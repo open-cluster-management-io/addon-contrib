@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ .Values.agentDeploymentName }}
+  annotations:
+  {{- with .Values.agentDeploymentAnnotations }}
+  {{ toYaml . | indent 8 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      open-cluster-management.io/addon: otel-collector
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.agentDeploymentAnnotations }}
+      {{ toYaml . | indent 8 }}
+      {{- end }}
+      labels:
+        open-cluster-management.io/addon: otel-collector
+    spec:
+      serviceAccount: otel-collector
+      containers:
+        - name: otel-collector
+          command:
+            - /otelcol
+            - --config=/conf/relay.yaml
+          image: {{ .Values.otelCollectorImage }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: otlp
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          volumeMounts:
+            - name: collector-config
+              mountPath: /conf
+          resources:
+            requests:
+              memory: "100Mi"
+              cpu: "200m"
+            limits:
+              memory: "200Mi"
+              cpu: "300m"
+        - name: addon-agent
+          image: {{ .Values.registry }}/{{ .Values.image }}:{{ .Values.tag }}
+          imagePullPolicy: Always
+          command:
+            - /agent
+          args:
+            {{- range .Values.addonAgentArgs }}
+            - {{ . }}
+            {{- end }}
+          volumeMounts:
+            - name: hub-kubeconfig
+              mountPath: /etc/kubeconfig/
+              readOnly: true
+          resources:
+            requests:
+              memory: "50Mi"
+              cpu: "100m"
+            limits:
+              memory: "100Mi"
+              cpu: "200m"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - name: collector-config
+          configMap:
+            name: collector-config
+            items:
+              - key: relay
+                path: relay.yaml
+        - name: hub-kubeconfig
+          secret:
+            secretName: otel-collector-hub-kubeconfig
+      imagePullSecrets:
+      {{- range .Values.otelAgentImagePullSecrets }}
+      - name: {{ . }}
+      {{- end }}
