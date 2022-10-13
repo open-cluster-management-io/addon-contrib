@@ -11,11 +11,7 @@ import (
 // Can be override via "--agent-image-name" on the hub addon manager.
 var AgentImageName string
 
-// AgentImageName is the installing namespace of the spoke addon agent.
-// Can be override via "--agent-install-namespace" on the hub addon manager.
-var AddonInstallNamespace = DefaultAddonInstallNamespace
-
-const DefaultAddonInstallNamespace = "open-cluster-management-otel-collector"
+var AddonInstallNamespace = "open-cluster-management-otel-collector"
 
 func GetParsedAgentImage(defaultAgentImageName string) (string, string, string, error) {
 	if len(AgentImageName) == 0 {

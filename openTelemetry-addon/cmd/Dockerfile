@@ -15,10 +15,10 @@ COPY cmd/ cmd/
 COPY pkg/ pkg/
 
 # Build addons
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o agent cmd/addon-agent/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o agent cmd/addon_agent/main.go
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a \
         -ldflags="-X 'otel-add-on/pkg/config.AgentImageName=${ADDON_AGENT_IMAGE_NAME}'" \
-        -o manager cmd/addon-manager/main.go
+        -o manager cmd/addon_manager/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

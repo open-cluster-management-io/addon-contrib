@@ -36,13 +36,13 @@ func init() {
 var fs embed.FS
 
 var manifestFiles = []string{
-	"manifests/service-account.yaml",
-	"manifests/jaeger-deployment.yaml",
-	"manifests/jaeger-service.yaml",
-	"manifests/collector-deployment.yaml",
-	"manifests/collector-service.yaml",
-	"manifests/collector-config.yaml",
-	"manifests/jaeger-external.yaml",
+	"manifests/service_account.yaml",
+	"manifests/jaeger_deployment.yaml",
+	"manifests/jaeger_service.yaml",
+	"manifests/collector_deployment.yaml",
+	"manifests/collector_service.yaml",
+	"manifests/collector_config.yaml",
+	"manifests/jaeger_external.yaml",
 }
 
 func Applymanifests(rclient client.Client) error {
