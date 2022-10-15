@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"embed"
-	"otel-add-on/pkg/common"
-	"otel-add-on/pkg/config"
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/common"
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/config"
 
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

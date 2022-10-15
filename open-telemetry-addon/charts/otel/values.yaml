@@ -1,7 +1,6 @@
 # Image registry
 registry: docker.io/nitishchauhan0022
 
-# Image of the cluster-gateway instances
 image: otelcollector-addon
 
 # Image tag

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/common"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 	"open-cluster-management.io/addon-framework/pkg/lease"
-	"otel-add-on/pkg/common"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 )

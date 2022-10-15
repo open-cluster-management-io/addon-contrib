@@ -37,10 +37,10 @@ import (
 	"open-cluster-management.io/api/client/addon/clientset/versioned"
 	"open-cluster-management.io/api/client/addon/informers/externalversions"
 
-	"otel-add-on/pkg/agent"
-	"otel-add-on/pkg/hub"
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/agent"
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/hub"
 
-	"otel-add-on/pkg/config"
+	"github.com/open-cluster-management-io/addon-contrib/open-telemetry-addon/pkg/config"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	//+kubebuilder:scaffold:imports
