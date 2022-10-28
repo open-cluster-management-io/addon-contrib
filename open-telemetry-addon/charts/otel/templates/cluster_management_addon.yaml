@@ -1,0 +1,8 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: otel-collector
+spec:
+  addOnMeta:
+    displayName: otel-collector
+    description: otel-collector-add-on
