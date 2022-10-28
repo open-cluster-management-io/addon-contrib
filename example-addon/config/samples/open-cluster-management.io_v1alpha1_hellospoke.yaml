@@ -1,0 +1,12 @@
+apiVersion: open-cluster-management.io.open-cluster-management.io/v1alpha1
+kind: HelloSpoke
+metadata:
+  labels:
+    app.kubernetes.io/name: hellospoke
+    app.kubernetes.io/instance: hellospoke-sample
+    app.kubernetes.io/part-of: example-addon
+    app.kuberentes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: example-addon
+  name: hellospoke-sample
+spec:
+  # TODO(user): Add fields here

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hellospoke-agent
+  namespace: {{ .AddonInstallNamespace }}
+spec:
+  selector:
+    matchLabels:
+      control-plane: hellospoke-agent
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: hellospoke-agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - command:
+        - /manager
+        args:
+        - agent
+        - --hub-kubeconfig=/var/run/hub/kubeconfig
+        - --cluster-name={{ .ClusterName }}
+        image: controller:latest
+        name: manager
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - "ALL"
+        # TODO(user): Configure the resources accordingly based on the project requirements.
+        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi

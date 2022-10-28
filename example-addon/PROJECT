@@ -1,0 +1,16 @@
+domain: open-cluster-management.io
+layout:
+- go.kubebuilder.io/v4-alpha
+projectName: example-addon
+repo: open-cluster-management.io/addon-contrib/example-addon
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: example
+  group: open-cluster-management.io
+  kind: HelloSpoke
+  path: open-cluster-management.io/addon-contrib/example-addon/api/v1alpha1
+  version: v1alpha1
+version: "3"

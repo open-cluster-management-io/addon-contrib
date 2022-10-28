@@ -1,0 +1,27 @@
+# permissions for end users to view hellospokes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: hellospoke-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: example-addon
+    app.kubernetes.io/part-of: example-addon
+    app.kubernetes.io/managed-by: kustomize
+  name: hellospoke-viewer-role
+rules:
+- apiGroups:
+  - open-cluster-management.io.open-cluster-management.io
+  resources:
+  - hellospokes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - open-cluster-management.io.open-cluster-management.io
+  resources:
+  - hellospokes/status
+  verbs:
+  - get

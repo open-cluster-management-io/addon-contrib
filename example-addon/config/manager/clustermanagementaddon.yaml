@@ -1,0 +1,8 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: hellospoke
+spec:
+  addOnMeta:
+    displayName: hellospoke
+    description: "hellospoke is an example addon created by go template"
