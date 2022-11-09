@@ -1,0 +1,8 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: hellospoke-addon
+spec:
+  addOnMeta:
+    displayName: HelloSpoke Addon
+    description: "hellospoke-addon is an example addon that copys a CR from spoke to hub"

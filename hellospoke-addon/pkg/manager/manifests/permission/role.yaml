@@ -1,0 +1,12 @@
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .RoleAndRolebindingName }}
+  namespace: {{ .ClusterName }}
+rules:
+  - apiGroups: ["example.open-cluster-management.io"]
+    resources: ["hellospokes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["example.open-cluster-management.io"]
+    resources: ["hellospokes/status"]
+    verbs: ["update", "patch"]

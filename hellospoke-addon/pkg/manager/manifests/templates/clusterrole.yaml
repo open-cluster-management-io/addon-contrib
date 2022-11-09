@@ -1,0 +1,62 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .SpokeRolebindingName }}-agent
+  namespace: {{ .AddonInstallNamespace }}
+rules:
+  # Allow addon agent run with openshift library-go
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs: 
+      - get
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs: 
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - replicasets
+    verbs: 
+      - get
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs: 
+      - create
+      - patch
+      - update
+  # Allow addon agent run with addon
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - '*'
+  # Allow addon agent run with hellospoke
+  - apiGroups:
+      - example.open-cluster-management.io
+    resources:
+      - hellospokes
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - example.open-cluster-management.io
+    resources:
+      - hellospokes/status
+    verbs:
+      - update
+      - patch
