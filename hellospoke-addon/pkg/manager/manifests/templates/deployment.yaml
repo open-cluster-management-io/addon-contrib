@@ -1,0 +1,33 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .AddonName }}
+  namespace: {{ .AddonInstallNamespace }}
+  labels:
+    app: {{ .AddonName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .AddonName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .AddonName }}
+    spec:
+      serviceAccountName: {{ .AgentServiceAccountName }}
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - name: {{ .AddonName }}
+        image: {{ .Image }}
+        imagePullPolicy: IfNotPresent
+        args:
+          - "agent"
+          - "--hub-kubeconfig=/var/run/hub/kubeconfig"
+          - "--cluster-name={{ .ClusterName }}"
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub

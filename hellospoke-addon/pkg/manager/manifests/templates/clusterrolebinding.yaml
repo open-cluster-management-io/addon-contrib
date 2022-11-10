@@ -1,0 +1,13 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .SpokeRolebindingName }}-agent
+  namespace: {{ .AddonInstallNamespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .SpokeRolebindingName }}-agent
+subjects:
+  - kind: ServiceAccount
+    name: {{ .AgentServiceAccountName }}
+    namespace: {{ .AddonInstallNamespace }}

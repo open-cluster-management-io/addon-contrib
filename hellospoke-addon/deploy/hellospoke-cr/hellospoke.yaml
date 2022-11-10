@@ -1,0 +1,6 @@
+apiVersion: example.open-cluster-management.io/v1alpha1
+kind: HelloSpoke
+metadata:
+  name: hellospoke
+#status:
+#  spokeURL: hello
