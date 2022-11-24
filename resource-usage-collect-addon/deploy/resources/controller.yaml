@@ -20,11 +20,11 @@ spec:
         image: example-addon-image
         imagePullPolicy: Always
         env:
-        - name: EXAMPLE_IMAGE_NAME
+        - name: IMAGE_NAME
           valueFrom:
             configMapKeyRef:
               name: image-config
-              key: EXAMPLE_IMAGE_NAME
+              key: IMAGE_NAME
         args:
           - "/addon"
           - "controller"

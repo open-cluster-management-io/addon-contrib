@@ -1,11 +1,12 @@
 package main
 
 import (
-	addonagent "JiahaoWei-RH/resource-usage-collect/pkg/addon/agent"
 	"context"
 	"embed"
 	"fmt"
 	"os"
+
+	addonagent "open-cluster-management.io/addon-contrib/resource-usage-collect-addon/pkg/addon/agent"
 
 	"github.com/openshift/library-go/pkg/assets"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -104,7 +105,7 @@ func getValues(cluster *clusterv1.ManagedCluster,
 		installNamespace = addonagent.AgentInstallationNamespace
 	}
 
-	image := os.Getenv("EXAMPLE_IMAGE_NAME")
+	image := os.Getenv("IMAGE_NAME")
 	if len(image) == 0 {
 		image = defaultExampleImage
 	}

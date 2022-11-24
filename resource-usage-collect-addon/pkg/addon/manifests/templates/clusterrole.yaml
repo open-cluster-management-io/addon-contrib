@@ -4,5 +4,8 @@
     name: resource-usage-collect-agent 
   rules:
     - apiGroups: [""]
-      resources: ["nodes","configmaps", "pods", "events", "leases"]
+      resources: ["nodes","configmaps", "pods", "events"]
       verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection", "patch"]
+    - apiGroups: ["coordination.k8s.io"]
+      resources: ["leases"]
+      verbs: ["create", "get", "list", "update", "watch", "patch"]
