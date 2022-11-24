@@ -1,0 +1,35 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: resource-usage-collect-agent
+  namespace: {{ .AddonInstallNamespace }}
+  labels:
+    app: resource-usage-collect-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resource-usage-collect-agent
+  template:
+    metadata:
+      labels:
+        app: resource-usage-collect-agent
+    spec:
+      serviceAccountName: resource-usage-collect-agent-sa
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - name: resource-usage-collect-agent
+        image: {{ .Image }}
+        imagePullPolicy: Always
+        args:
+          - "/addon"
+          - "agent"
+          - "--hub-kubeconfig=/var/run/hub/kubeconfig"
+          - "--cluster-name={{ .ClusterName }}"
+          - "--addon-namespace={{ .AddonInstallNamespace }}"
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub

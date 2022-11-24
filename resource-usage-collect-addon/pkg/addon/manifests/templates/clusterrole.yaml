@@ -1,0 +1,8 @@
+  kind: ClusterRole
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: resource-usage-collect-agent 
+  rules:
+    - apiGroups: [""]
+      resources: ["nodes","configmaps", "pods", "events", "leases"]
+      verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection", "patch"]
