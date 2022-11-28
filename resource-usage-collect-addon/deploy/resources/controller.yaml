@@ -1,0 +1,30 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: resource-usage-collect-controller
+  labels:
+    app: resource-usage-collect-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resource-usage-collect-controller
+  template:
+    metadata:
+      labels:
+        app: resource-usage-collect-controller
+    spec:
+      serviceAccountName: resource-usage-collect-sa
+      containers:
+      - name: resource-usage-collect-controller
+        image: example-addon-image
+        imagePullPolicy: Always
+        env:
+        - name: IMAGE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: image-config
+              key: IMAGE_NAME
+        args:
+          - "/addon"
+          - "controller"

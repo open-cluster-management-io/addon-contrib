@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: resource-usage-collect-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: resource-usage-collect-agent
+subjects:
+  - kind: ServiceAccount
+    name: resource-usage-collect-agent-sa
+    namespace: {{ .AddonInstallNamespace }}
