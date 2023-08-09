@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clusternet-addon-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: clusternet-addon-controller
+subjects:
+- kind: ServiceAccount
+  name: clusternet-addon-controller
+  namespace: open-cluster-management
