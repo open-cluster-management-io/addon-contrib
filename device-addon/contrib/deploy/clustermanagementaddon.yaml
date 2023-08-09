@@ -1,0 +1,11 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: device-addon
+spec:
+  addOnMeta:
+    displayName: device-addon
+    description: device-addon
+  supportedConfigs:
+  - group: edge.open-cluster-management.io
+    resource: deviceaddonconfigs

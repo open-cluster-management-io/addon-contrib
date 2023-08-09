@@ -1,0 +1,9 @@
+{{ if .AddOnConfigData }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: device-addon-config
+  namespace: {{ .AddonInstallNamespace }}
+data:
+  config: {{ .AddOnConfigData }}
+{{ end }}

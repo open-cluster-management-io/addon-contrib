@@ -1,0 +1,11 @@
+apiVersion: edge.open-cluster-management.io/v1alpha1
+kind: Driver
+metadata:
+  name: opcua
+spec:
+  type: "opcua"
+  properties:
+    securityPolicy: "None"
+    securityMode: "None"
+    certFile: ""
+    keyFile: ""
