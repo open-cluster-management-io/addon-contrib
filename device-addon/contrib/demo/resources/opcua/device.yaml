@@ -1,0 +1,33 @@
+apiVersion: edge.open-cluster-management.io/v1alpha1
+kind: Device
+metadata:
+  name: opcua-s001
+spec:
+  name: "opcua-s001"
+  driverType: "opcua"
+  manufacturer: "Free OPC-UA"
+  description: "OPCUA device is created for test purpose"
+  protocolProperties:
+      endpoint: "opc.tcp://opcua-server.opcua-server.svc.cluster.local:4840/freeopcua/server/"
+  profile:
+    deviceResources:
+    - name: "counter"
+      description: "generated counter number"
+      properties:
+        valueType: "Int32"
+        readWrite: "R"
+        defaultValue: "0"
+        minimum: 0
+        maximum: 30
+      attributes:
+        nodeId: "ns=2;i=3"
+    - name: "random"
+      description: "generated random number"
+      properties:
+        valueType: "Float64"
+        readWrite: "R"
+        defaultValue: "0.0"
+        minimum: -2.0
+        maximum: 2.0
+      attributes:
+        nodeId: "ns=2;i=2"

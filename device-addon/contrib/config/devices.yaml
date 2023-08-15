@@ -1,0 +1,86 @@
+devices:
+- name: "opcua-s001"
+  driverType: "opcua"
+  manufacturer: "Prosys"
+  model: "S1"
+  description: "OPCUA device is created for test purpose"
+  protocolProperties:
+      endpoint: "opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer"
+  profile:
+    deviceResources:
+    - name: "counter"
+      description: "generated counter number"
+      properties:
+        valueType: "Int32"
+        readWrite: "R"
+        defaultValue: "0"
+        minimum: 0
+        maximum: 30
+      attributes:
+        nodeId: "ns=3;i=1002"
+    - name: "random"
+      description: "generated random number"
+      properties:
+        valueType: "Float64"
+        readWrite: "R"
+        defaultValue: "0.0"
+        minimum: -2.0
+        maximum: 2.0
+      attributes:
+        nodeId: "ns=3;i=1003"
+    # deviceCommands:
+    # - name: "CounterNum"
+    #   readWrite: "R"
+    #   resources:
+    #     - { deviceResource: "Counter", defaultValue: "0" }
+    # - name: "RandomNum"
+    #   readWrite: "R"
+    #   resources:
+    #     - { deviceResource: "Random", defaultValue: "0.0" }
+# - name: "mqtt-m001"
+#   driverType: "mqtt"
+#   manufacturer: "Paho"
+#   model: "v3"
+#   description: "MQTT device is created for test purpose"
+#   profile:
+#     deviceResources:
+#     - name: randfloat32
+#       description: "random 32 bit float"
+#       properties:
+#         valueType: "Float32"
+#         readWrite: "RW"
+#         defaultValue: "0.00"
+#         minimum: 0
+#         maximum: 100
+#     - name: randfloat64
+#       description: "random 64 bit float"
+#       properties:
+#         valueType: "Float64"
+#         readWrite: "RW"
+#         defaultValue: "0.00"
+#         minimum: 0
+#         maximum: 100
+#     - name: ping
+#       description: "device awake"
+#       properties:
+#         valueType: "String"
+#         readWrite: "R"
+#         defaultValue: "oops"
+#     - name: message
+#       description: "device notification message"
+#       properties:
+#         valueType: "String"
+#         readWrite: "RW"
+#     - name: json
+#       description: "JSON message"
+#       properties:
+#         valueType: "Object"
+#         readWrite: "RW"
+#         mediaType: "application/json"
+#     deviceCommands:
+#     - name: allValues
+#       readWrite: "RW"
+#       resources:
+#         - { deviceResource: "randfloat32" }
+#         - { deviceResource: "randfloat64" }
+#         - { deviceResource: "message" }

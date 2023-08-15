@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: messagebus-mqtt
+  namespace:  {{ .AddonInstallNamespace }}
+spec:
+  type: NodePort
+  ports:
+  - port: 1883
+    nodePort: 30950
+    targetPort: default
+    protocol: TCP
+    name: default
+  selector:
+    open-cluster-management.io/addon: device

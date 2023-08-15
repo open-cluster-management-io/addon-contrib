@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opcua-server
+  namespace: opcua-server
+spec:
+  ports:
+    - port: 4840
+      targetPort: 4840
+      protocol: TCP
+  selector:
+    opcuaserver: opcuaserver

@@ -1,0 +1,6 @@
+messageBuses:
+- type: "mqtt"
+  enabled: true
+  properties:
+    receiveTopic: "devices/%s/data/%s" # message bus use this topic to receive data from driver
+    payloadFormat: "jsonMap" # jsonObj or jsonMap

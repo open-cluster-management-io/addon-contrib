@@ -1,0 +1,16 @@
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- crds/edge.open-cluster-management.io_deviceaddonconfigs.yaml
+- crds/edge.open-cluster-management.io_devices.yaml
+- crds/edge.open-cluster-management.io_drivers.yaml
+- clustermanagementaddon.yaml
+- clusterrole.yaml
+- clusterrolebinding.yaml
+- serviceaccount.yaml
+- deployment.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opcua-server
+  namespace: opcua-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      opcuaserver: opcuaserver
+  template:
+    metadata:
+      labels:
+        opcuaserver: opcuaserver
+    spec:
+      containers:
+        - name: opcua-server
+          image: quay.io/skeeey/opcua-server
+          imagePullPolicy: IfNotPresent

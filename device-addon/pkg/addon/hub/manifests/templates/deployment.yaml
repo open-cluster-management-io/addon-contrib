@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: device-addon-agent
+  namespace: {{ .AddonInstallNamespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      open-cluster-management.io/addon: device
+  template:
+    metadata:
+      labels:
+        open-cluster-management.io/addon: device
+    spec:
+      serviceAccount: device-addon-agent-sa
+      containers:
+      - name: device-addon-agent
+        image: quay.io/skeeey/device-addon:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+          - name: default
+            containerPort: 1883
+            protocol: TCP
+        args:
+        - "/device-addon"
+        - "agent"
+        - --cluster-name={{ .ClusterName }}
+        - --hub-kubeconfig=/etc/hub/kubeconfig
+        {{ if .AddOnConfigData }}
+        - --addonconfig=/etc/agent/config
+        {{ end }}
+        volumeMounts:
+          - name: hub-kubeconfig
+            mountPath: /etc/hub/
+            readOnly: true
+          {{ if .AddOnConfigData }}
+          - name: addon-config
+            mountPath: /etc/agent/
+            readOnly: true
+          {{ end }}
+      volumes:
+      - name: hub-kubeconfig
+        secret:
+          secretName: device-addon-hub-kubeconfig
+      {{ if .AddOnConfigData }}
+      - name: addon-config
+        configMap:
+          name: device-addon-config
+      {{ end }}

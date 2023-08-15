@@ -1,0 +1,12 @@
+apiVersion: edge.open-cluster-management.io/v1alpha1
+kind: DeviceAddOnConfig
+metadata:
+  name: device-addon
+spec:
+  messageBuses:
+  - name: "buildin-mqtt-bus"
+    type: "mqtt"
+    enabled: true
+    properties:
+      dataTopic: "devices/+/data/+"
+      payloadFormat: "jsonMap"

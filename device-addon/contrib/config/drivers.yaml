@@ -1,0 +1,16 @@
+drivers:
+- type: "opcua"
+  properties:
+    securityPolicy: "None"
+    securityMode: "None"
+    certFile: ""
+    keyFile: ""
+# - type: "mqtt"
+#   properties:
+#     host: "localhost:1883"
+#     qos: 0
+#     keepAlive: 3600
+#     clientId: "device-mqtt"
+#     connEstablishingRetry: 10
+#     authMode: "none"
+#     subTopic: "sub/data/#"  # device broker sub topic, we use this topic to get data from device
