@@ -58,10 +58,9 @@ func (s *Score) calculateScore() (cpuScore int64, memScore int64, err error) {
 	return s.normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage)
 }
 
-func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage int64) (cpuScore int64, memScore int64, err error) {
-	klog.Infof("cpuAlloc = %v, cpuUsage = %v, memAlloc = %v, memUsage = %v", cpuAlloc, cpuUsage, memAlloc, memUsage)
-	var availableCpu float64
-	availableCpu = float64(cpuAlloc - cpuUsage)
+func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage float64) (cpuScore int64, memScore int64, err error) {
+	klog.Infof("cpuAlloc = %v, cpuUsage = %v, memAlloc = %v, memUsage = %v", cpuAlloc, cpuUsage, int64(memAlloc), int64(memUsage))
+	availableCpu := cpuAlloc - cpuUsage
 	if availableCpu > MAXCPUCOUNT {
 		cpuScore = int64(MAXSCORE)
 	} else if availableCpu <= MINCPUCOUNT {
@@ -70,8 +69,7 @@ func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage int64) (cp
 		cpuScore = int64(200*availableCpu/MAXCPUCOUNT - 100)
 	}
 
-	var availableMem float64
-	availableMem = float64((memAlloc - memUsage) / (1024 * 1024)) // MB
+	availableMem := (memAlloc - memUsage) / (1024 * 1024) // MB
 	if availableMem > MAXMEMCOUNT {
 		memScore = int64(MAXSCORE)
 	} else if availableMem <= MINMEMCOUNT {
@@ -84,7 +82,7 @@ func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage int64) (cp
 	return cpuScore, memScore, nil
 }
 
-func (s *Score) calculateClusterAllocateable(resourceName clusterv1.ResourceName) (int64, error) {
+func (s *Score) calculateClusterAllocateable(resourceName clusterv1.ResourceName) (float64, error) {
 	nodes, err := s.nodeLister.List(labels.Everything())
 	if err != nil {
 		return 0, err
@@ -105,16 +103,16 @@ func (s *Score) calculateClusterAllocateable(resourceName clusterv1.ResourceName
 		}
 	}
 	quantity := allocatableList[resourceName]
-	return quantity.Value(), nil
+	return quantity.AsApproximateFloat64(), nil
 }
 
-func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (int64, error) {
+func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (float64, error) {
 	list, err := s.podListener.List(labels.Everything())
 	if err != nil {
 		return 0, err
 	}
 
-	var podRequest int64
+	var podRequest float64
 	var podCount int
 	for _, pod := range list {
 
@@ -135,7 +133,7 @@ func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (int64
 		// If Overhead is being utilized, add to the total requests for the pod
 		if pod.Spec.Overhead != nil && s.enablePodOverhead {
 			if quantity, found := pod.Spec.Overhead[resourceName]; found {
-				podRequest += quantity.Value()
+				podRequest += quantity.AsApproximateFloat64()
 			}
 		}
 		podCount++
@@ -143,7 +141,7 @@ func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (int64
 	return podRequest, nil
 }
 
-func (s *Score) getRequestForResource(resource v1.ResourceName, requests *v1.ResourceList, nonZero bool) int64 {
+func (s *Score) getRequestForResource(resource v1.ResourceName, requests *v1.ResourceList, nonZero bool) float64 {
 	if requests == nil {
 		return 0
 	}
@@ -153,18 +151,18 @@ func (s *Score) getRequestForResource(resource v1.ResourceName, requests *v1.Res
 		if _, found := (*requests)[v1.ResourceCPU]; !found && nonZero {
 			return 100
 		}
-		return requests.Cpu().Value()
+		return requests.Cpu().AsApproximateFloat64()
 	case v1.ResourceMemory:
 		// Override if un-set, but not if explicitly set to zero
 		if _, found := (*requests)[v1.ResourceMemory]; !found && nonZero {
 			return 200 * 1024 * 1024
 		}
-		return requests.Memory().Value()
+		return requests.Memory().AsApproximateFloat64()
 	default:
 		quantity, found := (*requests)[resource]
 		if !found {
 			return 0
 		}
-		return quantity.Value()
+		return quantity.AsApproximateFloat64()
 	}
 }
