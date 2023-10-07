@@ -2,15 +2,23 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestNormalizeValue(t *testing.T) {
 	cases := []struct {
 		name           string
-		cpuAlloc       int64
-		cpuUsage       int64
-		memAlloc       int64
-		memUsage       int64
+		cpuAlloc       float64
+		cpuUsage       float64
+		memAlloc       float64
+		memUsage       float64
 		expectCPUScore int64
 		expectMemScore int64
 	}{
@@ -46,15 +54,52 @@ func TestNormalizeValue(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			score := Score{}
-			cpuScore, memScore, _ := score.normalizeScore(c.cpuAlloc, c.cpuUsage, c.memAlloc, c.memUsage)
-
-			if cpuScore != c.expectCPUScore {
-				t.Errorf("expected cpuScore %v, but got %v", c.expectCPUScore, cpuScore)
-			}
-
-			if memScore != c.expectMemScore {
-				t.Errorf("expected memScore %v, but got %v", c.expectMemScore, memScore)
-			}
+			cpuScore, memScore, err := score.normalizeScore(c.cpuAlloc, c.cpuUsage, c.memAlloc, c.memUsage)
+			require.NoError(t, err)
+			assert.Equal(t, c.expectCPUScore, cpuScore)
+			assert.Equal(t, c.expectMemScore, memScore)
 		})
 	}
+}
+
+func TestCalculatePodResourceRequest(t *testing.T) {
+	testPod := &corev1.Pod{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      "test",
+			Namespace: "default",
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: "test",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("1Gi"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset()
+	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	podInformer := informerFactory.Core().V1().Pods()
+	nodeInformer := informerFactory.Core().V1().Nodes()
+	podInformer.Informer().GetStore().Add(testPod)
+
+	s := NewScore(nodeInformer, podInformer)
+
+	cpuRequest, err := s.calculatePodResourceRequest(corev1.ResourceCPU)
+	require.NoError(t, err)
+
+	cpuExpected := 0.5
+	assert.Equal(t, cpuExpected, cpuRequest)
+
+	memoryRequest, err := s.calculatePodResourceRequest(corev1.ResourceMemory)
+	require.NoError(t, err)
+
+	memoryExpected := float64(1073741824) // 1GiB
+	assert.Equal(t, memoryExpected, memoryRequest)
 }

@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	corev1informers "k8s.io/client-go/informers/core/v1"
-	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	"open-cluster-management.io/api/client/cluster/listers/cluster/v1alpha1"
 
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
@@ -16,13 +15,11 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"open-cluster-management.io/addon-framework/pkg/lease"
 	"open-cluster-management.io/addon-framework/pkg/version"
-	addonv1alpha1client "open-cluster-management.io/api/client/addon/clientset/versioned"
 	clientset "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterinformers "open-cluster-management.io/api/client/cluster/informers/externalversions"
 	clusterinformers1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1alpha1"
@@ -79,7 +76,7 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 		return err
 	}
 	// ++2
-	hubClusterClient, err := clusterclient.NewForConfig(hubRestConfig)
+	hubClusterClient, err := clientset.NewForConfig(hubRestConfig)
 	if err != nil {
 		return nil
 	}
@@ -123,7 +120,6 @@ func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controll
 type agentController struct {
 	spokeKubeClient           kubernetes.Interface
 	hubKubeClient             clientset.Interface
-	addonClient               addonv1alpha1client.Interface
 	AddOnPlacementScoreLister v1alpha1.AddOnPlacementScoreLister
 	clusterName               string
 	addonName                 string
@@ -167,6 +163,9 @@ func newAgentController(
 func (c *agentController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	score := NewScore(c.nodeInformer, c.podInformer)
 	cpuScore, memScore, err := score.calculateScore()
+	if err != nil {
+		return err
+	}
 	items := []apiv1alpha2.AddOnPlacementScoreItem{
 		{
 			Name:  "cpuAvailable",
@@ -190,7 +189,7 @@ func (c *agentController) sync(ctx context.Context, syncCtx factory.SyncContext)
 				Scores: items,
 			},
 		}
-		_, err = c.hubKubeClient.ClusterV1alpha1().AddOnPlacementScores(c.clusterName).Create(ctx, addonPlacementScore, v1.CreateOptions{})
+		_, err = c.hubKubeClient.ClusterV1alpha1().AddOnPlacementScores(c.clusterName).Create(ctx, addonPlacementScore, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -200,6 +199,6 @@ func (c *agentController) sync(ctx context.Context, syncCtx factory.SyncContext)
 	}
 
 	addonPlacementScore.Status.Scores = items
-	_, err = c.hubKubeClient.ClusterV1alpha1().AddOnPlacementScores(c.clusterName).UpdateStatus(ctx, addonPlacementScore, v1.UpdateOptions{})
+	_, err = c.hubKubeClient.ClusterV1alpha1().AddOnPlacementScores(c.clusterName).UpdateStatus(ctx, addonPlacementScore, metav1.UpdateOptions{})
 	return err
 }
