@@ -1,13 +1,13 @@
 # fluid-addon
 
- fluid-addon is an addon that integrates the [fluid](https://github.com/fluid-cloudnative/fluid) project into OCM.
+fluid-addon is an addon that integrates the [fluid](https://github.com/fluid-cloudnative/fluid) project into OCM.
 
 ## Install the fluid-addon to the Hub cluster
 
 Switch context to Hub cluster.
 
 ```
-make deploy
+$ kubectl apply -f deploy/addon
 ```
 
 You can check if the fluid addon was deployed by:
@@ -17,10 +17,22 @@ $ kubectl get clustermanagementaddon fluid
 $ kubectl get addontemplate fluid-0.0.1
 ```
 
-Then apply a managedclusteraddon for to enable the fluid for a managed cluster by:
+## Enable the fluid addon for a managed cluster
+
+Then apply a managedclusteraddon to enable the fluid for a managed cluster(eg cluster1) by:
 
 ```
-MANAGED_CLUSTER=cluster1 make apply-fluid-cr
+# Replace 'cluster1' with the managed cluster name
+
+$ MANAGED_CLUSTER=cluster1 \
+  sed -e "s,MANAGED_CLUSTER,${MANAGED_CLUSTER}," deploy/sample/mca-fluid.yaml | \
+  kubectl apply -f -
+```
+
+OR use the [clusteradm](https://github.com/open-cluster-management-io/clusteradm/) cli:
+
+```
+clusteradm addon enable --names=fluid --clusters=cluster1
 ```
 
 You can check if the fluid addon was enabled by:
