@@ -1,0 +1,16 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  annotations:
+    addon.open-cluster-management.io/lifecycle: addon-manager
+  name: fluid
+spec:
+  addOnConfiguration: {}
+  addOnMeta: {}
+  installStrategy:
+    type: Manual
+  supportedConfigs:
+  - defaultConfig:
+      name: fluid-0.0.1
+    group: addon.open-cluster-management.io
+    resource: addontemplates
