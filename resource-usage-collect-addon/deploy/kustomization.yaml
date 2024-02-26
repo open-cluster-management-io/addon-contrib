@@ -3,6 +3,7 @@ namespace: open-cluster-management
 resources:
 - resources/clusterrole.yaml
 - resources/controller.yaml
+- resources/clustermanagementaddon.yaml
 
 images:
 - name: example-addon-image
