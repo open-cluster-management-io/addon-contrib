@@ -8,7 +8,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["addon.open-cluster-management.io"]
     resources: ["clustermanagementaddons"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "patch"]
   - apiGroups: ["addon.open-cluster-management.io"]
     resources: ["clustermanagementaddons/finalizers"]
     verbs: ["update"]
