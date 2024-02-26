@@ -1,0 +1,8 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: resource-usage-collect
+spec:
+  addOnMeta:
+    displayName: Resource Usage Collect Addon
+    description: "resource-usage-collect-addon is an example addon that generate addonplacementscore for each managed cluster"
