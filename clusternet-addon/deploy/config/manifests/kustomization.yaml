@@ -1,0 +1,4 @@
+bases:
+  - ../rbac
+  - ../operator
+  - ./clustermanagementaddon.yaml

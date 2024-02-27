@@ -1,0 +1,43 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: clusternet-addon-controller
+  namespace: open-cluster-management
+  labels:
+    app: clusternet-addon-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clusternet-addon-controller
+  template:
+    metadata:
+      labels:
+        app: clusternet-addon-controller
+    spec:
+      serviceAccountName: clusternet-addon-controller
+      containers:
+      - name: clusternet-addon-controller
+        image: quay.io/skeeey/clusternet-addon:latest
+        imagePullPolicy: IfNotPresent
+        args:
+          - "/clusternet"
+          - "controller"
+          - "--disable-leader-election"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
