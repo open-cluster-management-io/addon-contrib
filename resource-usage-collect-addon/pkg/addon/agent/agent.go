@@ -169,11 +169,11 @@ func (c *agentController) sync(ctx context.Context, syncCtx factory.SyncContext)
 	items := []apiv1alpha2.AddOnPlacementScoreItem{
 		{
 			Name:  "cpuAvailable",
-			Value: int32(cpuScore),
+			Value: cpuScore,
 		},
 		{
 			Name:  "memAvailable",
-			Value: int32(memScore),
+			Value: memScore,
 		},
 	}
 
