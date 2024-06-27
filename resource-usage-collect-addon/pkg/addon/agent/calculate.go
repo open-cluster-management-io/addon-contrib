@@ -6,17 +6,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	corev1lister "k8s.io/client-go/listers/core/v1"
-	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clustersdkv1alpha1 "open-cluster-management.io/sdk-go/pkg/apis/cluster/v1alpha1"
 )
-
-const MAXSCORE = float64(100)
-const MINSCORE = float64(-100)
 
 const MAXCPUCOUNT = float64(100)
 const MINCPUCOUNT = float64(0)
 
-// 1TB
+// // 1TB
 const MAXMEMCOUNT = float64(1024 * 1024)
 const MINMEMCOUNT = float64(0)
 
@@ -59,27 +56,16 @@ func (s *Score) calculateScore() (cpuScore int64, memScore int64, err error) {
 }
 
 func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage float64) (cpuScore int64, memScore int64, err error) {
-	klog.Infof("cpuAlloc = %v, cpuUsage = %v, memAlloc = %v, memUsage = %v", cpuAlloc, cpuUsage, int64(memAlloc), int64(memUsage))
-	availableCpu := cpuAlloc - cpuUsage
-	if availableCpu > MAXCPUCOUNT {
-		cpuScore = int64(MAXSCORE)
-	} else if availableCpu <= MINCPUCOUNT {
-		cpuScore = int64(MINSCORE)
-	} else {
-		cpuScore = int64(200*availableCpu/MAXCPUCOUNT - 100)
-	}
-
+	vailableCpu := cpuAlloc - cpuUsage
 	availableMem := (memAlloc - memUsage) / (1024 * 1024) // MB
-	if availableMem > MAXMEMCOUNT {
-		memScore = int64(MAXSCORE)
-	} else if availableMem <= MINMEMCOUNT {
-		memScore = int64(MINSCORE)
-	} else {
-		memScore = int64(200*availableMem/MAXMEMCOUNT - 100)
-	}
 
-	klog.Infof("cpuScore = %v, memScore = %v", cpuScore, memScore)
-	return cpuScore, memScore, nil
+	cpuScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINCPUCOUNT, MAXCPUCOUNT)
+	cpuScore, err = cpuScoreNormalizer.Normalize(vailableCpu)
+
+	memScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINMEMCOUNT, MAXMEMCOUNT)
+	memScore, err = memScoreNormalizer.Normalize(availableMem)
+
+	return cpuScore, memScore, err
 }
 
 func (s *Score) calculateClusterAllocateable(resourceName clusterv1.ResourceName) (float64, error) {
