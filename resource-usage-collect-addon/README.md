@@ -28,11 +28,11 @@ Build the docker image to run the sample AddOn.
 
 ```bash
 # build image
-export IMAGE_NAME=quay.io/haoqing/resource-usage-collect-addon:latest
+export IMAGE_NAME=zheshen/resource-usage-collect-addon-template:latest
 make images
 ```
 
-If your are using kind, load image into kind cluster.
+If you are using kind, load image into kind cluster.
 
 ```bash
 kind load docker-image $IMAGE_NAME --name cluster_name # kind load docker-image  $IMAGE_NAME --name hub
@@ -64,7 +64,7 @@ cluster2    resource-usage-score   3m24s
 
 ### For example
 
-Select a cluster with more available CPU.
+Select a cluster with more available GPU.
 
 Bind the default ManagedClusterSet to default Namespace.
 ```bash
@@ -76,7 +76,7 @@ cat <<EOF | kubectl apply -f -
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: placement
+  name: placement1
   namespace: default
 spec:
   numberOfClusters: 1
@@ -87,7 +87,7 @@ spec:
           type: AddOn
           addOn:
             resourceName: resource-usage-score
-            scoreName: cpuAvailable
+            scoreName: gpuAvailable
         weight: 1
 EOF
 ```

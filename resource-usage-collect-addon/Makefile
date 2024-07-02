@@ -19,8 +19,8 @@ PWD=$(shell pwd)
 
 # Image URL to use all building/pushing image targets;
 GO_BUILD_PACKAGES :=./pkg/...
-IMAGE ?= resource-usage-collect-addon
-IMAGE_REGISTRY ?= quay.io/haoqing
+IMAGE ?= resource-usage-collect-addon-template
+IMAGE_REGISTRY ?= zheshen
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)
 
@@ -43,7 +43,7 @@ vet: ## Run go vet against code.
 ##@ Build
 .PHONY: build
 build: fmt vet ## Build manager binary.
-	GOFLAGS="" go build -o addon ./pkg/addon/main.go ./pkg/addon/controller.go 
+	GOFLAGS="" go build -o addon ./pkg/addon/agent/agent.go ./pkg/addon/agent/calculate.go
 
 .PHONY: images
 images: ## Build addon binary.
