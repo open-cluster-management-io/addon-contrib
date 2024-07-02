@@ -6,7 +6,9 @@ metadata:
   name: fluid
 spec:
   addOnConfiguration: {}
-  addOnMeta: {}
+  addOnMeta:
+    displayName: Fluid
+    description: Fluid is an open source Kubernetes-native Distributed Dataset Orchestrator and Accelerator for data-intensive applications, such as big data and AI applications.
   installStrategy:
     type: Manual
   supportedConfigs:
