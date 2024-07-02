@@ -1,0 +1,10 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: open-cluster-management:klusterlet-work:fluid-clusterrole
+  labels:
+    open-cluster-management.io/aggregate-to-work: "true"  # with this label, the clusterRole will be selected to aggregate
+rules:
+  - apiGroups: ["data.fluid.io"]
+    resources: ["datasets", "alluxioruntimes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
