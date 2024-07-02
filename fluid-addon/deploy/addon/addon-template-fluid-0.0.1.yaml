@@ -57,6 +57,16 @@ spec:
         type: ServerSideApply
     workload:
       manifests:
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: open-cluster-management:klusterlet-work:fluid-clusterrole
+          labels:
+            open-cluster-management.io/aggregate-to-work: "true"  # with this label, the clusterRole will be selected to aggregate
+        rules:
+          - apiGroups: ["data.fluid.io"]
+            resources: ['*']
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
       - apiVersion: apps/v1
         kind: Deployment
         metadata:

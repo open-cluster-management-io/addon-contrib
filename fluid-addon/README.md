@@ -19,17 +19,7 @@ $ kubectl get addontemplate fluid-0.0.1
 
 ## Enable the fluid addon for a managed cluster
 
-Then apply a managedclusteraddon to enable the fluid for a managed cluster(eg cluster1) by:
-
-```
-# Replace 'cluster1' with the managed cluster name
-
-$ MANAGED_CLUSTER=cluster1 \
-  sed -e "s,MANAGED_CLUSTER,${MANAGED_CLUSTER}," deploy/sample/mca-fluid.yaml | \
-  kubectl apply -f -
-```
-
-OR use the [clusteradm](https://github.com/open-cluster-management-io/clusteradm/) cli:
+Then apply a managedclusteraddon to enable the fluid for a managed cluster(eg cluster1) by the tool [clusteradm](https://github.com/open-cluster-management-io/clusteradm/) cli:
 
 ```
 clusteradm addon enable --names=fluid --clusters=cluster1
@@ -59,6 +49,18 @@ fluidapp-controller-6c59d668cf-pxhjc     1/1     Running     0          16m
 
 ## Verify the fluid addon is functioning
 
+### As a Managed cluster admin
+
 Switch context to the Managed cluster.
 
 Please refer to the [Get Started of the fluid doc to crate a dataset](https://github.com/fluid-cloudnative/fluid/blob/v0.9.2/docs/en/userguide/get_started.md#create-a-dataset) to verify that the fluid is functioning properly.
+
+### As a Hub cluster admin
+
+Switch context to the Hub cluster. Distribute fluid resources by manifestworks to the managed cluster.
+
+```
+# clusteradm create work dataset-demo -c cluster1 -f quick-start/dataset.yaml
+# clusteradm create work runtime-demo -c cluster1 -f quick-start/runtime.yaml
+# clusteradm create work app-demo -c cluster1 -f quick-start/app.yaml
+```
