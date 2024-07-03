@@ -2,6 +2,7 @@
 # Resource usage addon
 ## Background
 Open-Cluster-Management has already supported [extensible placement scheduling](https://github.com/open-cluster-management-io/enhancements/blob/main/enhancements/sig-architecture/32-extensiblescheduling/32-extensiblescheduling.md), which allow users to use [addonplacementscore](https://github.com/open-cluster-management-io/enhancements/blob/main/enhancements/sig-architecture/32-extensiblescheduling/32-extensiblescheduling.md#addonplacementscore-api) to select clusters under certain conditions.
+
 The basic idea of `addonPlacementScore` is that, the addon agent, which is installed on the managed cluster, collect information about the managed cluster, and calculate a score. These scores can be used when selecting or comparing multiple clusters.
 With the rapid advancement of artificial intelligence, an increasing number of developers need to schedule and plan workloads based on available resources to achieve better performance and save resources.
 
