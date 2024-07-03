@@ -43,7 +43,7 @@ vet: ## Run go vet against code.
 ##@ Build
 .PHONY: build
 build: fmt vet ## Build manager binary.
-	GOFLAGS="" go build -o addon ./pkg/addon/agent/agent.go ./pkg/addon/agent/calculate.go
+	GOFLAGS="" go build -o addon ./pkg/main.go
 
 .PHONY: images
 images: ## Build addon binary.

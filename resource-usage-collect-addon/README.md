@@ -116,5 +116,5 @@ make undeploy
 ```
 
 ### Troubleshoot
-1. If `make deploy` could not work, it might be that there has an auto-generated  `kustomization_tmp.yaml` file, delete it and rerun the command.
-Also make sure you are under hub cluster context.
+1. If `make deploy` could not work, it might be that there has an auto-generated  `kustomization_tmp.yaml.tmp` file, delete it and rerun the command.
+Also make sure you are under hub cluster context, check the `kustomization.yaml` file, delete the part under `configMapGenerator`.

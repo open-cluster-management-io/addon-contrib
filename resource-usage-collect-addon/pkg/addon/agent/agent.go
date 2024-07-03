@@ -26,7 +26,6 @@ import (
 	apiv1alpha2 "open-cluster-management.io/api/cluster/v1alpha1"
 )
 
-const AgentInstallationNamespace = "default"
 const AddOnPlacementScoresName = "resource-usage-score"
 
 func NewAgentCommand(addonName string) *cobra.Command {
@@ -41,8 +40,8 @@ func NewAgentCommand(addonName string) *cobra.Command {
 	return cmd
 }
 
-// AgentOptions defines the flags for workload agent
-type AgentOptions struct {
+// Options AgentOptions defines the flags for workload agent
+type Options struct {
 	HubKubeconfigFile string
 	SpokeClusterName  string
 	AddonName         string
@@ -50,11 +49,11 @@ type AgentOptions struct {
 }
 
 // NewAgentOptions NewWorkloadAgentOptions returns the flags with default value set
-func NewAgentOptions(addonName string) *AgentOptions {
-	return &AgentOptions{AddonName: addonName}
+func NewAgentOptions(addonName string) *Options {
+	return &Options{AddonName: addonName}
 }
 
-func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
+func (o *Options) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	// This command only supports reading from config
 	flags.StringVar(&o.HubKubeconfigFile, "hub-kubeconfig", o.HubKubeconfigFile, "Location of kubeconfig file to connect to hub cluster.")
@@ -63,7 +62,7 @@ func (o *AgentOptions) AddFlags(cmd *cobra.Command) {
 }
 
 // RunAgent starts the controllers on agent to process work from hub.
-func (o *AgentOptions) RunAgent(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+func (o *Options) RunAgent(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
 	// build kubeclient of managed cluster
 	spokeKubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {

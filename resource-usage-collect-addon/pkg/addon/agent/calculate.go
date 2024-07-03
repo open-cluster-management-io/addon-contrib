@@ -19,11 +19,11 @@ const MAXCPUCOUNT = float64(100)
 const MINCPUCOUNT = float64(0)
 
 // MAXGPUCOUNT Constants for GPU resource counts
-const MAXGPUCOUNT = float64(20) // Assume that one cluster can have maximum 10 GPUs, can be modified.
+const MAXGPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 GPUs, can be modified.
 const MINGPUCOUNT = float64(0)
 
 // MAXTPUCOUNT Constants for TPU resource counts
-const MAXTPUCOUNT = float64(20) // Assume that one cluster can have maximum 10 GPUs, can be modified.
+const MAXTPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 GPUs, can be modified.
 const MINTPUCOUNT = float64(0)
 
 // MAXMEMCOUNT Constants for memory
