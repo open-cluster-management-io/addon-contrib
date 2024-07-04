@@ -6,7 +6,7 @@ Open-Cluster-Management has already supported [extensible placement scheduling](
 The basic idea of `addonPlacementScore` is that, the addon agent, which is installed on the managed cluster, collect information about the managed cluster, and calculate a score. These scores can be used when selecting or comparing multiple clusters.
 With the rapid advancement of artificial intelligence, an increasing number of developers need to schedule and plan workloads based on available resources to achieve better performance and save resources.
 
-This repository mainly introduce a addon who collect the resource usage information in the managed clusters and calculate `addonPlacementScore`, users could select clusters based on the score using a `placement`.
+This repository mainly introduce an addon which collects the resource usage information in the managed clusters and calculate `addonPlacementScore`, users could select clusters based on the score using a `placement`.
 A possible use case could be: As a developer, I want to deploy my work on the cluster who has the most GPU resources available. This addon is developed using `addonTemplate`.
 
 More details about:
