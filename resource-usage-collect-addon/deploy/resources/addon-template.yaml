@@ -62,7 +62,7 @@ spec:
                 serviceAccount: resource-usage-collect-agent-sa
                 containers:
                   - name: resource-usage-collect-agent
-                    image: zheshen/resource-usage-collect-addon-template:latest
+                    image: zheshen/resource-usage-collect-addon-template:v2
                     imagePullPolicy: Always
                     args:
                       - "/addon"

@@ -2,7 +2,6 @@ package agent
 
 import (
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	corev1lister "k8s.io/client-go/listers/core/v1"
@@ -23,7 +22,7 @@ const MAXGPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 G
 const MINGPUCOUNT = float64(0)
 
 // MAXTPUCOUNT Constants for TPU resource counts
-const MAXTPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 GPUs, can be modified.
+const MAXTPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 TPUs, can be modified.
 const MINTPUCOUNT = float64(0)
 
 // MAXMEMCOUNT Constants for memory
@@ -51,36 +50,36 @@ func NewScore(nodeInformer corev1informers.NodeInformer, podInformer corev1infor
 }
 
 func (s *Score) calculateScore() (cpuScore int64, memScore int64, gpuScore int64, tpuScore int64, err error) {
-	cpuAlloc, err := s.calculateClusterAllocatable(string(clusterv1.ResourceCPU))
+	cpuAlloc, cpuNode, err := s.calculateClusterAllocatable(string(clusterv1.ResourceCPU))
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	memAlloc, err := s.calculateClusterAllocatable(string(clusterv1.ResourceMemory))
+	memAlloc, memNode, err := s.calculateClusterAllocatable(string(clusterv1.ResourceMemory))
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	gpuAlloc, err := s.calculateClusterAllocatable(ResourceGPU)
+	gpuAlloc, gpuNode, err := s.calculateClusterAllocatable(ResourceGPU)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	tpuAlloc, err := s.calculateClusterAllocatable(ResourceTPU)
+	tpuAlloc, tpuNode, err := s.calculateClusterAllocatable(ResourceTPU)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
 
-	cpuUsage, err := s.calculatePodResourceRequest(string(v1.ResourceCPU))
+	cpuUsage, err := s.calculateNodeResourceUsage(cpuNode, string(v1.ResourceCPU))
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	memUsage, err := s.calculatePodResourceRequest(string(v1.ResourceMemory))
+	memUsage, err := s.calculateNodeResourceUsage(memNode, string(v1.ResourceMemory))
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	gpuUsage, err := s.calculatePodResourceRequest(ResourceGPU)
+	gpuUsage, err := s.calculateNodeResourceUsage(gpuNode, ResourceGPU)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
-	tpuUsage, err := s.calculatePodResourceRequest(ResourceTPU)
+	tpuUsage, err := s.calculateNodeResourceUsage(tpuNode, ResourceTPU)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
@@ -130,63 +129,31 @@ func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage, gpuAlloc,
 	return cpuScore, memScore, gpuScore, tpuScore, nil
 }
 
-func (s *Score) calculateClusterAllocatable(resourceName string) (float64, error) {
+// Iterate every node, find the node with maximum allocatable resource, return the number and node name.
+func (s *Score) calculateClusterAllocatable(resourceName string) (float64, string, error) {
 	nodes, err := s.nodeLister.List(labels.Everything())
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
-	allocatableList := make(map[string]resource.Quantity)
+	var maxAllocatable float64
+	var maxNodeName string
 	for _, node := range nodes {
 		if node.Spec.Unschedulable {
 			continue
 		}
-		for key, value := range node.Status.Allocatable {
-			if allocatable, exist := allocatableList[string(key)]; exist {
-				allocatable.Add(value)
-				allocatableList[string(key)] = allocatable
-			} else {
-				allocatableList[string(key)] = value
-			}
+		alloc, exists := node.Status.Allocatable[v1.ResourceName(resourceName)]
+		if !exists {
+			continue
+		}
+		klog.Infof("Node: %s, Allocatable %s: %f", node.Name, resourceName, alloc.AsApproximateFloat64())
+		if alloc.AsApproximateFloat64() > maxAllocatable {
+			maxAllocatable = alloc.AsApproximateFloat64()
+			maxNodeName = node.Name
 		}
 	}
-	quantity, exists := allocatableList[resourceName]
-	if !exists {
-		return 0, nil
-	}
-	return quantity.AsApproximateFloat64(), nil
-}
-
-func (s *Score) calculatePodResourceRequest(resourceName string) (float64, error) {
-	list, err := s.podLister.List(labels.Everything())
-	if err != nil {
-		return 0, err
-	}
-
-	var podRequest float64
-	for _, pod := range list {
-		for i := range pod.Spec.Containers {
-			container := &pod.Spec.Containers[i]
-			value := s.getRequestForResource(resourceName, &container.Resources.Requests, !s.useRequested)
-			podRequest += value
-		}
-
-		for i := range pod.Spec.InitContainers {
-			initContainer := &pod.Spec.InitContainers[i]
-			value := s.getRequestForResource(resourceName, &initContainer.Resources.Requests, !s.useRequested)
-			if podRequest < value {
-				podRequest = value
-			}
-		}
-
-		// If Overhead is being utilized, add to the total requests for the pod
-		if pod.Spec.Overhead != nil && s.enablePodOverhead {
-			if quantity, found := pod.Spec.Overhead[v1.ResourceName(resourceName)]; found {
-				podRequest += quantity.AsApproximateFloat64()
-			}
-		}
-	}
-	return podRequest, nil
+	klog.Infof("Max allocatable %s: %f on node: %s", resourceName, maxAllocatable, maxNodeName)
+	return maxAllocatable, maxNodeName, nil
 }
 
 func (s *Score) getRequestForResource(resource string, requests *v1.ResourceList, nonZero bool) float64 {
@@ -213,4 +180,39 @@ func (s *Score) getRequestForResource(resource string, requests *v1.ResourceList
 		}
 		return quantity.AsApproximateFloat64()
 	}
+}
+
+func (s *Score) calculateNodeResourceUsage(nodeName string, resourceName string) (float64, error) {
+	list, err := s.podLister.List(labels.Everything())
+	if err != nil {
+		return 0, err
+	}
+
+	var podRequest float64
+	for _, pod := range list {
+		if pod.Spec.NodeName != nodeName {
+			continue
+		}
+		for i := range pod.Spec.Containers {
+			container := &pod.Spec.Containers[i]
+			value := s.getRequestForResource(resourceName, &container.Resources.Requests, !s.useRequested)
+			podRequest += value
+		}
+
+		for i := range pod.Spec.InitContainers {
+			initContainer := &pod.Spec.InitContainers[i]
+			value := s.getRequestForResource(resourceName, &initContainer.Resources.Requests, !s.useRequested)
+			if podRequest < value {
+				podRequest = value
+			}
+		}
+
+		// If Overhead is being utilized, add to the total requests for the pod
+		if pod.Spec.Overhead != nil && s.enablePodOverhead {
+			if quantity, found := pod.Spec.Overhead[v1.ResourceName(resourceName)]; found {
+				podRequest += quantity.AsApproximateFloat64()
+			}
+		}
+	}
+	return podRequest, nil
 }

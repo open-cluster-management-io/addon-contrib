@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// Test normalize Score function.
 func TestNormalizeValue(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -88,21 +89,52 @@ func TestNormalizeValue(t *testing.T) {
 	}
 }
 
-func TestCalculatePodResourceRequest(t *testing.T) {
+// Test calculateClusterAllocatable and calculateNodeResourceUsage
+func TestCalculateClusterResources(t *testing.T) {
+	// Create testing nodes and pods.
+	node1 := &corev1.Node{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "node1",
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:               resource.MustParse("16"),
+				corev1.ResourceMemory:            resource.MustParse("32Gi"),
+				corev1.ResourceName(ResourceGPU): resource.MustParse("6"),
+			},
+		},
+	}
+
+	node2 := &corev1.Node{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "node2",
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:               resource.MustParse("32"),
+				corev1.ResourceMemory:            resource.MustParse("64Gi"),
+				corev1.ResourceName(ResourceGPU): resource.MustParse("8"),
+			},
+		},
+	}
+
 	testPod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
+			// Mock Pod deployed in node2
+			Labels: map[string]string{"name": "test"},
 		},
 		Spec: corev1.PodSpec{
+			NodeName: "node2",
 			Containers: []corev1.Container{
 				{
 					Name: "test",
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:                    resource.MustParse("500m"),
-							corev1.ResourceMemory:                 resource.MustParse("1Gi"),
-							corev1.ResourceName("nvidia.com/gpu"): resource.MustParse("1"),
+							corev1.ResourceCPU:               resource.MustParse("4"),
+							corev1.ResourceMemory:            resource.MustParse("8Gi"),
+							corev1.ResourceName(ResourceGPU): resource.MustParse("2"),
 						},
 					},
 				},
@@ -110,29 +142,28 @@ func TestCalculatePodResourceRequest(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewSimpleClientset(node1, node2, testPod)
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	podInformer := informerFactory.Core().V1().Pods()
 	nodeInformer := informerFactory.Core().V1().Nodes()
 	podInformer.Informer().GetStore().Add(testPod)
+	nodeInformer.Informer().GetStore().Add(node1)
+	nodeInformer.Informer().GetStore().Add(node2)
 
 	s := NewScore(nodeInformer, podInformer)
 
-	cpuRequest, err := s.calculatePodResourceRequest(string(corev1.ResourceCPU))
+	// Test calculateClusterAllocatable
+	gpuAlloc, nodeName, err := s.calculateClusterAllocatable(ResourceGPU)
 	require.NoError(t, err)
 
-	cpuExpected := 0.5
-	assert.Equal(t, cpuExpected, cpuRequest)
+	// Expect node2 has 8 GPUs.
+	assert.Equal(t, float64(8), gpuAlloc)
+	assert.Equal(t, "node2", nodeName)
 
-	memoryRequest, err := s.calculatePodResourceRequest(string(corev1.ResourceMemory))
+	// Test calculateNodeResourceUsage
+	gpuUsage, err := s.calculateNodeResourceUsage(nodeName, ResourceGPU)
 	require.NoError(t, err)
 
-	memoryExpected := float64(1073741824) // 1GiB
-	assert.Equal(t, memoryExpected, memoryRequest)
-
-	gpuRequest, err := s.calculatePodResourceRequest(ResourceGPU)
-	require.NoError(t, err)
-
-	gpuExpected := float64(1)
-	assert.Equal(t, gpuExpected, gpuRequest)
+	// Expect testPod use 2 GPUs.
+	assert.Equal(t, float64(2), gpuUsage)
 }
