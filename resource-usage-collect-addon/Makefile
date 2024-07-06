@@ -21,7 +21,7 @@ PWD=$(shell pwd)
 GO_BUILD_PACKAGES :=./pkg/...
 IMAGE ?= resource-usage-collect-addon-template
 IMAGE_REGISTRY ?= zheshen
-IMAGE_TAG ?= latest
+IMAGE_TAG ?= v2
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)
 
 GIT_HOST ?= open-cluster-management.io
