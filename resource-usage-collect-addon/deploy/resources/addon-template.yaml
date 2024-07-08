@@ -1,0 +1,112 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: resource-usage-collect
+spec:
+  addonName: resource-usage-collect
+  agentSpec:
+    workload:
+      manifests:
+        - kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: resource-usage-collect-agent
+          rules:
+            - apiGroups: [ "" ]
+              resources: [ "nodes","configmaps", "pods", "events" ]
+              verbs: [ "get", "list", "watch", "create", "update", "delete", "deletecollection", "patch" ]
+            - apiGroups: [ "coordination.k8s.io" ]
+              resources: [ "leases" ]
+              verbs: [ "create", "get", "list", "update", "watch", "patch" ]
+            - apiGroups: [ "apps" ]
+              resources: [ "replicasets" ]
+              verbs: [ "get", "list", "watch" ]
+            - apiGroups: [ "cluster.open-cluster-management.io" ]
+              resources: [ "addonplacementscores" ]
+              verbs: [ "get", "list", "watch", "create", "update", "delete","deletecollection", "patch" ]
+            - apiGroups: [ "cluster.open-cluster-management.io" ]
+              resources: [ "addonplacementscores/status" ]
+              verbs: [ "update", "patch" ]
+            - apiGroups: [ "config.openshift.io" ]
+              resources: [ "infrastructures" ]
+              verbs: [ "get", "list", "watch" ]
+        - kind: ClusterRoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: resource-usage-collect-agent
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: resource-usage-collect-agent
+          subjects:
+            - kind: ServiceAccount
+              name: resource-usage-collect-agent-sa
+              namespace: open-cluster-management-agent-addon
+        - kind: Deployment
+          apiVersion: apps/v1
+          metadata:
+            name: resource-usage-collect-agent
+            namespace: open-cluster-management-agent-addon
+            labels:
+              app: resource-usage-collect-agent
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: resource-usage-collect-agent
+            template:
+              metadata:
+                labels:
+                  app: resource-usage-collect-agent
+              spec:
+                serviceAccount: resource-usage-collect-agent-sa
+                containers:
+                  - name: resource-usage-collect-agent
+                    image: zheshen/resource-usage-collect-addon-template:v2
+                    imagePullPolicy: Always
+                    args:
+                      - "/addon"
+                      - "agent"
+                      - "--hub-kubeconfig={{HUB_KUBECONFIG}}"
+                      - "--cluster-name={{CLUSTER_NAME}}"
+                      - "--addon-namespace=open-cluster-management-agent-addon"
+        - kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: open-cluster-management:resource-usage-collect:agent
+            namespace: open-cluster-management-agent-addon
+          rules:
+            - apiGroups: [ "" ]
+              resources: [ "nodes","configmaps", "pods" ]
+              verbs: [ "get", "list", "watch" ]
+            - apiGroups: [ "cluster.open-cluster-management.io" ]
+              resources: [ "addonplacementscores" ]
+              verbs: [ "get", "list", "watch", "create", "update", "delete", "deletecollection", "patch" ]
+            - apiGroups: [ "cluster.open-cluster-management.io" ]
+              resources: [ "addonplacementscores/status" ]
+              verbs: [ "update", "patch" ]
+        - kind: RoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          metadata:
+            name: open-cluster-management:resource-usage-collect:agent
+            namespace: open-cluster-management-agent-addon
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: open-cluster-management:resource-usage-collect:agent
+          subjects:
+            - kind: ServiceAccount
+              name: resource-usage-collect-agent-sa
+              namespace: open-cluster-management-agent-addon
+        - kind: ServiceAccount
+          apiVersion: v1
+          metadata:
+            name: resource-usage-collect-agent-sa
+            namespace: open-cluster-management-agent-addon
+  registration:
+    - type: KubeClient
+      kubeClient:
+        hubPermissions:
+          - type: CurrentCluster
+            currentCluster:
+              clusterRoleName: open-cluster-management:resource-usage-collect:agent # permission in the hub
