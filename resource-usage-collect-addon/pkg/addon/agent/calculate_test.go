@@ -12,70 +12,113 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// Test normalizeScore function.
 func TestNormalizeValue(t *testing.T) {
 	cases := []struct {
 		name           string
-		cpuAlloc       float64
-		cpuUsage       float64
-		memAlloc       float64
-		memUsage       float64
-		expectCPUScore int64
-		expectMemScore int64
+		cpuAvailable   float64
+		memAvailable   float64
+		gpuAvailable   float64
+		tpuAvailable   float64
+		expectCPUScore int32
+		expectMemScore int32
+		expectGPUScore int32
+		expectTPUScore int32
 	}{
 		{
-			name:           "usage < alloc",
-			cpuAlloc:       70,
-			cpuUsage:       30,
-			memAlloc:       1024 * 1024 * 1024 * 1024,
-			memUsage:       1024 * 1024 * 1024 * 500,
+			name:           "usage = alloc", // Indicating that cpuAvailable, gpuAvailable etc. are all 0.
+			cpuAvailable:   0,
+			memAvailable:   0,
+			gpuAvailable:   0,
+			tpuAvailable:   0,
+			expectCPUScore: -100,
+			expectMemScore: -100,
+			expectGPUScore: -100,
+			expectTPUScore: -100,
+		},
+		{
+			name:           "usage < alloc", // Indicating that cpuAvailable, gpuAvailable etc. are all positive.
+			cpuAvailable:   40,
+			memAvailable:   524 * 1024 * 1024 * 1024,
+			gpuAvailable:   2,
+			tpuAvailable:   1,
 			expectCPUScore: -20,
-			expectMemScore: 2,
+			expectMemScore: 100,
+			expectGPUScore: -80,
+			expectTPUScore: -90,
 		},
 		{
-			name:           "usage = alloc",
-			cpuAlloc:       70,
-			cpuUsage:       70,
-			memAlloc:       1024 * 1024 * 1024,
-			memUsage:       1024 * 1024 * 1024,
+			name:           "usage > alloc", // Indicating that cpuAvailable, gpuAvailable etc. are all negative.
+			cpuAvailable:   -10,
+			memAvailable:   -1024 * 1024 * 1024,
+			gpuAvailable:   -10,
+			tpuAvailable:   -10,
 			expectCPUScore: -100,
 			expectMemScore: -100,
-		},
-		{
-			name:           "usage > alloc",
-			cpuAlloc:       70,
-			cpuUsage:       80,
-			memAlloc:       1024 * 1024 * 1024 * 1024,
-			memUsage:       1024 * 1024 * 1024 * 1025,
-			expectCPUScore: -100,
-			expectMemScore: -100,
+			expectGPUScore: -100,
+			expectTPUScore: -100,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			score := Score{}
-			cpuScore, memScore, err := score.normalizeScore(c.cpuAlloc, c.cpuUsage, c.memAlloc, c.memUsage)
+			cpuScore, memScore, gpuScore, tpuScore, err := score.normalizeScore("testScope", c.cpuAvailable, c.memAvailable, c.gpuAvailable, c.tpuAvailable)
 			require.NoError(t, err)
 			assert.Equal(t, c.expectCPUScore, cpuScore)
 			assert.Equal(t, c.expectMemScore, memScore)
+			assert.Equal(t, c.expectGPUScore, gpuScore)
+			assert.Equal(t, c.expectTPUScore, tpuScore)
 		})
 	}
 }
 
-func TestCalculatePodResourceRequest(t *testing.T) {
+// Test the calculation of resources across the cluster and on specific nodes
+func TestCalculateClusterResources(t *testing.T) {
+	// Create testing nodes and pods.
+	node1 := &corev1.Node{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "node1",
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:               resource.MustParse("16"),
+				corev1.ResourceMemory:            resource.MustParse("32Gi"),
+				corev1.ResourceName(ResourceGPU): resource.MustParse("6"),
+			},
+		},
+	}
+
+	node2 := &corev1.Node{
+		ObjectMeta: v1.ObjectMeta{
+			Name: "node2",
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:               resource.MustParse("32"),
+				corev1.ResourceMemory:            resource.MustParse("64Gi"),
+				corev1.ResourceName(ResourceGPU): resource.MustParse("8"),
+			},
+		},
+	}
+
 	testPod := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
+			// Mock Pod deployed in node2
+			Labels: map[string]string{"name": "test"},
 		},
 		Spec: corev1.PodSpec{
+			NodeName: "node2",
 			Containers: []corev1.Container{
 				{
 					Name: "test",
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("500m"),
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
+							corev1.ResourceCPU:               resource.MustParse("4"),
+							corev1.ResourceMemory:            resource.MustParse("8Gi"),
+							corev1.ResourceName(ResourceGPU): resource.MustParse("2"),
 						},
 					},
 				},
@@ -83,23 +126,27 @@ func TestCalculatePodResourceRequest(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewSimpleClientset(node1, node2, testPod)
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	podInformer := informerFactory.Core().V1().Pods()
 	nodeInformer := informerFactory.Core().V1().Nodes()
 	podInformer.Informer().GetStore().Add(testPod)
+	nodeInformer.Informer().GetStore().Add(node1)
+	nodeInformer.Informer().GetStore().Add(node2)
 
 	s := NewScore(nodeInformer, podInformer)
 
-	cpuRequest, err := s.calculatePodResourceRequest(corev1.ResourceCPU)
+	// Test calculateClusterAvailable for GPUs
+	totalGPUAvailable, err := s.calculateClusterAvailable(ResourceGPU)
 	require.NoError(t, err)
 
-	cpuExpected := 0.5
-	assert.Equal(t, cpuExpected, cpuRequest)
+	// The cluster should have 12 GPUs available (6 from node1 + 6 from node2 after deducting 2 used by testPod).
+	assert.Equal(t, float64(12), totalGPUAvailable)
 
-	memoryRequest, err := s.calculatePodResourceRequest(corev1.ResourceMemory)
+	// Test calculateNodeResourceUsage for node2
+	gpuUsage, err := s.calculateNodeResourceUsage("node2", ResourceGPU)
 	require.NoError(t, err)
 
-	memoryExpected := float64(1073741824) // 1GiB
-	assert.Equal(t, memoryExpected, memoryRequest)
+	// Expect testPod on node2 to use 2 GPUs.
+	assert.Equal(t, float64(2), gpuUsage)
 }
