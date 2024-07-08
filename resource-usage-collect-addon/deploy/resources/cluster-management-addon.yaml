@@ -1,0 +1,17 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: resource-usage-collect
+spec:
+  addOnMeta:
+    displayName: resource-usage-collect
+  supportedConfigs:
+    - group: addon.open-cluster-management.io
+      resource: addontemplates
+      defaultConfig:
+        name: resource-usage-collect
+  installStrategy:
+    type: Placements
+    placements:
+      - name: placement-all
+        namespace: default
