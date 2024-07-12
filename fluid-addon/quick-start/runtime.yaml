@@ -1,0 +1,16 @@
+apiVersion: data.fluid.io/v1alpha1
+kind: AlluxioRuntime
+metadata:
+  name: demo
+  namespace: default
+spec:
+  replicas: 1
+  tieredstore:
+    levels:
+      - mediumtype: MEM
+        #path: /dev/shm
+        #quota: 64Mi
+        path: /home/tmp/fluid
+        quota: 2Gi
+        high: "0.95"
+        low: "0.7"

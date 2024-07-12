@@ -1,0 +1,9 @@
+apiVersion: data.fluid.io/v1alpha1
+kind: Dataset
+metadata:
+  name: demo
+  namespace: default
+spec:
+  mounts:
+    - mountPoint: https://downloads.apache.org/zookeeper/stable/
+      name: spark

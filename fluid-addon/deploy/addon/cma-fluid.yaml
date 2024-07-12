@@ -6,11 +6,42 @@ metadata:
   name: fluid
 spec:
   addOnConfiguration: {}
-  addOnMeta: {}
+  addOnMeta:
+    displayName: Fluid
+    description: Fluid is an open source Kubernetes-native Distributed Dataset Orchestrator and Accelerator for data-intensive applications, such as big data and AI applications.
   installStrategy:
-    type: Manual
+    # type: Manual
+    type: Placements
+    placements:
+      - name: placement-all
+        namespace: default
+      - name: placement-gke
+        namespace: default
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addontemplates
+            name: fluid-gke-1.0.0
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: fluid-gke-config
+            namespace: default
+      - name: placement-ocp
+        namespace: default
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addontemplates
+            name: fluid-ocp-1.0.0
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: fluid-ocp-config
+            namespace: default
   supportedConfigs:
   - defaultConfig:
-      name: fluid-0.0.1
+      name: fluid-1.0.0
     group: addon.open-cluster-management.io
     resource: addontemplates
+  - defaultConfig:
+      name: fluid-config
+      namespace: default
+    group: addon.open-cluster-management.io
+    resource: addondeploymentconfigs

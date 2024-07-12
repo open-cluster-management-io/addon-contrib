@@ -1,0 +1,2825 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: fluid-1.0.0
+spec:
+  addonName: fluid
+  agentSpec:
+    manifestConfigs:
+    - resourceIdentifier:
+        group: batch
+        name: fluid-crds-upgrade-100-31f5433
+        namespace: fluid-system
+        resource: jobs # server-side apply for jobs since the job resources will also be updated by k8s controllers
+      updateStrategy:
+        type: ServerSideApply
+    # server-side apply for all *runtime-controller, since the initial replicas for these controllers are 0, but
+    # the replicas will be updated if there is a corresponding runtime CR created
+    - resourceIdentifier:
+        group: apps
+        name: alluxioruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: efcruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: goosefsruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: jindoruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: juicefsruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: thinruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    - resourceIdentifier:
+        group: apps
+        name: vineyardruntime-controller
+        namespace: fluid-system
+        resource: deployments
+      updateStrategy:
+        type: ServerSideApply
+    workload:
+      manifests:
+      # grant permission for work agent ----- begin
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: open-cluster-management:klusterlet-work:fluid-clusterrole
+          labels:
+            # with this label, the clusterRole will be selected to aggregate
+            open-cluster-management.io/aggregate-to-work: "true"
+        rules:
+        - apiGroups: ["data.fluid.io"]
+          resources: ['*']
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["csidrivers"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["admissionregistration.k8s.io"]
+          resources: ["mutatingwebhookconfigurations"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      # grant permission for work agent ----- end
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          annotations:
+            addon.open-cluster-management.io/deletion-orphan: ""
+          labels:
+            addon.open-cluster-management.io/namespace: "true"
+          name: fluid-system
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: alluxioruntime-controller
+          name: alluxioruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: alluxioruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: alluxioruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --runtime-node-port-range=20000-26000
+                - --runtime-workers=3
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                - --port-allocate-policy=random
+                command:
+                - alluxioruntime-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                - name: DEFAULT_INIT_IMAGE_ENV
+                  value: fluidcloudnative/init-users:v0.9.0
+                - name: ALLUXIO_RUNTIME_IMAGE_ENV
+                  value: alluxio/alluxio-dev:2.9.0
+                - name: ALLUXIO_FUSE_IMAGE_ENV
+                  value: alluxio/alluxio-dev:2.9.0
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: HELM_DRIVER
+                  value: configmap
+                - name: ALLUXIO_MOUNT_CONFIG_STORAGE
+                  value: configmap
+                image: fluidcloudnative/alluxioruntime-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: alluxioruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: dataset-controller
+          name: dataset-controller
+          namespace: fluid-system
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: dataset-controller
+          template:
+            metadata:
+              labels:
+                control-plane: dataset-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                command:
+                - dataset-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                - name: JINDO_ENGINE_TYPE
+                  value: jindocache
+                - name: ALLUXIO_RUNTIME_IMAGE_ENV
+                  value: alluxio/alluxio-dev:2.9.0
+                - name: MY_POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: HELM_DRIVER
+                  value: configmap
+                image: fluidcloudnative/dataset-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: dataset-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: efcruntime-controller
+          name: efcruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: efcruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: efcruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=true
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                command:
+                - efcruntime-controller
+                - start
+                env:
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: EFC_INIT_FUSE_IMAGE_ENV
+                  value: registry.cn-zhangjiakou.aliyuncs.com/nascache/init-alifuse:v1.2.2-19dcee9
+                - name: EFC_MASTER_IMAGE_ENV
+                  value: registry.cn-zhangjiakou.aliyuncs.com/nascache/efc-master:v1.2.2-19dcee9
+                - name: EFC_WORKER_IMAGE_ENV
+                  value: registry.cn-zhangjiakou.aliyuncs.com/nascache/efc-worker:v1.2.2-19dcee9
+                - name: EFC_FUSE_IMAGE_ENV
+                  value: registry.cn-zhangjiakou.aliyuncs.com/nascache/efc-fuse:v1.2.2-19dcee9
+                - name: EFC_SESSMGR_IMAGE_ENV
+                  value: registry.cn-zhangjiakou.aliyuncs.com/nascache/efc-fuse:v1.2.2-19dcee9
+                - name: HELM_DRIVER
+                  value: configmap
+                image: fluidcloudnative/efcruntime-controller:v1.0.0-31f5433
+                imagePullPolicy: Always
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: efcruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: fluidapp-controller
+          name: fluidapp-controller
+          namespace: fluid-system
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: fluidapp-controller
+          template:
+            metadata:
+              labels:
+                control-plane: fluidapp-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                command:
+                - fluidapp-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                image: fluidcloudnative/application-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: fluidapp-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: goosefsruntime-controller
+          name: goosefsruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: goosefsruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: goosefsruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --runtime-node-port-range=26000-32000
+                - --runtime-workers=3
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                - --port-allocate-policy=random
+                command:
+                - goosefsruntime-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                - name: DEFAULT_INIT_IMAGE_ENV
+                  value: fluidcloudnative/init-users:v0.9.0
+                - name: GOOSEFS_RUNTIME_IMAGE_ENV
+                  value: ccr.ccs.tencentyun.com/qcloud/goosefs:v1.2.0
+                - name: GOOSEFS_FUSE_IMAGE_ENV
+                  value: ccr.ccs.tencentyun.com/qcloud/goosefs-fuse:v1.2.0
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                image: fluidcloudnative/goosefsruntime-controller:v1.0.0-31f5433
+                imagePullPolicy: Always
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: goosefsruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: jindoruntime-controller
+          name: jindoruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: jindoruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: jindoruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --runtime-node-port-range=18000-19999
+                - --runtime-workers=3
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                - --port-allocate-policy=random
+                command:
+                - jindoruntime-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: JINDO_SMARTDATA_IMAGE_ENV
+                  value: registry.cn-shanghai.aliyuncs.com/jindofs/smartdata:6.2.0
+                - name: JINDO_FUSE_IMAGE_ENV
+                  value: registry.cn-shanghai.aliyuncs.com/jindofs/jindo-fuse:6.2.0
+                - name: DEFAULT_INIT_IMAGE_ENV
+                  value: fluidcloudnative/init-users:v0.9.0
+                - name: INIT_PORT_CHECK_ENABLED
+                  value: "false"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: JINDO_ENGINE_TYPE
+                  value: jindocache
+                - name: QUERY_UFS_TOTAL
+                  value: "true"
+                - name: HELM_DRIVER
+                  value: configmap
+                image: fluidcloudnative/jindoruntime-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: jindoruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: juicefsruntime-controller
+          name: juicefsruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: juicefsruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: juicefsruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --runtime-workers=3
+                - --leader-election-namespace=fluid-system
+                command:
+                - juicefsruntime-controller
+                - start
+                env:
+                - name: JUICEFS_CE_IMAGE_ENV
+                  value: juicedata/juicefs-fuse:ce-v1.1.0-rc1
+                - name: JUICEFS_EE_IMAGE_ENV
+                  value: juicedata/juicefs-fuse:ee-4.9.16
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: HELM_DRIVER
+                  value: configmap
+                image: fluidcloudnative/juicefsruntime-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: juicefsruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: thinruntime-controller
+          name: thinruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: thinruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: thinruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                command:
+                - thinruntime-controller
+                - start
+                env:
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: CRITICAL_FUSE_POD
+                  value: "{{CRITICAL_FUSE_POD}}"
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: HELM_DRIVER
+                  value: configmap
+                - name: THIN_FUSE_CONFIG_STORAGE
+                  value: configmap
+                image: fluidcloudnative/thinruntime-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: thinruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: vineyardruntime-controller
+          name: vineyardruntime-controller
+          namespace: fluid-system
+        spec:
+          replicas: 0
+          selector:
+            matchLabels:
+              control-plane: vineyardruntime-controller
+          template:
+            metadata:
+              annotations: null
+              labels:
+                control-plane: vineyardruntime-controller
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --development=false
+                - --pprof-addr=:6060
+                - --enable-leader-election
+                - --leader-election-namespace=fluid-system
+                command:
+                - vineyardruntime-controller
+                - start
+                env:
+                - name: FLUID_WORKDIR
+                  value: /tmp
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: VINEYARD_MASTER_IMAGE_ENV
+                  value: bitnami/etcd:3.5.10
+                - name: VINEYARD_WORKER_IMAGE_ENV
+                  value: vineyardcloudnative/vineyardd:v0.21.5
+                - name: VINEYARD_FUSE_IMAGE_ENV
+                  value: vineyardcloudnative/vineyard-fluid-fuse:v0.21.5
+                - name: FLUID_SYNC_RETRY_DURATION
+                  value: 15s
+                - name: HELM_DRIVER
+                  value: configmap
+                image: fluidcloudnative/vineyardruntime-controller:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 1536Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+              serviceAccountName: vineyardruntime-controller
+              terminationGracePeriodSeconds: 10
+              tolerations:
+              - operator: Exists
+      - apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: csi-nodeplugin-fluid
+          namespace: fluid-system
+        spec:
+          selector:
+            matchLabels:
+              app: csi-nodeplugin-fluid
+          template:
+            metadata:
+              labels:
+                app: csi-nodeplugin-fluid
+            spec:
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                    - matchExpressions:
+                      - key: type
+                        operator: NotIn
+                        values:
+                        - virtual-kubelet
+              containers:
+              - args:
+                - --v=5
+                - --csi-address=/var/lib/kubelet/csi-plugins/fuse.csi.fluid.io/csi.sock
+                - --kubelet-registration-path=/var/lib/kubelet/csi-plugins/fuse.csi.fluid.io/csi.sock
+                env:
+                - name: KUBE_NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                image: fluidcloudnative/csi-node-driver-registrar:v2.3.0
+                name: node-driver-registrar
+                volumeMounts:
+                - mountPath: /var/lib/kubelet
+                  mountPropagation: HostToContainer
+                  name: kubelet-dir
+                - mountPath: /registration
+                  name: registration-dir
+              - args:
+                - --nodeid=$(NODE_ID)
+                - --endpoint=$(CSI_ENDPOINT)
+                - --v=5
+                - --feature-gates=FuseRecovery=false
+                - --prune-fs=fuse.alluxio-fuse,fuse.jindofs-fuse,fuse.juicefs,fuse.goosefs-fuse,ossfs,alifuse.aliyun-alinas-efc
+                - --prune-path="{{RUNTIME_MOUNT_PATH}}"
+                - --pprof-addr=:6060
+                command:
+                - /usr/local/bin/entrypoint.sh
+                env:
+                - name: NODE_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                - name: NODE_IP
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.hostIP
+                - name: MOUNT_ROOT
+                  value: "{{RUNTIME_MOUNT_PATH}}"
+                - name: REVOCER_WARNING_THRESHOLD
+                  value: "50"
+                - name: ALLOW_PATCH_STALE_NODE
+                  value: "true"
+                - name: KUBELET_ROOTDIR
+                  value: /var/lib/kubelet
+                - name: CSI_ENDPOINT
+                  value: unix:///var/lib/kubelet/csi-plugins/fuse.csi.fluid.io/csi.sock
+                - name: NODEPUBLISH_METHOD
+                  value: bindMount
+                image: fluidcloudnative/fluid-csi:v1.0.0-31f5433
+                imagePullPolicy: IfNotPresent
+                name: plugins
+                securityContext:
+                  allowPrivilegeEscalation: true
+                  capabilities:
+                    add:
+                    - SYS_ADMIN
+                  privileged: true
+                  runAsUser: 0
+                volumeMounts:
+                - mountPath: /plugin
+                  name: plugin-dir
+                - mountPath: /var/lib/kubelet
+                  mountPropagation: Bidirectional
+                  name: kubelet-dir
+                - mountPath: "{{RUNTIME_MOUNT_PATH}}"
+                  mountPropagation: HostToContainer
+                  name: fluid-src-dir
+                - mountPath: /etc/kubernetes/kubelet.conf
+                  mountPropagation: HostToContainer
+                  name: kubelet-kube-config
+                  readOnly: true
+                - mountPath: /host-etc/updatedb.conf
+                  name: updatedb-conf
+                - mountPath: /host-etc/updatedb.conf.bak
+                  name: updatedb-conf-bak
+              hostPID: false
+              serviceAccountName: fluid-csi
+              tolerations:
+              - operator: Exists
+              volumes:
+              - hostPath:
+                  path: /var/lib/kubelet
+                  type: Directory
+                name: kubelet-dir
+              - hostPath:
+                  path: /var/lib/kubelet/plugins/csi-fluid-plugin
+                  type: DirectoryOrCreate
+                name: plugin-dir
+              - hostPath:
+                  path: /var/lib/kubelet/plugins_registry
+                  type: DirectoryOrCreate
+                name: registration-dir
+              - hostPath:
+                  path: "{{RUNTIME_MOUNT_PATH}}"
+                  type: DirectoryOrCreate
+                name: fluid-src-dir
+              - hostPath:
+                  path: /etc/kubernetes/kubelet.conf
+                  type: File
+                name: kubelet-kube-config
+              - hostPath:
+                  path: /etc/updatedb.conf
+                  type: FileOrCreate
+                name: updatedb-conf
+              - hostPath:
+                  path: /etc/updatedb.conf.backup
+                  type: FileOrCreate
+                name: updatedb-conf-bak
+          updateStrategy:
+            type: RollingUpdate
+      - apiVersion: storage.k8s.io/v1
+        kind: CSIDriver
+        metadata:
+          name: fuse.csi.fluid.io
+        spec:
+          attachRequired: false
+          podInfoOnMount: true
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: alluxioruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: alluxioruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - alluxiodataloads
+          - alluxioruntimes
+          - datasets
+          - alluxiodataloads/status
+          - alluxioruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: alluxioruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: alluxioruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: alluxioruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: alluxioruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - alluxio.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: alluxioruntime-controller
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: alluxioruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: alluxioruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: fluid-csi
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: fluid-csi-plugin
+        rules:
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - alluxioruntimes
+          - jindoruntimes
+          - goosefsruntimes
+          - juicefsruntimes
+          - thinruntimes
+          - efcruntimes
+          - datasets
+          - vineyardruntimes
+          - alluxioruntimes/status
+          - jindoruntimes/status
+          - goosefsruntimes/status
+          - juicefsruntimes/status
+          - thinruntimes/status
+          - efcruntimes/status
+          - datasets/status
+          - vineyardruntimes/status
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes/status
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims/status
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: fluid-csi-plugin
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: fluid-csi-plugin
+        subjects:
+        - kind: ServiceAccount
+          name: fluid-csi
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: dataset-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: dataset-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          - jobs/status
+          - cronjobs
+          - cronjobs/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - get
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - datamigrates
+          - datamigrates/status
+          - dataloads
+          - dataloads/status
+          - databackups
+          - databackups/status
+          - dataprocesses
+          - dataprocesses/status
+          - datasets
+          - datasets/status
+          - alluxioruntimes
+          - alluxioruntimes/status
+          - jindoruntimes
+          - jindoruntimes/status
+          - goosefsruntimes
+          - goosefsruntimes/status
+          - juicefsruntimes
+          - juicefsruntimes/status
+          - thinruntimes
+          - thinruntimes/status
+          - efcruntimes
+          - efcruntimes/status
+          - vineyardruntimes
+          - vineyardruntimes/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - statefulsets
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - daemonsets/status
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          - deployments/scale
+          - deployments/status
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: dataset-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: dataset-controller
+        subjects:
+        - kind: ServiceAccount
+          name: dataset-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: dataset-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - dataset.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: dataset-controller
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: dataset-controller
+        subjects:
+        - kind: ServiceAccount
+          name: dataset-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: efcruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: efcruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - efcruntimes
+          - datasets
+          - efcruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: efcruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: efcruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: efcruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: efcruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - efc.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: efcruntime-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: efcruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: efcruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: fluidapp-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: fluidapp-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - get
+          - watch
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - get
+          - create
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: fluidapp-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: fluidapp-controller
+        subjects:
+        - kind: ServiceAccount
+          name: fluidapp-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: fluidapp-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - fluidapp.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: fluidapp-controller
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: fluidapp-controller
+        subjects:
+        - kind: ServiceAccount
+          name: fluidapp-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: goosefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: goosefsruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - list
+          - watch
+          - get
+          - create
+          - delete
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - goosefsdataloads
+          - goosefsruntimes
+          - datasets
+          - goosefsdataloads/status
+          - goosefsruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: goosefsruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: goosefsruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: goosefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: goosefsruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - goosefs.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: goosefsruntime-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: goosefsruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: goosefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: jindoruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: jindoruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - jindoruntimes
+          - datasets
+          - jindoruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: jindoruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: jindoruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: jindoruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: jindoruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - jindo.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: jindoruntime-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: jindoruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: jindoruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: juicefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: juicefsruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - create
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+          - get
+          - list
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - juicefsruntimes
+          - datasets
+          - juicefsruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - list
+          - get
+          - delete
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - roles
+          - rolebindings
+          verbs:
+          - create
+          - list
+          - get
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: juicefsruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: juicefsruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: juicefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: juicefsruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - juicefs.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: juicefsruntime-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: juicefsruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: juicefsruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: thinruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: thinruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - alluxioruntimes
+          - jindoruntimes
+          - juicefsruntimes
+          - goosefsruntimes
+          - efcruntimes
+          - thinruntimes
+          - thinruntimeprofiles
+          - datasets
+          - thinruntimes/status
+          - thinruntimeprofiles/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - serviceaccounts
+          verbs:
+          - create
+          - list
+          - get
+          - delete
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterroles
+          - clusterrolebindings
+          verbs:
+          - create
+          - list
+          - get
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: thinruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: thinruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: thinruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: thinruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - thin.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: thinruntime-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: thinruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: thinruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: vineyardruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: vineyardruntime-controller
+        rules:
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumeclaims
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - create
+          - delete
+          - list
+          - watch
+          - get
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - vineyardruntimes
+          - datasets
+          - vineyardruntimes/status
+          - datasets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - statefulsets
+          - daemonsets/status
+          - statefulsets/status
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: vineyardruntime-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: vineyardruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: vineyardruntime-controller
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: vineyardruntime-controller
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - create
+        - apiGroups:
+          - coordination.k8s.io
+          resourceNames:
+          - vineyard.data.fluid.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - update
+          - patch
+          - delete
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: vineyardruntime-controller
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: vineyardruntime-controller
+        subjects:
+        - kind: ServiceAccount
+          name: vineyardruntime-controller
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: fluid-webhook
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: fluid-webhook
+        rules:
+        - apiGroups:
+          - admissionregistration.k8s.io
+          resourceNames:
+          - fluid-pod-admission-webhook
+          resources:
+          - mutatingwebhookconfigurations
+          verbs:
+          - get
+          - patch
+          - list
+          - watch
+        - apiGroups:
+          - data.fluid.io
+          resources:
+          - datasets
+          - alluxioruntimes
+          - jindoruntimes
+          - juicefsruntimes
+          - goosefsruntimes
+          - thinruntimes
+          - efcruntimes
+          - vineyardruntimes
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          - persistentvolumeclaims
+          - persistentvolumes
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - create
+          - update
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - daemonsets/status
+          verbs:
+          - get
+          - list
+          - watch
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: fluid-webhook-clusterrolebinding
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: fluid-webhook
+        subjects:
+        - kind: ServiceAccount
+          name: fluid-webhook
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: fluid-webhook
+          namespace: fluid-system
+        rules:
+        - apiGroups:
+          - ""
+          resourceNames:
+          - fluid-webhook-certs
+          resources:
+          - secrets
+          verbs:
+          - get
+          - update
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: fluid-webhook-rolebinding
+          namespace: fluid-system
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: Role
+          name: fluid-webhook
+        subjects:
+        - kind: ServiceAccount
+          name: fluid-webhook
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          annotations:
+            helm.sh/hook: pre-upgrade
+            helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+            helm.sh/hook-weight: "-5"
+          name: fluid-crds-upgrade
+          namespace: fluid-system
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          annotations:
+            helm.sh/hook: pre-upgrade
+            helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+            helm.sh/hook-weight: "-5"
+          name: fluid-crds-upgrade
+        rules:
+        - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - create
+          - get
+          - update
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          annotations:
+            helm.sh/hook: pre-upgrade
+            helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+            helm.sh/hook-weight: "-5"
+          name: fluid-crds-upgrade
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: fluid-crds-upgrade
+        subjects:
+        - kind: ServiceAccount
+          name: fluid-crds-upgrade
+          namespace: fluid-system
+      - apiVersion: batch/v1
+        kind: Job
+        metadata:
+          annotations:
+            helm.sh/hook: pre-upgrade
+            helm.sh/hook-delete-policy: before-hook-creation
+            helm.sh/hook-weight: "-4"
+          name: fluid-crds-upgrade-100-31f5433
+          namespace: fluid-system
+        spec:
+          template:
+            spec:
+              containers:
+              - command:
+                - bash
+                - /fluid/upgrade-crds.sh
+                image: fluidcloudnative/fluid-crd-upgrader:v1.0.0-31f5433
+                name: fluid-crds-upgrade
+              restartPolicy: OnFailure
+              serviceAccountName: fluid-crds-upgrade
+          ttlSecondsAfterFinished: 259200
+      - apiVersion: v1
+        data:
+          pluginsProfile: |
+            pluginConfig:
+            - args: |
+                preferred:
+                  # fluid.io/fuse is a fluid built-in affinity, prefer to schedule pods to nodes with runtime fuse pods.
+                  # - name: fluid.io/fuse
+                  #   weight: 100
+                  # fluid.io/node is a fluid built-in affinity, prefer to schedule pods to nodes with runtime worker pods.
+                  - name: fluid.io/node
+                    weight: 100
+                  # runtime worker's zone label name, can be changed according to k8s environment.
+                  - name: topology.kubernetes.io/zone
+                    weight: 50
+                  # runtime worker's region label name, can be changed according to k8s environment.
+                  - name: topology.kubernetes.io/region
+                    weight: 20
+                # used when app pod with label fluid.io/dataset.{dataset name}.sched set true
+                required:
+                  - fluid.io/node
+              name: NodeAffinityWithCache
+            plugins:
+              serverful:
+                withDataset:
+                - RequireNodeWithFuse
+                - NodeAffinityWithCache
+                - MountPropagationInjector
+                withoutDataset:
+                - PreferNodesWithoutCache
+              serverless:
+                withDataset:
+                - FuseSidecar
+                withoutDataset: []
+        kind: ConfigMap
+        metadata:
+          name: webhook-plugins
+          namespace: fluid-system
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: fluid-pod-admission-webhook
+          namespace: fluid-system
+        spec:
+          ports:
+          - name: https-rest
+            port: 9443
+            targetPort: 9443
+          selector:
+            control-plane: fluid-webhook
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          labels:
+            control-plane: fluid-webhook
+          name: fluid-webhook
+          namespace: fluid-system
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              control-plane: fluid-webhook
+          template:
+            metadata:
+              labels:
+                control-plane: fluid-webhook
+            spec:
+              containers:
+              - args:
+                - --development=false
+                - --full-go-profile=false
+                - --pprof-addr=:6060
+                command:
+                - fluid-webhook
+                - start
+                env:
+                - name: MY_POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: TIME_TRACK
+                  value: "false"
+                image: fluidcloudnative/fluid-webhook:v1.0.0-31f5433
+                name: manager
+                ports:
+                - containerPort: 8080
+                  name: metrics
+                  protocol: TCP
+                volumeMounts:
+                - mountPath: /etc/fluid
+                  name: webhook-plugins
+              serviceAccountName: fluid-webhook
+              tolerations:
+              - operator: Exists
+              volumes:
+              - configMap:
+                  items:
+                  - key: pluginsProfile
+                    mode: 292
+                    path: plugins.profile
+                  name: webhook-plugins
+                name: webhook-plugins
+      - apiVersion: admissionregistration.k8s.io/v1
+        kind: MutatingWebhookConfiguration
+        metadata:
+          name: fluid-pod-admission-webhook
+        webhooks:
+        - admissionReviewVersions:
+          - v1
+          - v1beta1
+          clientConfig:
+            caBundle: Cg==
+            service:
+              name: fluid-pod-admission-webhook
+              namespace: fluid-system
+              path: /mutate-fluid-io-v1alpha1-schedulepod
+              port: 9443
+          failurePolicy: Fail
+          name: sidecar.fuse.fluid.io
+          objectSelector:
+            matchLabels:
+              serverless.fluid.io/inject: "true"
+          reinvocationPolicy: IfNeeded
+          rules:
+          - apiGroups:
+            - ""
+            apiVersions:
+            - v1
+            operations:
+            - CREATE
+            resources:
+            - pods
+          sideEffects: None
+          timeoutSeconds: 15
+        - admissionReviewVersions:
+          - v1
+          - v1beta1
+          clientConfig:
+            caBundle: Cg==
+            service:
+              name: fluid-pod-admission-webhook
+              namespace: fluid-system
+              path: /mutate-fluid-io-v1alpha1-schedulepod
+              port: 9443
+          failurePolicy: Fail
+          name: fuse.serverful.fluid.io
+          objectSelector:
+            matchLabels:
+              fuse.serverful.fluid.io/inject: "true"
+          reinvocationPolicy: IfNeeded
+          rules:
+          - apiGroups:
+            - ""
+            apiVersions:
+            - v1
+            operations:
+            - CREATE
+            resources:
+            - pods
+          sideEffects: None
+          timeoutSeconds: 15
+  registration: []

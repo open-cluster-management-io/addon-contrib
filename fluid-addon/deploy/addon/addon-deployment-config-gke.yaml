@@ -1,0 +1,12 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: fluid-gke-config
+  namespace: default
+spec:
+  agentInstallNamespace: fluid-system
+  customizedVariables:
+  - name: RUNTIME_MOUNT_PATH
+    value: /tmp/runtime-mnt
+  - name: CRITICAL_FUSE_POD
+    value: "false"
