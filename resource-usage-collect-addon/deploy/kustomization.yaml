@@ -7,7 +7,7 @@ resources:
 
 images:
 - name: example-addon-image
-  newName: zheshen/resource-usage-collect-addon
+  newName: quay.io/open-cluster-management/resource-usage-collect-addon
   newTag: latest
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

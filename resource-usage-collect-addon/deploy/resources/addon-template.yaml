@@ -50,7 +50,7 @@ spec:
                 serviceAccount: resource-usage-collect-agent-sa
                 containers:
                   - name: resource-usage-collect-agent
-                    image: zheshen/resource-usage-collect-addon:latest
+                    image: example-addon-image
                     imagePullPolicy: Always
                     args:
                       - "/addon"
