@@ -2,126 +2,237 @@ package agent
 
 import (
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	corev1lister "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clustersdkv1alpha1 "open-cluster-management.io/sdk-go/pkg/apis/cluster/v1alpha1"
 )
 
-const MAXSCORE = float64(100)
-const MINSCORE = float64(-100)
-
+// MAXCPUCOUNT Constants for CPU resource counts
 const MAXCPUCOUNT = float64(100)
 const MINCPUCOUNT = float64(0)
 
-// 1TB
+// MAXGPUCOUNT Constants for GPU resource counts
+const MAXGPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 GPUs, can be modified.
+const MINGPUCOUNT = float64(0)
+
+// MAXTPUCOUNT Constants for TPU resource counts
+const MAXTPUCOUNT = float64(20) // Assume that one cluster can have maximum 20 TPUs, can be modified.
+const MINTPUCOUNT = float64(0)
+
+// MAXMEMCOUNT Constants for memory
 const MAXMEMCOUNT = float64(1024 * 1024)
 const MINMEMCOUNT = float64(0)
+
+// ResourceGPU Custom resource names
+const ResourceGPU = "nvidia.com/gpu"
+const ResourceTPU = "google.com/tpu"
 
 type Score struct {
 	nodeLister        corev1lister.NodeLister
 	useRequested      bool
 	enablePodOverhead bool
-	podListener       corev1lister.PodLister
+	podLister         corev1lister.PodLister
 }
 
 func NewScore(nodeInformer corev1informers.NodeInformer, podInformer corev1informers.PodInformer) *Score {
 	return &Score{
 		nodeLister:        nodeInformer.Lister(),
-		podListener:       podInformer.Lister(),
+		podLister:         podInformer.Lister(),
 		enablePodOverhead: true,
 		useRequested:      true,
 	}
 }
 
-func (s *Score) calculateScore() (cpuScore int64, memScore int64, err error) {
-	cpuAlloc, err := s.calculateClusterAllocateable(clusterv1.ResourceCPU)
+// Calculate the available resources in the node scope, the node with the maximum available resources will be chosen to calculate the score.
+func (s *Score) calculateNodeScore() (cpuScore int32, memScore int32, gpuScore int32, tpuScore int32, err error) {
+	// Get the amount of resources available for the node with the largest actual available CPU resources.
+	cpuAvailable, _, err := s.calculateMaxAvailableNode(string(clusterv1.ResourceCPU))
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
-	memAlloc, err := s.calculateClusterAllocateable(clusterv1.ResourceMemory)
+	// Get the amount of resources available for the node with the largest actual available Memory resources.
+	memAvailable, _, err := s.calculateMaxAvailableNode(string(clusterv1.ResourceMemory))
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
-
-	cpuUsage, err := s.calculatePodResourceRequest(v1.ResourceCPU)
+	// Get the amount of resources available for the node with the largest actual available GPU resources.
+	gpuAvailable, _, err := s.calculateMaxAvailableNode(ResourceGPU)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
-	memUsage, err := s.calculatePodResourceRequest(v1.ResourceMemory)
+	// Get the amount of resources available for the node with the largest actual available TPU resources.
+	tpuAvailable, _, err := s.calculateMaxAvailableNode(ResourceTPU)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
-
-	return s.normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage)
+	// Use the amount of available resources directly to generate scores
+	return s.normalizeScore("node", cpuAvailable, memAvailable, gpuAvailable, tpuAvailable)
 }
 
-func (s *Score) normalizeScore(cpuAlloc, cpuUsage, memAlloc, memUsage float64) (cpuScore int64, memScore int64, err error) {
-	klog.Infof("cpuAlloc = %v, cpuUsage = %v, memAlloc = %v, memUsage = %v", cpuAlloc, cpuUsage, int64(memAlloc), int64(memUsage))
-	availableCpu := cpuAlloc - cpuUsage
-	if availableCpu > MAXCPUCOUNT {
-		cpuScore = int64(MAXSCORE)
-	} else if availableCpu <= MINCPUCOUNT {
-		cpuScore = int64(MINSCORE)
-	} else {
-		cpuScore = int64(200*availableCpu/MAXCPUCOUNT - 100)
+// Calculate the available resources in the cluster scope and return four scores for CPU, Memory, GPU, and TPU.
+func (s *Score) calculateClusterScopeScore() (cpuScore int32, memScore int32, gpuScore int32, tpuScore int32, err error) {
+	// Get the total available CPU resources across the cluster.
+	cpuAvailable, err := s.calculateClusterAvailable(string(clusterv1.ResourceCPU))
+	if err != nil {
+		return 0, 0, 0, 0, err
 	}
 
-	availableMem := (memAlloc - memUsage) / (1024 * 1024) // MB
-	if availableMem > MAXMEMCOUNT {
-		memScore = int64(MAXSCORE)
-	} else if availableMem <= MINMEMCOUNT {
-		memScore = int64(MINSCORE)
-	} else {
-		memScore = int64(200*availableMem/MAXMEMCOUNT - 100)
+	// Get the total available Memory resources across the cluster.
+	memAvailable, err := s.calculateClusterAvailable(string(clusterv1.ResourceMemory))
+	if err != nil {
+		return 0, 0, 0, 0, err
 	}
 
-	klog.Infof("cpuScore = %v, memScore = %v", cpuScore, memScore)
-	return cpuScore, memScore, nil
+	// Get the total available GPU resources across the cluster.
+	gpuAvailable, err := s.calculateClusterAvailable(ResourceGPU)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	// Get the total available TPU resources across the cluster.
+	tpuAvailable, err := s.calculateClusterAvailable(ResourceTPU)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	// Normalize and return the scores based on available resources
+	return s.normalizeScore("cluster", cpuAvailable, memAvailable, gpuAvailable, tpuAvailable)
 }
 
-func (s *Score) calculateClusterAllocateable(resourceName clusterv1.ResourceName) (float64, error) {
+// Calculate the available resources in the cluster scope.
+func (s *Score) calculateClusterAvailable(resourceName string) (float64, error) {
 	nodes, err := s.nodeLister.List(labels.Everything())
 	if err != nil {
 		return 0, err
 	}
 
-	allocatableList := make(map[clusterv1.ResourceName]resource.Quantity)
+	var totalAllocatable float64
+	var totalUsage float64
+
 	for _, node := range nodes {
 		if node.Spec.Unschedulable {
 			continue
 		}
-		for key, value := range node.Status.Allocatable {
-			if allocatable, exist := allocatableList[clusterv1.ResourceName(key)]; exist {
-				allocatable.Add(value)
-				allocatableList[clusterv1.ResourceName(key)] = allocatable
-			} else {
-				allocatableList[clusterv1.ResourceName(key)] = value
-			}
+
+		// Accumulate allocatable resources from all nodes
+		alloc, exists := node.Status.Allocatable[v1.ResourceName(resourceName)]
+		if exists {
+			totalAllocatable += alloc.AsApproximateFloat64()
 		}
+
+		// Calculate the resource usage for this node
+		usage, err := s.calculateNodeResourceUsage(node.Name, resourceName)
+		if err != nil {
+			return 0, err
+		}
+		totalUsage += usage
 	}
-	quantity := allocatableList[resourceName]
-	return quantity.AsApproximateFloat64(), nil
+
+	// Calculate available resources
+	available := totalAllocatable - totalUsage
+	return available, nil
 }
 
-func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (float64, error) {
-	list, err := s.podListener.List(labels.Everything())
+// Normalize the score with the logic of ScoreNormaliser.
+func (s *Score) normalizeScore(scope string, cpuAvailable, memAvailable, gpuAvailable, tpuAvailable float64) (cpuScore int32, memScore int32, gpuScore int32, tpuScore int32, err error) {
+	// Add a parameter that identifies whether the current scope is "cluster scope" or "node scope".
+	klog.Infof("[%s] cpuAvailable = %v, memAvailable = %v, gpuAvailable = %v, tpuAvailable = %v", scope, cpuAvailable, memAvailable, gpuAvailable, tpuAvailable)
+
+	cpuScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINCPUCOUNT, MAXCPUCOUNT)
+	cpuScore, err = cpuScoreNormalizer.Normalize(cpuAvailable)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	availableMem := memAvailable / 1024 * 1024 // MB
+	memScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINMEMCOUNT, MAXMEMCOUNT)
+	memScore, err = memScoreNormalizer.Normalize(availableMem)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	gpuScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINGPUCOUNT, MAXGPUCOUNT)
+	gpuScore, err = gpuScoreNormalizer.Normalize(gpuAvailable)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	tpuScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINTPUCOUNT, MAXTPUCOUNT)
+	tpuScore, err = tpuScoreNormalizer.Normalize(tpuAvailable)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	klog.Infof("[%s] cpuScore = %v, memScore = %v, gpuScore = %v, tpuScore = %v", scope, cpuScore, memScore, gpuScore, tpuScore)
+	return cpuScore, memScore, gpuScore, tpuScore, nil
+}
+
+// Find the node in the cluster that has the maximum available resources.
+func (s *Score) calculateMaxAvailableNode(resourceName string) (float64, string, error) {
+	// Get the list of all Nodes,
+	nodes, err := s.nodeLister.List(labels.Everything())
+	if err != nil {
+		return 0, "", err
+	}
+	var maxAvailable float64
+	var maxNodeName string
+	// Iterate every node, calculate its available resources amount.
+	for _, node := range nodes {
+		if node.Spec.Unschedulable {
+			continue
+		}
+		alloc, exists := node.Status.Allocatable[v1.ResourceName(resourceName)]
+		if !exists {
+			continue
+		}
+		// Get the resource usage on this node.
+		usage, err := s.calculateNodeResourceUsage(node.Name, resourceName)
+		if err != nil {
+			return 0, "", err
+		}
+		// Calculate the actual amount of resources available.
+		available := alloc.AsApproximateFloat64() - usage
+		// Find the node with the maximum available resources.
+		if available > maxAvailable {
+			maxAvailable = available
+			maxNodeName = node.Name
+		}
+	}
+	klog.Infof("Max available %s: %f on node: %s", resourceName, maxAvailable, maxNodeName)
+	return maxAvailable, maxNodeName, nil
+}
+
+// Calculate the actual usage of a specific resource (e.g., GPU) by unfinished Pods on a given node.
+func (s *Score) calculateNodeResourceUsage(nodeName string, resourceName string) (float64, error) {
+	// Get the list of all Pods.
+	list, err := s.podLister.List(labels.Everything())
 	if err != nil {
 		return 0, err
 	}
 
 	var podRequest float64
-	var podCount int
 	for _, pod := range list {
+		// Only counts Pods dispatched to specific nodes.
+		if pod.Spec.NodeName != nodeName {
+			continue
+		}
 
+		// Skip completed Pods or Pods that have released resources.
+		if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed || pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		// Calculate resource requests for each container in the Pod.
 		for i := range pod.Spec.Containers {
 			container := &pod.Spec.Containers[i]
 			value := s.getRequestForResource(resourceName, &container.Resources.Requests, !s.useRequested)
 			podRequest += value
 		}
 
+		// Calculate resource requests for the Init container.
 		for i := range pod.Spec.InitContainers {
 			initContainer := &pod.Spec.InitContainers[i]
 			value := s.getRequestForResource(resourceName, &initContainer.Resources.Requests, !s.useRequested)
@@ -132,34 +243,33 @@ func (s *Score) calculatePodResourceRequest(resourceName v1.ResourceName) (float
 
 		// If Overhead is being utilized, add to the total requests for the pod
 		if pod.Spec.Overhead != nil && s.enablePodOverhead {
-			if quantity, found := pod.Spec.Overhead[resourceName]; found {
+			if quantity, found := pod.Spec.Overhead[v1.ResourceName(resourceName)]; found {
 				podRequest += quantity.AsApproximateFloat64()
 			}
 		}
-		podCount++
 	}
 	return podRequest, nil
 }
 
-func (s *Score) getRequestForResource(resource v1.ResourceName, requests *v1.ResourceList, nonZero bool) float64 {
+func (s *Score) getRequestForResource(resource string, requests *v1.ResourceList, nonZero bool) float64 {
 	if requests == nil {
 		return 0
 	}
 	switch resource {
-	case v1.ResourceCPU:
+	case string(v1.ResourceCPU):
 		// Override if un-set, but not if explicitly set to zero
 		if _, found := (*requests)[v1.ResourceCPU]; !found && nonZero {
 			return 100
 		}
 		return requests.Cpu().AsApproximateFloat64()
-	case v1.ResourceMemory:
+	case string(v1.ResourceMemory):
 		// Override if un-set, but not if explicitly set to zero
 		if _, found := (*requests)[v1.ResourceMemory]; !found && nonZero {
 			return 200 * 1024 * 1024
 		}
 		return requests.Memory().AsApproximateFloat64()
 	default:
-		quantity, found := (*requests)[resource]
+		quantity, found := (*requests)[v1.ResourceName(resource)]
 		if !found {
 			return 0
 		}

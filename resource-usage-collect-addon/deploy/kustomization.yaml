@@ -1,13 +1,13 @@
-namespace: open-cluster-management
-
 resources:
-- resources/clusterrole.yaml
-- resources/controller.yaml
-- resources/clustermanagementaddon.yaml
+- resources/addon-template.yaml
+- resources/cluster-management-addon.yaml
+- resources/cluster-role.yaml
+- resources/managed-cluster-set-binding.yaml
+- resources/placement.yaml
 
 images:
 - name: example-addon-image
-  newName: quay.io/open-cluster-management/resource-usage-collect-addon
+  newName: zheshen/resource-usage-collect-addon
   newTag: latest
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
