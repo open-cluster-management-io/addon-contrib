@@ -20,7 +20,7 @@ PWD=$(shell pwd)
 # Image URL to use all building/pushing image targets;
 GO_BUILD_PACKAGES :=./pkg/...
 IMAGE ?= resource-usage-collect-addon
-IMAGE_REGISTRY ?= zheshen
+IMAGE_REGISTRY ?= quay.io/haoqing
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)
 
@@ -53,7 +53,7 @@ images: ## Build addon binary.
 .PHONY: deploy
 deploy: kustomize
 	cp deploy/kustomization.yaml deploy/kustomization.yaml.tmp
-	cd deploy && $(KUSTOMIZE) edit set image example-addon-image=$(IMAGE_NAME) && $(KUSTOMIZE) edit add configmap image-config --from-literal=IMAGE_NAME=$(IMAGE_NAME)
+	cd deploy && $(KUSTOMIZE) edit set image example-addon-image=$(IMAGE_NAME)
 	$(KUSTOMIZE) build deploy | $(KUBECTL) apply -f -
 	mv deploy/kustomization.yaml.tmp deploy/kustomization.yaml
 
