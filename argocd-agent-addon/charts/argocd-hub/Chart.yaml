@@ -1,0 +1,8 @@
+apiVersion: v2
+name: argocd-ocm-hub
+description: >
+  A simple and opinionated Helm chart for deploying an Argo CD instance on the Open Cluster Management (OCM) hub cluster.
+  This chart is primarily used to demonstrate the integration of Argo CD and the Argo CD Agent with OCM.
+type: application
+version: 0.1.0
+appVersion: 2.13.1

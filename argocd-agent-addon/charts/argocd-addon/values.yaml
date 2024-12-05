@@ -1,0 +1,4 @@
+argocd:
+  image:
+    repository: quay.io/argoproj/argocd
+    tag: v2.13.1
