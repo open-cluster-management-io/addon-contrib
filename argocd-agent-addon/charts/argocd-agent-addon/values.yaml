@@ -1,0 +1,17 @@
+global:
+  imageOverrides:
+    agentPrincipalImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-principal:latest
+    agentAgentImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-agent:latest
+  imagePullPolicy: IfNotPresent
+
+agent:
+  mode: "managed" # must be 'managed' or 'autonomous'
+  secrets:
+    cacrt: ""
+    tlscrt: ""
+    tlskey: ""
+    jwtkey: ""
+  principal:
+    server:
+      address: ""
+      port: 443
