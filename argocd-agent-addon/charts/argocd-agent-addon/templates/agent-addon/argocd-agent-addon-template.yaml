@@ -38,9 +38,15 @@ spec:
               app.kubernetes.io/component: agent
             name: argocd-agent-agent
           rules:
+            - apiGroups: [""]
+              resources: [namespaces]
+              verbs: [get, list, watch]
             - apiGroups: [argoproj.io]
               resources: [appprojects]
-              verbs: [get, list, watch]        
+              verbs: [get, list, watch]
+            - apiGroups: [argoproj.io]
+              resources: [applications]
+              verbs: [create, get, list, watch, update, delete, patch]
         - apiVersion: apps/v1
           kind: Deployment
           metadata:
@@ -49,6 +55,7 @@ spec:
             name: argocd-agent-agent
             namespace: argocd
           spec:
+            replicas: 1
             selector:
               matchLabels:
                 app.kubernetes.io/name: argocd-agent-agent

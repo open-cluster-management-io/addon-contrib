@@ -22,6 +22,8 @@ spec:
         - args:
             - /usr/local/bin/argocd-agent-principal
           env:
+          - name: ARGOCD_PRINCIPAL_ENABLE_RESOURCE_PROXY
+            value: "false"
           - name: ARGOCD_PRINCIPAL_LISTEN_HOST
             valueFrom:
               configMapKeyRef:
