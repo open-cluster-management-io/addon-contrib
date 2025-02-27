@@ -8,6 +8,14 @@ metadata:
   name: argocd-agent-principal
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - argoproj.io
   resources:
   - applications

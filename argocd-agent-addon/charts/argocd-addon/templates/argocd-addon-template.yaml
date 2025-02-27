@@ -6253,6 +6253,7 @@ spec:
               app.kubernetes.io/component: redis
             name: argocd-redis
           spec:
+            replicas: 1
             selector:
               matchLabels:
                 app.kubernetes.io/name: argocd-redis
@@ -6425,6 +6426,7 @@ spec:
               app.kubernetes.io/component: repo-server
             name: argocd-repo-server
           spec:
+            replicas: 1
             selector:
               matchLabels:
                 app.kubernetes.io/name: argocd-repo-server
