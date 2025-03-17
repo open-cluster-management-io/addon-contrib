@@ -9,7 +9,7 @@ spec:
       customSigner:
         signerName: open-cluster-management.io/argocd-agent-addon
         signingCA:
-          name: argocd-agent-tls
+          name: argocd-agent-ca
   agentSpec:
     workload:
       manifests:
@@ -126,11 +126,11 @@ spec:
                           name: argocd-agent-params
                           key: agent.mode
                           optional: true
-                    - name: ARGOCD_AGENT_CREDS
+                    - name: ARGOCD_AGENT_AUTH_METHOD
                       valueFrom:
                         configMapKeyRef:
                           name: argocd-agent-params
-                          key: agent.creds.userpass.path
+                          key: agent.auth.method
                           optional: true
                     image: {{ .Values.global.imageOverrides.agentAgentImage }}
                     imagePullPolicy: {{ .Values.global.imagePullPolicy }}
@@ -152,16 +152,8 @@ spec:
                         mountPath: /app/config/tls
                       - name: ca-secret
                         mountPath: /app/config/ca
-                      - name: userpass-passwd
-                        mountPath: /app/config/creds
                 serviceAccountName: argocd-agent-agent
                 volumes:
-                - name: userpass-passwd
-                  secret:
-                    secretName: argocd-agent-agent-userpass
-                    items:
-                    - key: credentials
-                      path: userpass.creds
                 - name: tls-secret
                   secret:
                     secretName: argocd-agent-open-cluster-management.io-argocd-agent-addon-client-cert
@@ -185,7 +177,7 @@ spec:
             namespace: argocd
           data:
             agent.mode: {{ .Values.agent.mode | quote }}
-            agent.creds.userpass.path: "userpass:/app/config/creds/userpass.creds"
+            agent.auth.method: "mtls"
             agent.tls.client.insecure: "false"
             agent.tls.root-ca-path: "/app/config/ca/ca.crt"
             agent.tls.client.cert-path: "/app/config/tls/tls.crt"
@@ -271,11 +263,3 @@ spec:
           type: Opaque
           data:
             ca.crt: {{ .Values.agent.secrets.cacrt | b64enc | quote }}
-        - apiVersion: v1
-          kind: Secret
-          metadata:
-            name: argocd-agent-agent-userpass
-            namespace: argocd
-          type: Opaque
-          stringData:
-            credentials: {{`"{{CLUSTER_NAME}}:D4pJipwOmXYb"`}}

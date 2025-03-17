@@ -106,7 +106,13 @@ spec:
             valueFrom:
               configMapKeyRef:
                 name: argocd-agent-params
-                key: principal.tls.client-cert.match-subject
+                key: principal.tls.client-cert.require
+                optional: true
+          - name: ARGOCD_PRINCIPAL_TLS_SERVER_ROOT_CA_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.tls.server.root-ca-path
                 optional: true
           - name: ARGOCD_PRINCIPAL_TLS_CLIENT_CERT_MATCH_SUBJECT
             valueFrom:
@@ -126,11 +132,17 @@ spec:
                 name: argocd-agent-params
                 key: principal.jwt.key-path
                 optional: true
-          - name: ARGOCD_PRINCIPAL_USER_DB_PATH
+          - name: ARGOCD_PRINCIPAL_AUTH_METHOD
             valueFrom:
               configMapKeyRef:
                 name: argocd-agent-params
-                key: principal.user-db.path
+                key: principal.auth.method
+                optional: true
+          - name: ARGOCD_PRINCIPAL_AUTH_MTLS_AGENT_ID_REGEX
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.auth.mtls-agent-id-regex
                 optional: true
           image: {{ .Values.global.imageOverrides.agentPrincipalImage }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
@@ -156,16 +168,8 @@ spec:
               mountPath: /app/config/tls
             - name: ca-secret
               mountPath: /app/config/ca
-            - name: userpass-passwd
-              mountPath: /app/config/userpass
       serviceAccountName: argocd-agent-principal
       volumes:
-      - name: userpass-passwd
-        secret:
-          secretName: argocd-agent-principal-userpass
-          items:
-          - key: passwd
-            path: passwd
       - name: jwt-secret
         secret:
           secretName: argocd-agent-jwt
@@ -184,5 +188,5 @@ spec:
         secret:
           secretName: argocd-agent-ca
           items:
-          - key: ca.crt
+          - key: tls.crt
             path: ca.crt
