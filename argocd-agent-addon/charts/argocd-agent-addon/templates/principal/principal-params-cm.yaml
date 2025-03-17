@@ -63,7 +63,7 @@ data:
   # principal.tls.client-cert.require: Whether to require client certs from
   # agents upon connection.
   # Default: false
-  principal.tls.client-cert.require: "false"
+  principal.tls.client-cert.require: "true"
   # principal.tls.client-cert.match-subject: Whether to match the subject field
   # in a client certificate presented by an agent to the agent's name.
   # Default: false
@@ -76,6 +76,10 @@ data:
   # principal.jwt.key-path: Path to the private key to be used for signing JWT
   # tokens.
   principal.jwt.key-path: "/app/config/jwt/jwt.key"
-  # principal.user-db.path: Path to the file containing encrypted credentials
-  # for authenticating agent connections.
-  principal.user-db.path: "/app/config/userpass/passwd"
+  # principal.auth.method: The authentication method. Valid values are
+  # "userpass" or "mtls".
+  # Default: userpass
+  principal.auth.method: "mtls"
+  # principal.auth.mtls-agent-id-regex: mTLS authentication method only.
+  # Regex pattern for extracting the agent ID from client cert subject.
+  principal.auth.mtls-agent-id-regex: "open-cluster-management:cluster:([^:]+):addon:argocd-agent"
