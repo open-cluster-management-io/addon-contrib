@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- federation-ai.open-cluster-management.io_v1alpha1_federatedlearning.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

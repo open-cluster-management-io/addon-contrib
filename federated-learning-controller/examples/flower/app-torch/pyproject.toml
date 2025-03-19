@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "app-torch"
+version = "1.0.0"
+description = ""
+license = "Apache-2.0"
+dependencies = [
+    "flwr[simulation]>=1.13.0",
+    "flwr-datasets[vision]>=0.3.0",
+    "torch==2.5.0",
+    "torchvision==0.20.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.flwr.app]
+publisher = "meng"
+
+[tool.flwr.app.components]
+serverapp = "app_torch.server_app:app"
+clientapp = "app_torch.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 10
+fraction-fit = 1
+local-epochs = 1
+
+[tool.flwr.federations]
+default = "local-simulation"
+
+[tool.flwr.federations.local-simulation]
+options.num-supernodes = 2

@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  selector: # Match the labels in the pod template
+    matchLabels:
+      job-name: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        job-name: {{ .Name }} # Ensure labels match the selector
+    spec:
+      containers:
+      - name: flower-server
+        image: {{ .Image }}
+        imagePullPolicy: Always
+        args:
+        - server # Maps to the entrypoint.sh logic
+        - --num-rounds={{ .NumberOfRounds }}
+        - --min-available-clients={{ .MinAvailableClients }}
+        - --model-dir={{ .ModelDir }}
+        - --init-model={{ .InitModel }}
+        volumeMounts:
+        - name: model-volume
+          mountPath: {{ .ModelDir }}
+      restartPolicy: Never
+      volumes:
+      - name: model-volume
+        persistentVolumeClaim:
+          claimName: {{ .StorageVolumeName }}
