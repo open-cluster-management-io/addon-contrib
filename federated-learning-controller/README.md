@@ -14,21 +14,21 @@ The controller reconciles `FederatedLearning` instances, managing the lifecycle 
 
 For example, see: [Flower PyTorch App](./examples/flower/Makefile)
 
-### Server
+- **Server**
 
-Creates a Kubernetes Job using a built-in manifest template, expected to start with:
+  Creates a Kubernetes Job using a built-in manifest template, expected to start with:
 
-```bash
-server --num-rounds <number-of-rounds> ...
-```
+  ```bash
+  server --num-rounds <number-of-rounds> ...
+  ```
 
-### Client  
+- **Client**  
 
-Creates a Kubernetes Job via **ManifestWorks** from the hub cluster, expected to start with: 
+  Creates a Kubernetes Job via **ManifestWorks** from the hub cluster, expected to start with: 
 
-```bash
-client --data-config <data-configuration> --server-address <aggregator-address> ...
-```
+  ```bash
+  client --data-config <data-configuration> --server-address <aggregator-address> ...
+  ```
 
 --- 
 
