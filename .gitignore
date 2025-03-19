@@ -17,3 +17,6 @@
 # Ignore macOS and IDE specific files
 .DS_Store
 .idea/
+.vscode/
+vendor
+bin

@@ -1,0 +1,50 @@
+apiVersion: work.open-cluster-management.io/v1
+kind: ManifestWork
+metadata:
+  name: {{.ManifestName}}
+  namespace: {{.ManifestNamespace}}
+spec:
+  manifestConfigs:
+    - resourceIdentifier:
+        group: batch
+        resource: jobs
+        namespace: {{ .ClientJobNamespace }}
+        name: {{ .ClientJobName }}
+      updateStrategy:
+        type: ServerSideApply
+  deleteOption:
+    propagationPolicy: SelectivelyOrphan
+    selectivelyOrphans:
+      orphaningRules:
+      - group: ""
+        resource: namespaces
+        name: {{ .ClientJobNamespace }}
+  workload:
+    manifests:
+      - kind: Namespace
+        apiVersion: v1
+        metadata:
+          name: {{.ClientJobNamespace}}
+      - kind: Job
+        apiVersion: batch/v1
+        metadata:
+          name: {{ .ClientJobName }}
+          namespace: {{ .ClientJobNamespace }}
+        spec:
+          selector: # Match the labels in the pod template
+            matchLabels:
+              job-name: {{ .ClientJobName }}
+          template:
+            metadata:
+              labels:
+                job-name: {{ .ClientJobName }} # Ensure labels match the selector
+            spec:
+              containers:
+              - name: flower-client
+                image: {{ .ClientJobImage }}
+                imagePullPolicy: Always
+                args:
+                - client # Maps to the entrypoint.sh logic
+                - --data-config={{ .ClientDataConfig }}
+                - --server-address={{ .ServerAddress }}
+              restartPolicy: Never

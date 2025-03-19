@@ -1,0 +1,23 @@
+# permissions for end users to view federatedlearnings.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: controller
+    app.kubernetes.io/managed-by: kustomize
+  name: viewer-role
+rules:
+- apiGroups:
+  - federation-ai.open-cluster-management.io
+  resources:
+  - federatedlearnings
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - federation-ai.open-cluster-management.io
+  resources:
+  - federatedlearnings/status
+  verbs:
+  - get
