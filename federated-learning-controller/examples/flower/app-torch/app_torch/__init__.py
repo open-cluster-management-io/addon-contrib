@@ -1,1 +1,1 @@
-"""cirfar10-torch: A Flower / PyTorch app."""
+"""A Flower / PyTorch app."""
