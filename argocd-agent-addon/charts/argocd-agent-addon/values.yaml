@@ -1,7 +1,7 @@
 global:
   imageOverrides:
-    agentPrincipalImage: quay.io/mikeshng/argocd-agent-principal:latest
-    agentAgentImage: quay.io/mikeshng/argocd-agent-agent:latest
+    agentPrincipalImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-principal:latest
+    agentAgentImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-agent:latest
   imagePullPolicy: IfNotPresent
 
 agent:
