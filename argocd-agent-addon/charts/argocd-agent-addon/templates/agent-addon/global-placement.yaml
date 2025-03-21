@@ -2,5 +2,5 @@ apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
   name: global
-  namespace: open-cluster-management-hub
+  namespace: argocd
 spec: {}
