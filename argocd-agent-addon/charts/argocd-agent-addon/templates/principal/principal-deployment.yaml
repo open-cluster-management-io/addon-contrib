@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: argocd-agent-principal
   name: argocd-agent-principal
-  namespace: open-cluster-management-hub
+  namespace: argocd
 spec:
   selector:
     matchLabels:
@@ -132,17 +132,11 @@ spec:
                 name: argocd-agent-params
                 key: principal.jwt.key-path
                 optional: true
-          - name: ARGOCD_PRINCIPAL_AUTH_METHOD
+          - name: ARGOCD_PRINCIPAL_AUTH
             valueFrom:
               configMapKeyRef:
                 name: argocd-agent-params
-                key: principal.auth.method
-                optional: true
-          - name: ARGOCD_PRINCIPAL_AUTH_MTLS_AGENT_ID_REGEX
-            valueFrom:
-              configMapKeyRef:
-                name: argocd-agent-params
-                key: principal.auth.mtls-agent-id-regex
+                key: principal.auth
                 optional: true
           image: {{ .Values.global.imageOverrides.agentPrincipalImage }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}

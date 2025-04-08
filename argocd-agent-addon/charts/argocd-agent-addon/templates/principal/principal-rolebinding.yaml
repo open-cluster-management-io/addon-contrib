@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/part-of: argocd-agent
     app.kubernetes.io/component: principal
   name: argocd-agent-principal
-  namespace: open-cluster-management-hub
+  namespace: argocd
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

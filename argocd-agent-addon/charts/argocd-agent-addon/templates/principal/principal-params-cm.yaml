@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: argocd-agent-params
-  namespace: open-cluster-management-hub
+  namespace: argocd
 data:
   # principal.listen.host: The interface address to listen on. Leave empty
   # for all interfaces.
@@ -23,7 +23,7 @@ data:
   # principal.namespace: The namespace the principal will operate in. If left
   # blank, the namespace where the pod is running in will be used.
   # Default: ""
-  principal.namespace: "open-cluster-management-hub"
+  principal.namespace: "argocd"
   # principal.allowed-namespaces: A list of namespaces the principal shall
   # watch and process Argo CD resources in. Seperate entries using commas.
   # Entries may contain shell-style wildcards.
@@ -76,10 +76,12 @@ data:
   # principal.jwt.key-path: Path to the private key to be used for signing JWT
   # tokens.
   principal.jwt.key-path: "/app/config/jwt/jwt.key"
-  # principal.auth.method: The authentication method. Valid values are
-  # "userpass" or "mtls".
-  # Default: userpass
-  principal.auth.method: "mtls"
-  # principal.auth.mtls-agent-id-regex: mTLS authentication method only.
-  # Regex pattern for extracting the agent ID from client cert subject.
-  principal.auth.mtls-agent-id-regex: "open-cluster-management:cluster:([^:]+):addon:argocd-agent"
+  # principal.auth: The authentication method. Must be in the
+  # format <method>:<configuration>. Valid values are:
+  # - "userpass:_path_to_encrypted_creds_" where _path_to_encrypted_creds_ is
+  #   the path to the file containing encrypted credentials for authenticating
+  #   agent connections.
+  # - "mtls:_agent_id_regex_" where _agent_id_regex_ is the regex pattern for
+  #   extracting the agent ID from client cert subject.
+  # Default: userpass:_path_to_encrypted_creds_
+  principal.auth: "mtls:open-cluster-management:cluster:([^:]+):addon:argocd-agent"

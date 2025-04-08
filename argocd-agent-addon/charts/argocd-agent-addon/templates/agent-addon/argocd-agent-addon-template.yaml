@@ -10,6 +10,7 @@ spec:
         signerName: open-cluster-management.io/argocd-agent-addon
         signingCA:
           name: argocd-agent-ca
+          namespace: argocd
   agentSpec:
     workload:
       manifests:
@@ -126,11 +127,11 @@ spec:
                           name: argocd-agent-params
                           key: agent.mode
                           optional: true
-                    - name: ARGOCD_AGENT_AUTH_METHOD
+                    - name: ARGOCD_AGENT_CREDS
                       valueFrom:
                         configMapKeyRef:
                           name: argocd-agent-params
-                          key: agent.auth.method
+                          key: agent.creds
                           optional: true
                     image: {{ .Values.global.imageOverrides.agentAgentImage }}
                     imagePullPolicy: {{ .Values.global.imagePullPolicy }}
@@ -177,7 +178,7 @@ spec:
             namespace: argocd
           data:
             agent.mode: {{ .Values.agent.mode | quote }}
-            agent.auth.method: "mtls"
+            agent.creds: "mtls:open-cluster-management:cluster:([^:]+):addon:argocd-agent"
             agent.tls.client.insecure: "false"
             agent.tls.root-ca-path: "/app/config/ca/ca.crt"
             agent.tls.client.cert-path: "/app/config/tls/tls.crt"
