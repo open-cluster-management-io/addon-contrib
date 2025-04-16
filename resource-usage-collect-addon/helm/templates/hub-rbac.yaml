@@ -30,3 +30,6 @@ subjects:
     name: addon-manager-controller-sa
     namespace: open-cluster-management-hub
 {{- end }} 
+
+
+

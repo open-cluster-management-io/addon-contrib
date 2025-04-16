@@ -29,3 +29,6 @@ spec:
           echo "AddOnTemplate test passed"
   restartPolicy: Never
   serviceAccountName: {{ .Values.addon.name }}-test-sa 
+
+
+

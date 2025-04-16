@@ -16,3 +16,6 @@ spec:
           kubectl get addontemplate {{ .Values.addon.name }} -n {{ .Values.addon.namespace }} -o jsonpath='{.metadata.name}' | grep -q "{{ .Values.addon.name }}"
   restartPolicy: Never
   serviceAccountName: {{ .Release.Name }}-test 
+
+
+

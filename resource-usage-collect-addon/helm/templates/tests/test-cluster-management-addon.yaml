@@ -20,3 +20,6 @@ spec:
           echo "ClusterManagementAddOn test passed"
   restartPolicy: Never
   serviceAccountName: {{ .Values.addon.name }}-test-sa 
+
+
+

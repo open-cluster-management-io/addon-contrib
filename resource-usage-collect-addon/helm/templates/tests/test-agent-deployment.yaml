@@ -17,3 +17,6 @@ spec:
           kubectl get deployment {{ .Values.addon.name }}-agent -n {{ .Values.addon.namespace }} -o jsonpath='{.spec.replicas}' | grep -q "{{ .Values.agent.replicas }}"
   restartPolicy: Never
   serviceAccountName: {{ .Release.Name }}-test 
+
+
+

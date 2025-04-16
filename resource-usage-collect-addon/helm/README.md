@@ -85,14 +85,6 @@ If you're currently using the direct YAML installation method from `setup-env.sh
    kubectl get clustermanagementaddon resource-usage-collect -n open-cluster-management-addon
    ```
 
-## Testing
-
-The chart includes a test suite that verifies the installation of all components. To run the tests:
-
-```bash
-helm test resource-usage-collect-addon -n open-cluster-management-addon
-```
-
 ## Uninstallation
 
 To uninstall/delete the deployment:
@@ -120,49 +112,6 @@ This addon is a key component in the OCM-Kueue integration workflow:
    - Ensure workloads are scheduled on clusters with sufficient resources
    - Prevent resource overallocation
    - Optimize cluster utilization
-
-## Migration from Direct YAML Installation
-
-If you're currently using the direct YAML installation method from `setup-env.sh`, follow these steps to migrate to the Helm chart:
-
-1. **Backup your current configuration**:
-   ```bash
-   kubectl get clustermanagementaddon resource-usage-collect -n open-cluster-management-addon -o yaml > backup.yaml
-   ```
-
-2. **Uninstall the current version**:
-   ```bash
-   kubectl delete -f https://raw.githubusercontent.com/open-cluster-management-io/addon-contrib/main/resource-usage-collect-addon/manifests/clustermanagementaddon.yaml
-   ```
-
-3. **Install using Helm**:
-   ```bash
-   helm install resource-usage-collect-addon . \
-     --namespace open-cluster-management-addon \
-     --create-namespace
-   ```
-
-4. **Verify the installation**:
-   ```bash
-   helm list -n open-cluster-management-addon
-   kubectl get clustermanagementaddon resource-usage-collect -n open-cluster-management-addon
-   ```
-
-## Testing
-
-The chart includes a test suite that verifies the installation of all components. To run the tests:
-
-```bash
-helm test resource-usage-collect-addon -n open-cluster-management-addon
-```
-
-## Uninstallation
-
-To uninstall/delete the deployment:
-
-```bash
-helm uninstall resource-usage-collect-addon -n open-cluster-management-addon
-```
 
 ## Contributing
 
