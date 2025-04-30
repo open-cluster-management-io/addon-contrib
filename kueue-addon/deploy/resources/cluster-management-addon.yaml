@@ -1,0 +1,17 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: kueue-addon
+spec:
+  addOnMeta:
+    displayName: kueue-addon
+  supportedConfigs:
+  - defaultConfig:
+      name: kueue-addon
+    group: addon.open-cluster-management.io
+    resource: addontemplates
+  installStrategy:
+    type: Placements
+    placements:
+    - name: hub
+      namespace: open-cluster-management-addon
