@@ -55,7 +55,7 @@ spec:
                     args:
                       - "/addon"
                       - "agent"
-                      - "--hub-kubeconfig={{HUB_KUBECONFIG}}"
+                      - "--hub-kubeconfig=/managed/hub-kubeconfig/kubeconfig"
                       - "--cluster-name={{CLUSTER_NAME}}"
                       - "--addon-namespace={{ .Values.addon.namespace }}"
                     resources:

@@ -15,8 +15,8 @@ This Helm chart installs the Resource Usage Collect Addon for Open Cluster Manag
 
 ```bash
 # Clone the repository
-git clone https://github.com/open-cluster-management-io/ocm.git
-cd ocm/solutions/kueue-admission-check/resource-usage-collect-addon-helm
+git clone https://github.com/open-cluster-management-io/addon-contrib.git
+cd addon-contrib/resource-usage-collect-addon/helm
 
 # Install the chart
 helm install resource-usage-collect-addon . \
@@ -58,33 +58,6 @@ The following table lists the configurable parameters of the Resource Usage Coll
 | `agent.resources.limits.memory` | Memory limit for the agent | `512Mi` |
 | `rbac.create` | Whether to create RBAC resources | `true` |
 
-## Migration from Direct YAML Installation
-
-If you're currently using the direct YAML installation method from `setup-env.sh`, follow these steps to migrate to the Helm chart:
-
-1. **Backup your current configuration**:
-   ```bash
-   kubectl get clustermanagementaddon resource-usage-collect -n open-cluster-management-addon -o yaml > backup.yaml
-   ```
-
-2. **Uninstall the current version**:
-   ```bash
-   kubectl delete -f https://raw.githubusercontent.com/open-cluster-management-io/addon-contrib/main/resource-usage-collect-addon/manifests/clustermanagementaddon.yaml
-   ```
-
-3. **Install using Helm**:
-   ```bash
-   helm install resource-usage-collect-addon . \
-     --namespace open-cluster-management-addon \
-     --create-namespace
-   ```
-
-4. **Verify the installation**:
-   ```bash
-   helm list -n open-cluster-management-addon
-   kubectl get clustermanagementaddon resource-usage-collect -n open-cluster-management-addon
-   ```
-
 ## Uninstallation
 
 To uninstall/delete the deployment:
@@ -92,26 +65,6 @@ To uninstall/delete the deployment:
 ```bash
 helm uninstall resource-usage-collect-addon -n open-cluster-management-addon
 ```
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Integration with Kueue
-
-This addon is a key component in the OCM-Kueue integration workflow:
-
-1. **Resource Collection**: The addon collects real-time resource usage metrics from managed clusters
-2. **Metric Storage**: Metrics are stored and made available through the OCM API
-3. **Kueue Integration**: Kueue uses these metrics to:
-   - Make intelligent workload placement decisions
-   - Ensure workloads are scheduled on clusters with sufficient resources
-   - Prevent resource overallocation
-   - Optimize cluster utilization
 
 ## Contributing
 
