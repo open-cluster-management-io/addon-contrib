@@ -175,7 +175,18 @@ func (r *FederatedLearningReconciler) updateLB(ctx context.Context, svc *corev1.
 		log.Info("loadBalancer service address is empty")
 		return nil
 	}
-	address := svc.Status.LoadBalancer.Ingress[0].Hostname + ":" + fmt.Sprintf("%d", svc.Spec.Ports[0].Port)
+
+	var address string
+	ingress := svc.Status.LoadBalancer.Ingress[0]
+	port := fmt.Sprintf("%d", svc.Spec.Ports[0].Port)
+
+	if ingress.Hostname != "" {
+		address = ingress.Hostname + ":" + port
+	} else if ingress.IP != "" {
+		address = ingress.IP + ":" + port
+	} else {
+		return fmt.Errorf("no available ingress address in service")
+	}
 
 	if address != "" {
 		newListeners := make([]flv1alpha1.ListenerStatus, 0)
