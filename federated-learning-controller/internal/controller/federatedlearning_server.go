@@ -241,7 +241,7 @@ func (r *FederatedLearningReconciler) updateNP(ctx context.Context, svc *corev1.
 	}
 
 	address := fmt.Sprintf("%s:%d", nodeIP, nodePort)
-	log.Info("found address: ", address)
+	log.Infof("found address: %s", address)
 
 	newListeners := make([]flv1alpha1.ListenerStatus, 0)
 	for _, listener := range instance.Status.Listeners {
