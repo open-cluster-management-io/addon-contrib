@@ -31,7 +31,7 @@ import (
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;delete;update;create
 // +kubebuilder:rbac:groups="route.openshift.io",resources=routes,verbs=get;list;watch;create;update;delete
 
-func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Context, 
+func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Context,
 	instance *flv1alpha1.FederatedLearning) error {
 	// don't delete the storage and cause the job's owner is instance
 	if instance.DeletionTimestamp != nil {
@@ -118,6 +118,9 @@ func (r *FederatedLearningReconciler) updateServerAddress(ctx context.Context, i
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		return r.updateLB(ctx, svc, instance)
 	}
+	if svc.Spec.Type == corev1.ServiceTypeNodePort {
+		return r.updateNP(ctx, svc, instance)
+	}
 	// if svc.Spec.Type == corev1.ServiceTypeClusterIP {
 	// 	return r.updateRoute(ctx, svc, instance)
 	// }
@@ -199,6 +202,67 @@ func (r *FederatedLearningReconciler) updateLB(ctx context.Context, svc *corev1.
 		log.Info("LoadBalancer address is empty")
 	} else {
 		log.Info("LoadBalancer address is not changed")
+	}
+	return nil
+}
+
+func (r *FederatedLearningReconciler) updateNP(ctx context.Context, svc *corev1.Service, instance *flv1alpha1.FederatedLearning) error {
+	log.Info("nodePort service found")
+	if len(svc.Spec.Ports) == 0 {
+		log.Info("nodePort service ports is empty")
+		return nil
+	}
+
+	nodePort := svc.Spec.Ports[0].NodePort
+	if nodePort == 0 {
+		log.Info("nodePort is 0")
+		return nil
+	}
+
+	nodeList := &corev1.NodeList{}
+	if err := r.List(ctx, nodeList); err != nil {
+		return err
+	}
+
+	var nodeIP string
+	for _, node := range nodeList.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				nodeIP = addr.Address
+				break
+			}
+		}
+		if nodeIP != "" {
+			break
+		}
+	}
+	if nodeIP == "" {
+		return fmt.Errorf("no node internal IP found")
+	}
+
+	address := fmt.Sprintf("%s:%d", nodeIP, nodePort)
+	log.Infof("found address: %s", address)
+
+	newListeners := make([]flv1alpha1.ListenerStatus, 0)
+	for _, listener := range instance.Status.Listeners {
+		if listener.Type == flv1alpha1.NodePort {
+			continue
+		} else {
+			newListeners = append(newListeners, listener)
+		}
+	}
+
+	newListeners = append(newListeners, flv1alpha1.ListenerStatus{
+		Name:    fmt.Sprintf("listener(service):%s", svc.Name),
+		Type:    flv1alpha1.NodePort,
+		Address: address,
+		Port:    int(nodePort),
+	})
+
+	instance.Status.Listeners = newListeners
+	log.Infow("update the server address", "address", address)
+	if err := r.Status().Update(ctx, instance); err != nil {
+		return err
 	}
 	return nil
 }
