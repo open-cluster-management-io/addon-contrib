@@ -13,6 +13,8 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	open-cluster-management.io/api v0.16.2-0.20250425084048-6c5efe2ab15d
+	open-cluster-management.io/cluster-permission v0.13.1-0.20250526133535-587622ddceb0
+	open-cluster-management.io/managed-serviceaccount v0.8.1-0.20250529020500-f25dcf870662
 	open-cluster-management.io/ocm v0.16.1-0.20250430081522-df87f528d7d7
 	open-cluster-management.io/sdk-go v0.16.1-0.20250428032116-875454003818
 	sigs.k8s.io/kueue v0.9.1
@@ -104,12 +106,15 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiserver v0.32.3 // indirect
-	k8s.io/kms v0.32.3 // indirect
+	k8s.io/apiextensions-apiserver v0.32.2 // indirect
+	k8s.io/apiserver v0.32.4 // indirect
+	k8s.io/kms v0.32.4 // indirect
+	k8s.io/kube-aggregator v0.32.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250304201544-e5f78fe3ede9 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.1 // indirect
 	sigs.k8s.io/controller-runtime v0.20.3 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
+	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect

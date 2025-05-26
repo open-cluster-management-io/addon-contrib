@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strings"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,7 @@ func NewKueueSecretCopyController(
 			func(obj interface{}) bool {
 				accessor, _ := meta.Accessor(obj)
 				// filter multikueue secret
-				return strings.Contains(accessor.GetName(), common.MultiKueueSecretPrefix)
+				return accessor.GetName() == common.MultiKueueResourceName
 			},
 			secretInformer.Informer()).
 		WithSync(c.sync).
@@ -69,7 +69,7 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 		return err
 	}
 
-	secret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	origSecret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		logger.Info("secret not found", "secret", name, "namespace", namespace)
 		return nil
@@ -95,7 +95,7 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	url := mcl.Spec.ManagedClusterClientConfigs[0].URL
 
 	// generate kubeconfig secret
-	kubeconfSecret, err := c.generateKueConfigSecret(secret, url, name)
+	kubeconfSecret, err := c.generateKueConfigSecret(origSecret, url, name)
 	if err != nil {
 		return err
 	}
@@ -104,22 +104,8 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 		return nil
 	}
 
-	return c.createOrUpdateSecret(ctx, kubeconfSecret)
-}
-
-func (c *kueueSecretCopyController) createOrUpdateSecret(ctx context.Context, secret *v1.Secret) error {
-	existSecret, err := c.kubeClient.CoreV1().Secrets(secret.Namespace).Get(ctx, secret.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		_, err := c.kubeClient.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
-		return err
-	}
-	if err != nil {
-		return err
-	}
-
-	newSecret := existSecret.DeepCopy()
-	newSecret.Data = secret.Data
-	_, err = c.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, newSecret, metav1.UpdateOptions{})
+	// generate kubeconfig secret
+	_, _, err = resourceapply.ApplySecret(ctx, c.kubeClient.CoreV1(), c.eventRecorder, kubeconfSecret)
 	return err
 }
 
@@ -139,7 +125,7 @@ func (c *kueueSecretCopyController) generateKueConfigSecret(secret *v1.Secret, c
 	// Create the Secret containing kubeconfig
 	kubeconfSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secret.Name,
+			Name:      common.GetMultiKueueSecretName(secret.Namespace),
 			Namespace: common.KueueNamespace,
 		},
 		Data: map[string][]byte{

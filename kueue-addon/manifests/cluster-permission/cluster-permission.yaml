@@ -1,0 +1,36 @@
+apiVersion: rbac.open-cluster-management.io/v1alpha1
+kind: ClusterPermission
+metadata:
+  name: multikueue
+spec:
+  clusterRole:
+    rules:
+    - apiGroups: ["batch"]
+      resources: ["jobs"]
+      verbs: ["create", "delete", "get", "list", "watch"]
+    - apiGroups: ["batch"]
+      resources: ["jobs/status"]
+      verbs: ["get"]
+    - apiGroups: ["jobset.x-k8s.io"]
+      resources: ["jobsets"]
+      verbs: ["create", "delete", "get", "list", "watch"]
+    - apiGroups: ["jobset.x-k8s.io"]
+      resources: ["jobsets/status"]
+      verbs: ["get"]
+    - apiGroups: ["kueue.x-k8s.io"]
+      resources: ["workloads"]
+      verbs: ["create", "delete", "get", "list", "watch"]
+    - apiGroups: ["kueue.x-k8s.io"]
+      resources: ["workloads/status"]
+      verbs: ["get", "patch", "update"]
+    - apiGroups: ["kubeflow.org"]
+      resources: ["tfjobs", "paddlejobs", "pytorchjobs", "xgboostjobs", "mpijobs"]
+      verbs: ["create", "delete", "get", "list", "watch"]
+    - apiGroups: ["kubeflow.org"]
+      resources: ["tfjobs/status", "paddlejobs/status", "pytorchjobs/status", "xgboostjobs/status", "mpijobs/status"]
+      verbs: ["get"]
+  clusterRoleBinding:
+    subject:
+      kind: ServiceAccount
+      name: multikueue
+      namespace: open-cluster-management-agent-addon
