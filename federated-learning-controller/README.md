@@ -1,76 +1,168 @@
 # Federated Learning Controller for Open Cluster Management
 
+As machine learning (ML) evolves, protecting data privacy becomes increasingly important. Since ML depends on large volumes of data, it's essential to secure that data without disrupting the learning process.
+
+Federated Learning (FL) addresses this by allowing multiple clusters or organizations to collaboratively train models without sharing sensitive data. Computation happens where the data lives, ensuring privacy, regulatory compliance, and efficiency.
+
 This Kubernetes controller automates the deployment and management of federated learning in an Open Cluster Management environment. The `FederatedLearning` Custom Resource Definition (CRD) provides a unified open interface for integrating frameworks such as Flower, OpenFL, and NVIDIA FLARE. It leverages Kubernetes-native resources to provision servers, launch clients, and orchestrate the training lifecycle across a multicluster environment.
 
-![Controller Architecture](./assets/images/controller.png)
-
----
-
-## Bring Federated Learning Across Multiple Clusters
-
-This controller enables federated learning across a **multicluster environment** without the need for manual orchestration. The only requirement is to **containerize your workload**, making it compatible with different federated learning frameworks.  
-
-The controller reconciles `FederatedLearning` instances, managing the lifecycle of **server** and **client** components that handle model training and aggregation. To integrate with the provided interface, servers and clients should follow the expected startup patterns.  
-
-For example, see: [Flower PyTorch App](./examples/flower/Makefile)
-
-- **Server**
-
-  Creates a Kubernetes Job using a built-in manifest template, expected to start with:
-
-  ```bash
-  server --num-rounds <number-of-rounds> ...
-  ```
-
-- **Client**  
-
-  Creates a Kubernetes Job via **ManifestWorks** from the hub cluster, expected to start with: 
-
-  ```bash
-  client --data-config <data-configuration> --server-address <aggregator-address> ...
-  ```
+![Controller Architecture](./assets/images/architecture.png)
 
 --- 
 
 ## Getting Started
 
-### Running Locally
+### Prerequisites
 
-**Install the CRDs into the cluster:**
+Ensure the following tools are installed:
 
-```sh
-make install
+- [`kubectl`](https://kubernetes.io/docs/reference/kubectl/)
+- [`kustomize`](https://kubectl.docs.kubernetes.io/installation/kustomize/)
+- [`kind`](https://kind.sigs.k8s.io/) (version > v0.9.0 recommended)
+- [`make`](https://www.gnu.org/software/make/) for build automation
+
+Optional (for container image building):
+
+- Podman or Docker
+- Go (version 1.19 or later)
+
+--- 
+
+### Set Up the Environment
+
+#### 1. Install `clusteradm`
+
+```bash
+$ curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash
 ```
 
-**Run the controller locally:**
+#### 2. Create hub and managed clusters with `kind`
 
-```sh
-make run
+```bash
+$ curl -L https://raw.githubusercontent.com/open-cluster-management-io/OCM/main/solutions/setup-dev-environment/local-up.sh | bash
 ```
 
-### To Deploy on the cluster
+#### 3. Verify cluster setup
 
-**1. Build and push your image to the location specified by `IMG`:**
-```sh
-make docker-build docker-push IMG=<IMG>
-# or
-make docker-build docker-push REGISTRY=<REGISTRY> 
+```bash
+$ kubectl get mcl
 ```
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
 
+Example output:
 
-**2. Deploy the Controller to the cluster**
+```bash
+NAME       HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
+cluster1   true           https://cluster1-control-plane:6443   True     True        2m
+cluster2   true           https://cluster2-control-plane:6443   True     True        3m
+```
 
-```sh
-make deploy IMG=<some-registry>/controller:tag NAMESPACE=<namespace>
+--- 
+
+### Deploy Federated Learning Controller
+
+#### 1. Clone and navigate to the repository
+
+```bash
+$ git@github.com:open-cluster-management-io/addon-contrib.git
+$ cd federated-learning-controller
+```
+
+#### 2. Build and push the controller image
+
+Use your custom image or the pre-built one: `quay.io/myan/federated-learning-controller:latest`.
+
+```bash
+$ make docker-build docker-push IMG=<your-image>
+```
+
+#### 3. Deploy the controller to the hub cluster
+
+```bash
+$ kubectl config use-context kind-hub
+$ make deploy IMG=<your-image> NAMESPACE=<namespace>  # Default namespace is open-cluster-management
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
 
-**3. Create a FederatedLearning instance**
+#### 4. Verify the deployment:
+  ```
+  $ kubectl get pods -n open-cluster-management
+  ```
+  Example output
+  ```bash
+  NAME                                            READY   STATUS      RESTARTS   AGE
+  cluster-manager-d9db64db5-c7kfj                 1/1     Running     0          5m
+  cluster-manager-d9db64db5-t7grh                 1/1     Running     0          5m
+  cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5m
+  federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
+  ```
+
+<details>
+
+<summary><strong>Alternatively: Run the Controller Locally</strong></summary>
+
+  **Install the CRDs into the cluster:**
+
+  ```sh
+  make install
+  ```
+
+  **Run the controller locally:**
+
+  ```sh
+  make run
+  ```
+</details>
+
+--- 
+
+### Deploy the Federated Learning Instance
+
+#### 1. Build the Application Image
+
+> **Note**: You can skip this step by using the pre-built image `quay.io/myan/flower-app-torch:latest`.
+
+```bash
+cd examples/flower
+
+export REGISTRY=<your-registry>
+export IMAGE_TAG=<your-tag>
+make build-app-image
+make push-app-image
+```
+
+Image format: `<REGISTRY>/flower-app-torch:<IMAGE_TAG>`
+
+<details>
+
+<summary><strong>About Containerized Federated Learning</strong></summary>
+
+### Containerized Federated Learning Application
+
+The controller manages the lifecycle of federated learning across multiple clusters by creating server and client jobs from your containerized app.
+
+- **Server Job Example**:
+
+  ```bash
+  server --num-rounds <number>
+  ```
+
+- **Client Job Example**:
+
+  ```bash
+  client --data-config <data-path> --server-address <address> ...
+  ```
+
+For example, see: [Flower PyTorch App](./examples/flower/Makefile)
+
+</details>
+
+#### 2. Deploy a Federated Learning Instance
+
+In this example, both the server and clients use the same image—either the one built above or the pre-built `quay.io/myan/flower-app-torch:latest`. Once the resource is created, the server is deployed to the hub cluster, and the clients are prepared for deployment to the managed clusters.
+
+Create a `FederatedLearning` resource in the controller namespace on the hub cluster:
 
 ```yaml
 apiVersion: federation-ai.open-cluster-management.io/v1alpha1
@@ -80,20 +172,20 @@ metadata:
 spec:
   framework: flower
   server:
-    image: quay.io/open-cluster-management/flower-app-torch:latest
+    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
     rounds: 3
     minAvailableClients: 2
     listeners:
       - name: server-listener
         port: 8080
-        type: LoadBalancer
+        type: NodePort
     storage:
       type: PersistentVolumeClaim
       name: model-pvc
       path: /data/models
       size: 2Gi
   client:
-    image: quay.io/open-cluster-management/flower-app-torch:latest
+    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
     placement:
       clusterSets:
         - global
@@ -104,26 +196,85 @@ spec:
                 - key: federated-learning-sample.client-data
                   operator: Exists
 ```
-**Note:** You can replace the above server and client images with those from your own registry.
 
-**4. Mark the data from the Managed clusters**
+> **Note**: Only `NodePort` is supported in KinD clusters.
 
-```sh
-cat <<EOF | oc apply -f -
+#### 3. Schedule the Federated Learning Clients into Managed Clusters
+
+The above configuration schedules only clusters with a `ClusterClaim` having the key `federated-learning-sample.client-data`. You can combine this with other scheduling policies (refer to the Placement API for details).
+
+Add the `ClusterClaim` to these clusters own the data for the client:
+
+**Cluster1:**
+
+```yaml
 apiVersion: cluster.open-cluster-management.io/v1alpha1
 kind: ClusterClaim
 metadata:
   name: federated-learning-sample.client-data
 spec:
   value: /data/private/cluster1
-EOF
 ```
 
-## Model Validation
+**Cluster2:**
 
-- Validate the model from the pvc by the guide in the [notebook](./examples/notebooks/deploy)
+```yaml
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: federated-learning-sample.client-data
+spec:
+  value: /data/private/cluster2
+```
+
+#### 4. Check the Federated Learning Instance Status
+
+- After creating the instance, the server initially shows a status of `Waiting`
+
+  Example - server in hub cluster:
+
+  ```bash
+  $ kubectl get pods
+  NAME                                            READY   STATUS      RESTARTS   AGE
+  federated-learning-sample-server-7jnfs          0/1     Completed   0          10m
+  ```
+
+- Once the required clients are ready, status changes to `Running`
+
+  Example - client in managed cluster
+
+  ```bash
+  $ kubectl get pods -n open-cluster-management
+  NAME                                     READY   STATUS      RESTARTS   AGE
+  federated-learning-sample-client-75sc8   0/1     Completed   0          10m
+  ```
+
+- After the training and aggregation rounds complete, the status becomes `Completed`
+
+  Example - Federated Learning instance:
+
+  ```yaml
+  status:
+    listeners:
+    - address: 172.18.0.2:31166
+      name: listener(service):federated-learning-sample-server
+      port: 31166
+      type: NodePort
+    message: Model training successful. Check storage for details
+    phase: Completed
+  ```
+
+#### 5. Download and Verify the Trained Model
+
+The trained model is saved in the `model-pvc` volume.
+
+- [Deploy a Jupyter notebook server](./examples/notebooks/deploy)
+- [Validate the model](./examples/notebooks/1.hub-evaluation.ipynb)
+
+--- 
 
 ### To Uninstall
+
 **Delete the instances (CRs) from the cluster:**
 
 ```sh
@@ -140,27 +291,4 @@ make uninstall
 
 ```sh
 make undeploy
-```
-
-## Project Distribution
-
-Following are the steps to build the installer and distribute this project to users.
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/controller:tag
-```
-
-NOTE: The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without
-its dependencies.
-
-2. Using the installer
-
-Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/github/open-cluster-management/federated-learning/<tag or branch>/dist/install.yaml
 ```
