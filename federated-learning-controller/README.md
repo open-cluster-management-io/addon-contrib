@@ -33,24 +33,19 @@ Optional (for container image building):
 #### 1. Install `clusteradm`
 
 ```bash
-$ curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash
+curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/main/install.sh | bash
 ```
 
 #### 2. Create hub and managed clusters with `kind`
 
 ```bash
-$ curl -L https://raw.githubusercontent.com/open-cluster-management-io/OCM/main/solutions/setup-dev-environment/local-up.sh | bash
+curl -L https://raw.githubusercontent.com/open-cluster-management-io/OCM/main/solutions/setup-dev-environment/local-up.sh | bash
 ```
 
 #### 3. Verify cluster setup
 
 ```bash
 $ kubectl get mcl
-```
-
-Example output:
-
-```bash
 NAME       HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
 cluster1   true           https://cluster1-control-plane:6443   True     True        2m
 cluster2   true           https://cluster2-control-plane:6443   True     True        3m
@@ -63,8 +58,8 @@ cluster2   true           https://cluster2-control-plane:6443   True     True   
 #### 1. Clone and navigate to the repository
 
 ```bash
-$ git@github.com:open-cluster-management-io/addon-contrib.git
-$ cd federated-learning-controller
+git@github.com:open-cluster-management-io/addon-contrib.git
+cd federated-learning-controller
 ```
 
 #### 2. Build and push the controller image
@@ -72,31 +67,29 @@ $ cd federated-learning-controller
 Use your custom image or the pre-built one: `quay.io/myan/federated-learning-controller:latest`.
 
 ```bash
-$ make docker-build docker-push IMG=<your-image>
+make docker-build docker-push IMG=<your-image>
 ```
 
 #### 3. Deploy the controller to the hub cluster
 
 ```bash
-$ kubectl config use-context kind-hub
-$ make deploy IMG=<your-image> NAMESPACE=<namespace>  # Default namespace is open-cluster-management
+kubectl config use-context kind-hub
+make deploy IMG=<your-image> NAMESPACE=<namespace>  # Default namespace is open-cluster-management
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
 
-#### 4. Verify the deployment:
-  ```
-  $ kubectl get pods -n open-cluster-management
-  ```
-  Example output
-  ```bash
-  NAME                                            READY   STATUS      RESTARTS   AGE
-  cluster-manager-d9db64db5-c7kfj                 1/1     Running     0          5m
-  cluster-manager-d9db64db5-t7grh                 1/1     Running     0          5m
-  cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5m
-  federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
-  ```
+#### 4. Verify the deployment
+
+```bash
+$ kubectl get pods -n open-cluster-management
+NAME                                            READY   STATUS      RESTARTS   AGE
+cluster-manager-d9db64db5-c7kfj                 1/1     Running     0          5m
+cluster-manager-d9db64db5-t7grh                 1/1     Running     0          5m
+cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5m
+federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
+```
 
 <details>
 
