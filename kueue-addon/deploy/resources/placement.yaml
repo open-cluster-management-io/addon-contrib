@@ -5,9 +5,7 @@ metadata:
   namespace: open-cluster-management-addon
 spec:
   clusterSet: global
-
 ---
-
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
@@ -22,7 +20,27 @@ spec:
   - key: cluster.open-cluster-management.io/unavailable
     operator: Equal
   predicates:
-    - requiredClusterSelector:
-        labelSelector:
-          matchLabels:
-            local-cluster: "true"
+  - requiredClusterSelector:
+      labelSelector:
+        matchLabels:
+          local-cluster: "true"
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: spoke
+  namespace: open-cluster-management-addon
+spec:
+  clusterSets:
+    - global
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Equal
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Equal
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+          - key: local-cluster
+            operator: DoesNotExist
