@@ -1,5 +1,6 @@
 resources:
-- resources/addon-template.yaml
+- resources/addon-template-hub.yaml
+- resources/addon-template-spoke.yaml
 - resources/cluster-management-addon.yaml
 - resources/placement.yaml
 

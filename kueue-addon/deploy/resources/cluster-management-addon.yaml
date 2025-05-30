@@ -6,12 +6,20 @@ spec:
   addOnMeta:
     displayName: kueue-addon
   supportedConfigs:
-  - defaultConfig:
-      name: kueue-addon
-    group: addon.open-cluster-management.io
+  - group: addon.open-cluster-management.io
     resource: addontemplates
   installStrategy:
     type: Placements
     placements:
     - name: hub
       namespace: open-cluster-management-addon
+      configs:
+      - name: kueue-addon-hub
+        group: addon.open-cluster-management.io
+        resource: addontemplates
+    - name: spoke
+      namespace: open-cluster-management-addon
+      configs:
+      - name: kueue-addon-spoke
+        group: addon.open-cluster-management.io
+        resource: addontemplates
