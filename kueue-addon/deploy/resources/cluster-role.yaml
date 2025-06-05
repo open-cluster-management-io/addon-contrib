@@ -1,0 +1,53 @@
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: open-cluster-management:kueue-addon:controller
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "nodes","configmaps", "pods", "events", "secrets"]
+    verbs: [ "get", "list", "watch", "create", "update", "delete", "deletecollection", "patch" ]
+  - apiGroups: [ "coordination.k8s.io" ]
+    resources: [ "leases" ]
+    verbs: [ "create", "get", "list", "update", "watch", "patch" ]
+  # Allow hub to managedclusters, placements, placementdecisions
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters", "placements", "placementdecisions"]
+    verbs: ["get", "list", "watch"]
+  # Allow hub to clusterpermission
+  - apiGroups: ["rbac.open-cluster-management.io"]
+    resources: ["clusterpermissions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Allow hub to managedserviceaccount
+  - apiGroups: ["authentication.open-cluster-management.io"]
+    resources: ["managedserviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Allow hub to manage multikueueconfig
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["multikueueconfigs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Allow hub to manage multikueueclusters
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["multikueueclusters"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Allow hub to manage admissionchecks
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["admissionchecks"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["kueue.x-k8s.io"]
+    resources: ["admissionchecks/status"]
+    verbs: ["update", "patch"]
+
+---
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: open-cluster-management:kueue-addon:controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: open-cluster-management:kueue-addon:controller
+subjects:
+  - kind: ServiceAccount
+    name: kueue-addon-controller-sa
+    namespace: open-cluster-management-addon

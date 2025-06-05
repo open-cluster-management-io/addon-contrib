@@ -1,7 +1,7 @@
 apiVersion: addon.open-cluster-management.io/v1alpha1
 kind: AddOnTemplate
 metadata:
-  name: kueue-addon-spoke
+  name: kueue-addon
 spec:
   addonName: kueue-addon
   agentSpec:

@@ -1,8 +1,9 @@
 resources:
-- resources/addon-template-hub.yaml
-- resources/addon-template-spoke.yaml
+- resources/addon-template.yaml
 - resources/cluster-management-addon.yaml
 - resources/placement.yaml
+- resources/deployment.yaml
+- resources/cluster-role.yaml
 
 images:
 - name: kueue-addon-image

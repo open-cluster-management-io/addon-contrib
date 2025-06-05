@@ -5,15 +5,16 @@ metadata:
 spec:
   addOnMeta:
     displayName: kueue-addon
+    description: kueue-addon
   supportedConfigs:
   - group: addon.open-cluster-management.io
     resource: addontemplates
   installStrategy:
     type: Placements
     placements:
-    - name: spoke
-      namespace: open-cluster-management-addon
+    - name: {{ .Values.placement.name }}
+      namespace: {{ .Release.Namespace }}
       configs:
-      - name: kueue-addon
+      - name: kueue-addon-{{ .Chart.Version }}
         group: addon.open-cluster-management.io
         resource: addontemplates
