@@ -122,7 +122,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 			Spec: kueuev1beta1.MultiKueueClusterSpec{
 				kueuev1beta1.KubeConfig{
 					LocationType: kueuev1beta1.SecretLocationType,
-					Location:     common.MultiKueueSecretPrefix + "-" + cn,
+					Location:     common.GetMultiKueueSecretName(cn),
 				},
 			},
 		}

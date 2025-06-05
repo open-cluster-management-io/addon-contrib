@@ -12,8 +12,14 @@ import (
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/admissioncheck"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/kueuesecretcopy"
+	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/kueuesecretgen"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterinformers "open-cluster-management.io/api/client/cluster/informers/externalversions"
+	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
+	permissioninformer "open-cluster-management.io/cluster-permission/client/informers/externalversions"
+	msacommon "open-cluster-management.io/managed-serviceaccount/pkg/common"
+	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
+	msainformer "open-cluster-management.io/managed-serviceaccount/pkg/generated/informers/externalversions"
 	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
 	kueueinformers "sigs.k8s.io/kueue/client-go/informers/externalversions"
 )
@@ -30,12 +36,24 @@ func RunControllerManager(ctx context.Context, controllerContext *controllercmd.
 		return err
 	}
 
+	permissionClient, err := permissionclientset.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
+	msaClient, err := msaclientset.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
 	kueueClient, err := kueueclient.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
 		return err
 	}
 
 	clusterInformers := clusterinformers.NewSharedInformerFactory(clusterClient, 10*time.Minute)
+	permissionInformers := permissioninformer.NewSharedInformerFactory(permissionClient, 30*time.Minute)
+	msaInformers := msainformer.NewSharedInformerFactory(msaClient, 10*time.Minute)
 	kueueInformers := kueueinformers.NewSharedInformerFactory(kueueClient, 10*time.Minute)
 	// to reduce cache size if there are larges number of secrets
 	secretInformers := kubeinformers.NewSharedInformerFactoryWithOptions(kubeClient, 30*time.Minute, kubeinformers.WithTweakListOptions(
@@ -43,7 +61,7 @@ func RunControllerManager(ctx context.Context, controllerContext *controllercmd.
 			selector := &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
-						Key:      "authentication.open-cluster-management.io/is-managed-serviceaccount",
+						Key:      msacommon.LabelKeyIsManagedServiceAccount,
 						Operator: metav1.LabelSelectorOpExists,
 					},
 				},
@@ -53,8 +71,8 @@ func RunControllerManager(ctx context.Context, controllerContext *controllercmd.
 
 	return RunControllerManagerWithInformers(
 		ctx, controllerContext,
-		kubeClient, clusterClient, kueueClient, secretInformers,
-		clusterInformers, kueueInformers,
+		kubeClient, clusterClient, permissionClient, msaClient, kueueClient, secretInformers,
+		clusterInformers, permissionInformers, msaInformers, kueueInformers,
 	)
 }
 
@@ -63,9 +81,13 @@ func RunControllerManagerWithInformers(
 	controllerContext *controllercmd.ControllerContext,
 	kubeClient kubernetes.Interface,
 	clusterClient clusterclient.Interface,
+	permissionClient permissionclientset.Interface,
+	msaClient msaclientset.Interface,
 	kueueClient *kueueclient.Clientset,
 	secretInformers kubeinformers.SharedInformerFactory,
 	clusterInformers clusterinformers.SharedInformerFactory,
+	permissionInformers permissioninformer.SharedInformerFactory,
+	msaInformers msainformer.SharedInformerFactory,
 	kueueInformers kueueinformers.SharedInformerFactory,
 ) error {
 	err := kueueInformers.Kueue().V1beta1().AdmissionChecks().Informer().AddIndexers(
@@ -93,13 +115,24 @@ func RunControllerManagerWithInformers(
 		controllerContext.EventRecorder,
 	)
 
+	kueuesecretgenController := kueuesecretgen.NewkueueSecretGenController(
+		permissionClient,
+		msaClient,
+		clusterInformers.Cluster().V1().ManagedClusters(),
+		permissionInformers.Api().V1alpha1().ClusterPermissions(),
+		msaInformers.Authentication().V1beta1().ManagedServiceAccounts(),
+		controllerContext.EventRecorder,
+	)
+
 	go secretInformers.Start(ctx.Done())
 	go clusterInformers.Start(ctx.Done())
+	go permissionInformers.Start(ctx.Done())
+	go msaInformers.Start(ctx.Done())
 	go kueueInformers.Start(ctx.Done())
 
 	go admissionCheckController.Run(ctx, 1)
 	go kueuesecretcopyController.Run(ctx, 1)
-
+	go kueuesecretgenController.Run(ctx, 1)
 	<-ctx.Done()
 	return nil
 }
