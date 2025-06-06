@@ -10,9 +10,7 @@ addon:
   displayName: resource-usage-collect
   namespace: open-cluster-management-agent-addon
 
-placement:
-  name: placement-all
-  namespace: default
+skipClusterSetBinding: false
 
 agent:
   replicas: 1

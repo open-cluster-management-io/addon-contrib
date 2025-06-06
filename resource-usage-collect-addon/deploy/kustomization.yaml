@@ -2,7 +2,6 @@ resources:
 - resources/addon-template.yaml
 - resources/cluster-management-addon.yaml
 - resources/cluster-role.yaml
-- resources/managed-cluster-set-binding.yaml
 - resources/placement.yaml
 
 images:

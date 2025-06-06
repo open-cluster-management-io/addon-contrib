@@ -1,0 +1,25 @@
+{{ if not .Values.skipClusterSetBinding }}
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterSet: global 
+{{- end }}
+
+---
+
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: {{ .Values.addon.name }}-global
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterSets:
+    - global
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Equal
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Equal

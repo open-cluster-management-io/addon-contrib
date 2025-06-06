@@ -21,7 +21,8 @@ cd addon-contrib/resource-usage-collect-addon/helm
 # Install the chart
 helm install resource-usage-collect-addon . \
   --namespace open-cluster-management-addon \
-  --create-namespace
+  --create-namespace \
+  --set global.image.repository=<image-name> # quay.io/haoqing/resource-usage-collect-addon
 ```
 
 ### From Chart Archive
@@ -33,7 +34,8 @@ helm package .
 # Install from the package
 helm install resource-usage-collect-addon resource-usage-collect-addon-0.1.0.tgz \
   --namespace open-cluster-management-addon \
-  --create-namespace
+  --create-namespace \
+  --set global.image.repository=<image-name> # quay.io/haoqing/resource-usage-collect-addon
 ```
 
 ## Configuration
@@ -49,14 +51,13 @@ The following table lists the configurable parameters of the Resource Usage Coll
 | `addon.displayName` | Display name of the addon | `Resource Usage Collect` |
 | `addon.description` | Description of the addon | `Collects resource usage metrics from managed clusters` |
 | `addon.namespace` | Namespace where the addon will be installed | `open-cluster-management-addon` |
-| `placement.name` | Name of the placement | `resource-usage-collect-placement` |
-| `placement.namespace` | Namespace of the placement | `open-cluster-management-addon` |
 | `agent.replicas` | Number of agent replicas | `1` |
 | `agent.resources.requests.cpu` | CPU request for the agent | `100m` |
 | `agent.resources.requests.memory` | Memory request for the agent | `128Mi` |
 | `agent.resources.limits.cpu` | CPU limit for the agent | `500m` |
 | `agent.resources.limits.memory` | Memory limit for the agent | `512Mi` |
 | `rbac.create` | Whether to create RBAC resources | `true` |
+| `skipClusterSetBinding` | skip creating managedclustersetbinding if already exist | `false` |
 
 ## Uninstallation
 
