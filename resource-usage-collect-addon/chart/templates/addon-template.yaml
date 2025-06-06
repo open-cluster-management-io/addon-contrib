@@ -1,7 +1,7 @@
 apiVersion: addon.open-cluster-management.io/v1alpha1
 kind: AddOnTemplate
 metadata:
-  name: {{ .Values.addon.name }}
+  name: resource-usage-collect-{{ .Chart.Version }}
 spec:
   addonName: {{ .Values.addon.name }}
   agentSpec:
@@ -55,9 +55,9 @@ spec:
                     args:
                       - "/addon"
                       - "agent"
-                      - "--hub-kubeconfig=/managed/hub-kubeconfig/kubeconfig"
-                      - "--cluster-name={{CLUSTER_NAME}}"
-                      - "--addon-namespace={{ .Values.addon.namespace }}"
+                      - --hub-kubeconfig={{ "{{" }}HUB_KUBECONFIG{{ "}}" }}
+                      - --cluster-name={{ `{{CLUSTER_NAME}}` }}
+                      - --addon-namespace={{ .Values.addon.namespace }}
                     resources:
                       {{- toYaml .Values.agent.resources | nindent 22 }}
         - kind: ServiceAccount

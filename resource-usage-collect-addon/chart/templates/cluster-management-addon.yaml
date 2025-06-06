@@ -9,12 +9,12 @@ spec:
     - group: addon.open-cluster-management.io
       resource: addontemplates
       defaultConfig:
-        name: {{ .Values.addon.name }}
+        name: resource-usage-collect-{{ .Chart.Version }}
   installStrategy:
     type: Placements
     placements:
-      - name: {{ .Values.placement.name }}
-        namespace: {{ .Values.placement.namespace }} 
+      - name: {{ .Values.addon.name }}-global
+        namespace: {{ .Release.Namespace }}
 
 
 

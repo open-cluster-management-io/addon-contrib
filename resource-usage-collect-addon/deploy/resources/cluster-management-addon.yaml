@@ -13,5 +13,5 @@ spec:
   installStrategy:
     type: Placements
     placements:
-      - name: placement-all
-        namespace: default
+      - name: global
+        namespace: open-cluster-management-addon
