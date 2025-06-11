@@ -1,0 +1,9 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: otel-config
+  namespace: open-cluster-management-hub
+spec:
+  customizedVariables:
+    - name: PROM_ENDPOINT
+      value: http://10.0.116.95:39090/api/v1/write
