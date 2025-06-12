@@ -546,6 +546,11 @@ spec:
                     items:
                       description: ListenerSpec defines the specification for a listener.
                       properties:
+                        ip:
+                          description: |-
+                            IP is the optional bind IP for NodePort services.
+                            It is only applicable when Type is "NodePort".
+                          type: string
                         name:
                           type: string
                         port:

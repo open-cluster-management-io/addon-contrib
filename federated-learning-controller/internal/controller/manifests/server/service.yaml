@@ -1,4 +1,4 @@
-{{- if or (eq .ListenerType "NodePort") (eq .ListenerType "LoadBalancer") }}
+{{- if and .CreateService (or (eq .ListenerType "NodePort") (eq .ListenerType "LoadBalancer") ) }}
 apiVersion: v1
 kind: Service
 metadata:

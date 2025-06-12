@@ -32,7 +32,8 @@ import (
 // +kubebuilder:rbac:groups="route.openshift.io",resources=routes,verbs=get;list;watch;create;update;delete
 
 func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Context,
-	instance *flv1alpha1.FederatedLearning) error {
+	instance *flv1alpha1.FederatedLearning,
+) error {
 	// don't delete the storage and cause the job's owner is instance
 	if instance.DeletionTimestamp != nil {
 		return nil
@@ -50,6 +51,27 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 	if instance.Spec.Server.Listeners[0].Type != flv1alpha1.LoadBalancer &&
 		instance.Spec.Server.Listeners[0].Type != flv1alpha1.NodePort {
 		return fmt.Errorf("unsupported listener type: %s", instance.Spec.Server.Listeners[0].Type)
+	}
+
+	createService := false
+
+	// get the servcie instance if not exist create it
+	service := &corev1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: instance.Namespace,
+		Name:      getSeverName(instance.Name),
+	}, service); err != nil {
+		if errors.IsNotFound(err) {
+			createService = true
+		} else {
+			return fmt.Errorf("failed to get service: %w", err)
+		}
+	} else {
+		// if service already exists, check if the type is correct
+		if service.Spec.Type != corev1.ServiceType(instance.Spec.Server.Listeners[0].Type) {
+			log.Infof("service type is %s, but expected %s", service.Spec.Type, instance.Spec.Server.Listeners[0].Type)
+			createService = true
+		}
 	}
 
 	modelDir, initModel, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
@@ -70,6 +92,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 			StorageVolumeName:   instance.Spec.Server.Storage.Name,
 			ListenerType:        string(instance.Spec.Server.Listeners[0].Type),
 			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
+			CreateService:       createService,
 		}, nil
 	})
 	if err != nil {
@@ -230,28 +253,30 @@ func (r *FederatedLearningReconciler) updateNP(ctx context.Context, svc *corev1.
 		return nil
 	}
 
-	nodeList := &corev1.NodeList{}
-	if err := r.List(ctx, nodeList); err != nil {
-		return err
-	}
+	nodeIp := instance.Spec.Server.Listeners[0].IP
+	if nodeIp == "" {
+		log.Info("node IP is not specified, will use the first node's internal IP")
 
-	var nodeIP string
-	for _, node := range nodeList.Items {
-		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP {
-				nodeIP = addr.Address
-				break
+		nodeList := &corev1.NodeList{}
+		if err := r.List(ctx, nodeList); err != nil {
+			return err
+		}
+
+		for _, node := range nodeList.Items {
+			for _, addr := range node.Status.Addresses {
+				if addr.Address != "" && addr.Type == corev1.NodeInternalIP {
+					nodeIp = addr.Address
+					break
+				}
 			}
 		}
-		if nodeIP != "" {
-			break
-		}
 	}
-	if nodeIP == "" {
+
+	if nodeIp == "" {
 		return fmt.Errorf("no node internal IP found")
 	}
 
-	address := fmt.Sprintf("%s:%d", nodeIP, nodePort)
+	address := fmt.Sprintf("%s:%d", nodeIp, nodePort)
 	log.Infof("found address: %s", address)
 
 	newListeners := make([]flv1alpha1.ListenerStatus, 0)
