@@ -38,19 +38,33 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 	if instance.DeletionTimestamp != nil {
 		return nil
 	}
-	if err := r.storage(ctx, instance); err != nil {
-		return err
-	}
 
 	if len(instance.Spec.Server.Listeners) == 0 {
 		return fmt.Errorf("no listeners specified")
+	}
+
+	var err error
+
+	defer func() {
+		if err != nil {
+			instance.Status.Message = fmt.Sprintf("failed to initialize the server resources: %s", err.Error())
+			if updateErr := r.Status().Update(ctx, instance); updateErr != nil {
+				log.Errorw("failed to update the instance status", "error", updateErr)
+			}
+			return
+		}
+	}()
+
+	if err = r.storage(ctx, instance); err != nil {
+		return err
 	}
 
 	// instance.Spec.Server.Listeners[0].Type != flv1alpha1.Route
 	// route is http based -> requires to handle the transport: https://flower.ai/docs/framework/ref-api/flwr.client.start_client.html
 	if instance.Spec.Server.Listeners[0].Type != flv1alpha1.LoadBalancer &&
 		instance.Spec.Server.Listeners[0].Type != flv1alpha1.NodePort {
-		return fmt.Errorf("unsupported listener type: %s", instance.Spec.Server.Listeners[0].Type)
+		err = fmt.Errorf("unsupported listener type: %s", instance.Spec.Server.Listeners[0].Type)
+		return err
 	}
 
 	createService := false
@@ -64,7 +78,8 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		if errors.IsNotFound(err) {
 			createService = true
 		} else {
-			return fmt.Errorf("failed to get service: %w", err)
+			err = fmt.Errorf("failed to get service: %w", err)
+			return err
 		}
 	} else {
 		// if service already exists, check if the type is correct
@@ -107,7 +122,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 
 	// create restmapper for deployer to find GVR
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
-	if err := SetOwner(unstructuredObjects, instance, mapper, r.Scheme); err != nil {
+	if err = SetOwner(unstructuredObjects, instance, mapper, r.Scheme); err != nil {
 		return err
 	}
 
@@ -117,7 +132,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		}
 	}
 
-	if err := r.updateServerAddress(ctx, instance); err != nil {
+	if err = r.updateServerAddress(ctx, instance); err != nil {
 		return err
 	}
 
@@ -195,8 +210,7 @@ func (r *FederatedLearningReconciler) updateRoute(ctx context.Context, svc *core
 func (r *FederatedLearningReconciler) updateLB(ctx context.Context, svc *corev1.Service, instance *flv1alpha1.FederatedLearning) error {
 	log.Info("loadBalancer service found")
 	if len(svc.Status.LoadBalancer.Ingress) == 0 {
-		log.Info("loadBalancer service address is empty")
-		return nil
+		return fmt.Errorf("loadBalancer service address is empty for %s/%s", svc.Namespace, svc.Name)
 	}
 
 	var address string
