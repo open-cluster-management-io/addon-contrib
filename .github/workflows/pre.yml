@@ -1,0 +1,70 @@
+# The following workflow is to handle skipped but required jobs when only documentations is changed.
+# Github doc: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+name: pre
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches:
+      - main
+
+env:
+  # Common versions
+  GO_VERSION: '1.23'
+  GO_REQUIRED_MIN_VERSION: ''
+
+permissions:
+  contents: read
+
+jobs:
+  subproj:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.diff.outputs.projects }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      - name: Get changed sub projects
+        id: diff
+        run: |
+          # Get top-level changed directories (ignore .github and top-level files)
+          projects=$(git diff --name-only origin/main...HEAD \
+            | awk -F/ '{print $1}' \
+            | sort -u \
+            | grep -v '^$' \
+            | grep -v '^.github$' \
+            | while read name; do [ -d "$name" ] && echo "$name"; done \
+            | jq -R . | jq -s .)
+          echo "projects=$projects" >> $GITHUB_OUTPUT
+
+  verify:
+    needs: subproj
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: ${{ fromJson(needs.subproj.outputs.projects) }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: verify
+        run: make -C ${{ matrix.project }} verify
+
+  build:
+    needs: subproj
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: ${{ fromJson(needs.subproj.outputs.projects) }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build
+        run: make -C ${{ matrix.project }} build
