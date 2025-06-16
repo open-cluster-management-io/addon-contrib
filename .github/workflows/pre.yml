@@ -1,0 +1,87 @@
+# The following workflow is to handle skipped but required jobs when only documentations is changed.
+# Github doc: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/troubleshooting-required-status-checks#handling-skipped-but-required-checks
+name: pre
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches:
+      - main
+
+env:
+  # Common versions
+  GO_VERSION: '1.23'
+  GO_REQUIRED_MIN_VERSION: ''
+
+permissions:
+  contents: read
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      projects: ${{ steps.diff.outputs.projects }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Fetch base branch
+        run: git fetch origin main
+      - name: Get changed sub projects
+        id: diff
+        run: |
+          # Get changed files from the last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1...HEAD)
+          
+          echo "=== All changed files ==="
+          echo "$CHANGED_FILES"
+          echo "========================="
+          
+          # Extract unique first-level directories from changed files
+          ALL_CHANGED_DIRS=$(echo "$CHANGED_FILES" | cut -d'/' -f1 | sort -u)
+          
+          # Convert to JSON matrix format, filtering out top-level files and .github
+          SUB_PROJ=""
+          for dir in $ALL_CHANGED_DIRS; do
+            if [ -d "$dir" ] && [ "$dir" != ".github" ]; then
+              if [ -n "$SUB_PROJ" ]; then
+                SUB_PROJ="$SUB_PROJ,"
+              fi
+              SUB_PROJ="$SUB_PROJ{\"project\":\"$dir\"}"
+            fi
+          done
+          
+          # Set output
+          echo "projects={\"include\":[$SUB_PROJ]}" >> $GITHUB_OUTPUT
+          echo "Changed projects:$SUB_PROJ"
+  verify:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.projects) }}
+      fail-fast: false
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: verify
+        run: make -C ${{ matrix.project }} verify
+  build:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.detect-changes.outputs.projects) }}
+      fail-fast: false
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build
+        run: make -C ${{ matrix.project }} build
