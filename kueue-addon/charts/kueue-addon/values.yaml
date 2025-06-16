@@ -2,8 +2,9 @@
 # This is a YAML-formatted file.
 
 # Image configuration
-image: quay.io/open-cluster-management/kueue-addon
-tag: latest
+image:
+  repository: quay.io/open-cluster-management/kueue-addon
+  tag: latest
 
 # Skip cluster set binding
 skipClusterSetBinding: false
@@ -19,7 +20,7 @@ resourceFlavor:
 # Cluster queue
 clusterQueue:
   name: cluster-queue
-  namespaceSelector: "{}" # match all namespaces
+  namespaceSelector: "{}"  # match all namespaces
   resourceGroups:
   - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
     flavors:

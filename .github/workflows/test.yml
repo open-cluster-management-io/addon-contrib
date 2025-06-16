@@ -1,0 +1,166 @@
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        required: true
+        type: string
+
+env:
+  GO_REQUIRED_MIN_VERSION: ''
+
+jobs:
+  reviewable:
+    name: Run verify build and test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: test-${{ github.ref }}-${{ inputs.repo }}-reviewable
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 1
+          fetch-tags: true
+          submodules: 'recursive'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install DevSpace
+        uses: loft-sh/setup-devspace@main
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: 1.23
+          # See: https://github.com/actions/setup-go/issues/424
+          # go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Verify
+        id: verify
+        run: cd ${{ inputs.repo }} && make verify
+
+      - name: Build
+        id: build
+        run: cd ${{ inputs.repo }} && make build
+
+      - name: Test
+        id: test
+        run: cd ${{ inputs.repo }} && make test-unit
+
+  test-chart:
+    name: Run Helm Chart Tests
+    runs-on: ubuntu-latest
+    if: hashFiles('${{ inputs.repo }}/charts/**') != ''
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: ${{ inputs.repo }}
+      IMAGE_TAG: dev
+    concurrency:
+      group: test-${{ github.ref }}-${{ inputs.repo }}-test-chart
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+          submodules: 'recursive'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4
+        with:
+          version: v3.11.2
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+          check-latest: true
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@0d28d3144d3a25ea2cc349d6e59901c4ff469b3b # v2.7.0
+        with:
+          version: v3.13.0
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          set -e
+          changed=$(ct list-changed --chart-dirs ${{ inputs.repo }}/charts)
+          echo $changed
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Helm changes detected. Skipping chart testing!"
+          fi
+
+      - name: Prime Helm repos
+        if: steps.list-changed.outputs.changed == 'true'  
+        id: prime-helm-repos
+        run: |
+          set -e
+          yq eval '.dependencies[] | .name + " " + .repository' ${{ inputs.repo }}/charts/${{ inputs.repo }}/Chart.yaml | while read -r repo_name repo_url; do
+            if [[ ! "$repo_url" =~ ^(oci://|file://) ]]; then
+              helm repo add "$repo_name" "$repo_url"
+            else
+              echo "Skipping repository $repo_url for $repo_name"
+            fi
+          done
+          if helm repo list | grep -q .; then
+            helm repo update
+          else
+            echo "No helm repositories to update."
+          fi
+          helm dependency update ${{ inputs.repo }}/charts/${{ inputs.repo }}
+
+      - name: Run chart-testing (lint)
+        if: steps.list-changed.outputs.changed == 'true'
+        run: ct lint --chart-dirs ${{ inputs.repo }}/charts
+
+      - name: Format cluster name
+        id: format-cluster-name
+        run: |
+          set -e
+          sha=${{ github.sha }}
+          truncated_sha=$(echo $sha | cut -c1-7)
+          cluster_name=${{ inputs.repo }}-$truncated_sha-ct
+          echo "cluster_name=$cluster_name" >> "$GITHUB_OUTPUT"
+
+      - name: Create kind cluster
+        if: steps.list-changed.outputs.changed == 'true'
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          version: v0.27.0
+          cluster_name: ${{ steps.format-cluster-name.outputs.cluster_name }}
+          node_image: kindest/node:v1.31.9
+
+      - name: Build Docker Image
+        if: steps.list-changed.outputs.changed == 'true'
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
+        with:
+          context: ./${{ inputs.repo }}
+          file: ./${{ inputs.repo }}/Dockerfile
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          builder: ${{ steps.buildx.outputs.name }}
+          push: false
+          cache-from: type=gha,scope=${{ github.ref_name }}-${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          cache-to: type=gha,scope=${{ github.ref_name }}-${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          load: true
+
+      - name: Load image & create namespace
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          kind load docker-image ${{ env.IMAGE }}:${{ env.IMAGE_TAG }} --name ${{ steps.format-cluster-name.outputs.cluster_name }}
+
+      - name: Run chart-testing (install)
+        if: steps.list-changed.outputs.changed == 'true'
+        run: cd ${{ inputs.repo }} && make test-chart

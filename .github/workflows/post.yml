@@ -1,0 +1,149 @@
+name: Post
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: post-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-matrix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
+      repositories: ${{ steps.repo-matrix.outputs.repositories }}
+      artifacts: ${{ steps.generate.outputs.artifacts }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      with:
+        fetch-depth: 0
+        ref: ${{ github.sha }}
+    - name: Compute diff refs
+      id: compute-refs
+      run: |
+        set -e
+
+        BASE_SHA=${{ github.event.before }}
+        HEAD_SHA=${{ github.sha }}
+
+        # Ensure we have both the base and head commits
+        git fetch --depth=1 origin $BASE_SHA
+        git fetch --depth=1 origin $HEAD_SHA
+        echo "BASE_SHA=$BASE_SHA" >> $GITHUB_ENV
+        echo "HEAD_SHA=$HEAD_SHA" >> $GITHUB_ENV
+
+        # echo "Diff will compare $BASE_SHA with $HEAD_SHA"
+        echo "Diff will compare main ($BASE_SHA) with $HEAD_SHA"
+    - name: Generate repository matrix
+      id: repo-matrix
+      uses: ./.github/actions/generate-repo-matrix
+      with:
+        repoRoot: "."
+    - name: Build changed project matrix
+      id: generate
+      run: |
+        set -e
+
+        # Get repository names and check for changes
+        repositories_json='${{ steps.repo-matrix.outputs.repositories }}'
+        changed_repos=()
+
+        # Check each repository for changes
+        while IFS= read -r repo; do
+          if git diff --name-only $BASE_SHA $HEAD_SHA | grep "^$repo/" > /dev/null 2>&1; then
+            changed_repos+=("$repo")
+          fi
+        done < <(echo "$repositories_json" | jq -r 'keys[]')
+
+        if [ ${#changed_repos[@]} -eq 0 ]; then
+          echo "No changes detected for any project"
+          echo "matrix=" >> $GITHUB_OUTPUT
+          echo "artifacts={}" >> $GITHUB_OUTPUT
+        else
+          # Convert changed repos array to JSON
+          changed_repos_json=$(printf '%s\n' "${changed_repos[@]}" | jq -R . | jq -s .)
+          matrixJson=$(echo "$changed_repos_json" | jq -c '{"repo": .}')
+
+          # Generate artifacts JSON with workspace prefix
+          artifacts_json=$(
+            echo "$repositories_json" | jq -c \
+              --argjson changed_repos "$changed_repos_json" \
+              --arg workspace "${{ github.workspace }}" \
+              '
+                to_entries
+                | map(select(.key as $repo | $changed_repos | index($repo) != null))
+                | from_entries
+                | with_entries(
+                    .key as $repo
+                    | .value = (
+                        .value["e2e-artifacts"]
+                        | map($workspace + "/" + $repo + "/" + .)
+                        | join("\n")
+                      )
+                  )
+              '
+          )
+
+          echo "matrix=$matrixJson" >> $GITHUB_OUTPUT
+          echo "artifacts=$artifacts_json" >> $GITHUB_OUTPUT
+        fi
+
+        echo "Matrix: $matrixJson"
+        echo "Artifacts: $artifacts_json"
+
+  images:
+    name: Build and Push Images
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.matrix != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJson(needs.generate-matrix.outputs.matrix).repo }}
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: install imagebuilder
+        run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.16
+      - name: pull base image
+        run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
+      - name: build image
+        run: |
+          IMAGE_TAG=latest-${{ matrix.arch }} \
+          IMAGE_BUILD_EXTRA_FLAGS="--build-arg OS=linux --build-arg ARCH=${{ matrix.arch }}" \
+            cd ${{ matrix.repo }} && make image
+      - name: push image
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          IMAGE_TAG=latest-${{ matrix.arch }} \
+            cd ${{ matrix.repo }} && make image-push
+
+  image-manifest:
+    name: Create and Push Image Manifest
+    needs: [images, generate-matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJson(needs.generate-matrix.outputs.matrix).repo }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: create and push manifest
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          IMAGE_TAG=latest \
+            cd ${{ matrix.repo }} && make image-manifest
