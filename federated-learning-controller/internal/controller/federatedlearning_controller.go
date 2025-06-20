@@ -120,7 +120,7 @@ func (r *FederatedLearningReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// 1. server: storage, job (rounds, minAvailableClients)
 		if err := r.federatedLearningServer(ctx, instance); err != nil {
 			log.Errorf("failed to create/update the server: %v", err)
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 
 		// 2. client: placement(based on selected cluster -> Running), Running -> generate manifestwork

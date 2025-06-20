@@ -58,8 +58,8 @@ cluster2   true           https://cluster2-control-plane:6443   True     True   
 #### 1. Clone and navigate to the repository
 
 ```bash
-git@github.com:open-cluster-management-io/addon-contrib.git
-cd federated-learning-controller
+git clone git@github.com:open-cluster-management-io/addon-contrib.git
+cd ./addon-contrib/federated-learning-controller
 ```
 
 #### 2. Build and push the controller image

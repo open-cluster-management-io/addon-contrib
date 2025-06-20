@@ -11,6 +11,7 @@ type FederatedLearningServerParams struct {
 	InitModel           string
 	ListenerType        string
 	ListenerPort        int
+	CreateService       bool
 }
 
 type FederatedLearningClientParams struct {
