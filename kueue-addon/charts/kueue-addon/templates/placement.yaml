@@ -1,18 +1,20 @@
+{{ if not .Values.skipClusterSetBinding }}
 apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
   name: global
-  namespace: open-cluster-management-addon
+  namespace: {{ .Release.Namespace }}
 spec:
   clusterSet: global
+{{- end }}
 
 ---
 
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: spoke
-  namespace: open-cluster-management-addon
+  name: {{ .Values.placement.name }}
+  namespace: {{ .Release.Namespace }}
 spec:
   clusterSets:
     - global

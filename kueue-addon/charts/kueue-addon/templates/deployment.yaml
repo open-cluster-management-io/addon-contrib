@@ -1,0 +1,31 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kueue-addon-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kueue-addon-controller
+  template:
+    metadata:
+      labels:
+        app: kueue-addon-controller
+    spec:
+      serviceAccount: kueue-addon-controller-sa
+      containers:
+        - name: kueue-addon-controller
+          image: {{ .Values.image }}:{{ .Values.tag | default (print "v" .Chart.Version) }}
+          imagePullPolicy: Always
+          args:
+            - "/kueue-addon-controller"
+            - "hub"
+
+---
+
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: kueue-addon-controller-sa
+  namespace: {{ .Release.Namespace }}
