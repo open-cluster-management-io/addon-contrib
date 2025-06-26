@@ -18,3 +18,4 @@ allowing for enhanced AI integration, IoT layer, cluster proxy, telemetry, resou
 ## Repository Structure
 
 The repository is organized into directories, each containing the source code and configuration files for a specific addon.
+

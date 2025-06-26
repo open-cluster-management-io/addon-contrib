@@ -8,6 +8,7 @@ import (
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/version"
+
 	commonoptions "open-cluster-management.io/ocm/pkg/common/options"
 )
 
