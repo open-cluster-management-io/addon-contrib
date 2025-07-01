@@ -60,7 +60,7 @@ spec:
                 imagePullPolicy: Always
                 args:
                 - -metricfile=/metrics/metric.txt
-                - -endpoint=cluster1-collector.default.svc.cluster.local:4317
+                - -endpoint=otel-collector.default.svc.cluster.local:4317
                 volumeMounts:
                   - name: metric-data
                     mountPath: /metrics
