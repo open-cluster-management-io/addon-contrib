@@ -25,8 +25,22 @@ spec:
         volumeMounts:
         - name: model-volume
           mountPath: {{ .ModelDir }}
+        - name: metric-data
+          mountPath: /metrics
+
+      - name: obs-sidecar
+        image: quay.io/mrrr61/fl_sidecar:latest
+        imagePullPolicy: Always
+        args:
+        - -metricfile=/metrics/metric.txt
+        - -endpoint=hub-collector.default.svc.cluster.local:4317
+        volumeMounts:
+        - name: metric-data
+          mountPath: /metrics
       restartPolicy: Never
       volumes:
       - name: model-volume
         persistentVolumeClaim:
           claimName: {{ .StorageVolumeName }}
+      - name: metric-data
+        emptyDir: {}

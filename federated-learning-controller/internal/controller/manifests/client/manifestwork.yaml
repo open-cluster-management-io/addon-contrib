@@ -39,6 +39,10 @@ spec:
               labels:
                 job-name: {{ .ClientJobName }} # Ensure labels match the selector
             spec:
+              volumes:
+                - name: metric-data
+                  emptyDir: {}
+
               containers:
               - name: flower-client
                 image: {{ .ClientJobImage }}
@@ -47,4 +51,17 @@ spec:
                 - client # Maps to the entrypoint.sh logic
                 - --data-config={{ .ClientDataConfig }}
                 - --server-address={{ .ServerAddress }}
+                volumeMounts:
+                  - name: metric-data
+                    mountPath: /metrics
+              
+              - name: obs-sidecar
+                image: quay.io/mrrr61/fl_sidecar:latest
+                imagePullPolicy: Always
+                args:
+                - -metricfile=/metrics/metric.txt
+                - -endpoint=cluster1-collector.default.svc.cluster.local:4317
+                volumeMounts:
+                  - name: metric-data
+                    mountPath: /metrics
               restartPolicy: Never
