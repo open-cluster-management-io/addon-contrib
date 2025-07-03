@@ -11,7 +11,7 @@ spec:
           kind: Deployment
           metadata:
             name: deployment-collector-opentelemetry-collector
-            namespace: open-cluster-management-agent
+            namespace: open-cluster-management-addon
           spec:
             replicas: 1
             selector:
@@ -87,8 +87,10 @@ spec:
                     terminationMessagePath: /dev/termination-log
                     terminationMessagePolicy: File
                     volumeMounts:
-                      - mountPath: /conf
-                        name: opentelemetry-collector-configmap
+                    - mountPath: /conf
+                      name: opentelemetry-collector-configmap
+                    - mountPath: /prom-certs
+                      name: prom-web-root-ca
                 dnsPolicy: ClusterFirst
                 restartPolicy: Always
                 schedulerName: default-scheduler
@@ -97,13 +99,19 @@ spec:
                 serviceAccountName: opentelemetry-collector-sa
                 terminationGracePeriodSeconds: 30
                 volumes:
-                  - configMap:
-                      defaultMode: 420
-                      items:
-                        - key: relay
-                          path: relay.yaml
-                      name: deployment-collector-opentelemetry-collector
-                    name: opentelemetry-collector-configmap
+                - configMap:
+                    defaultMode: 420
+                    items:
+                      - key: relay
+                        path: relay.yaml
+                    name: deployment-collector-opentelemetry-collector
+                  name: opentelemetry-collector-configmap
+                - configMap:
+                    defaultMode: 420
+                    items:
+                      - key: ca.crt
+                        path: ca.crt
+                    name: prom-web-root-ca
         - apiVersion: v1
           data:
             relay: |
@@ -111,6 +119,11 @@ spec:
                 debug: {}
                 prometheusremotewrite:
                   endpoint: {{PROM_REMOTE_WRITE_ENDPOINT}}
+                  tls:
+                    insecure: false
+                    cert_file: /managed/open-cluster-management.io-otel-addon/client.crt
+                    key_file: /managed/open-cluster-management.io-otel-addon/client.key
+                    ca_file: /prom-certs/ca.crt
                   external_labels:
                     cluster_name: {{CLUSTER_NAME}}
               extensions:
@@ -149,12 +162,20 @@ spec:
           kind: ConfigMap
           metadata:
             name: deployment-collector-opentelemetry-collector
-            namespace: open-cluster-management-agent
+            namespace: open-cluster-management-addon
+        - apiVersion: v1
+          data:
+            ca.crt: |
+              PROM_WEB_ROOT_CA
+          kind: ConfigMap
+          metadata:
+            name: prom-web-root-ca
+            namespace: open-cluster-management-addon
         - apiVersion: v1
           kind: ServiceAccount
           metadata:
             name: opentelemetry-collector-sa
-            namespace: open-cluster-management-agent
+            namespace: open-cluster-management-addon
         - apiVersion: rbac.authorization.k8s.io/v1
           kind: ClusterRole
           metadata:
@@ -188,8 +209,8 @@ spec:
               namespace: default
   registration:
   - type: CustomSigner
-  customSigner:
-    signerName: open-cluster-management.io/otel-addon
-    signingCA:
-      name: otel-signer
+    customSigner:
+      signerName: open-cluster-management.io/otel-addon
+      signingCA:
+        name: otel-signer
   

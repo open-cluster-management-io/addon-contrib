@@ -5,5 +5,5 @@ metadata:
   namespace: open-cluster-management-hub
 spec:
   customizedVariables:
-    - name: PROM_REMOTE_WRITE_ENDPOINT
-      value: http://hub-control-plane:30090/api/v1/write
+  - name: PROM_REMOTE_WRITE_ENDPOINT
+    value: http://hub-control-plane:30090/api/v1/write

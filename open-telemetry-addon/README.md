@@ -32,8 +32,9 @@ kubectl --context kind-hub create namespace monitoring
 - Create otel-signer secret in open-cluster-management-hub namespace
 
 ```shell
-cd hack/cert
+cd hack/certs
 bash ./generate-certs.sh
+cd ../..
 ```
 
 3. Install Prometheus with the following command:
@@ -47,7 +48,8 @@ helm --kube-context kind-hub install prometheus prometheus-community/kube-promet
 ### Installing the otel-addon
 
 ```shell
-oc apply -k deploy
+kubectl --context kind-hub create namespace open-cluster-management-addon
+oc --context kind-hub apply -k deploy
 ```
 
 ### Verifying the addOn

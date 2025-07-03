@@ -1,4 +1,5 @@
 resources:
 - resources/addon-template.yaml
+- resources/placement.yaml
 - resources/addon-deployment-config.yaml
 - resources/cluster-management-addon.yaml

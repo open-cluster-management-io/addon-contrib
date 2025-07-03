@@ -6,7 +6,14 @@ metadata:
   name: otel
 spec:
   installStrategy:
-    type: Manual
+    type: Placements
+    placements:
+    - name: otel-addon
+      namespace: open-cluster-management-addon
+      configs:
+      - name: otel-addon
+        group: addon.open-cluster-management.io
+        resource: addontemplates
   supportedConfigs:
     - defaultConfig:
         name: otel-0.0.1
