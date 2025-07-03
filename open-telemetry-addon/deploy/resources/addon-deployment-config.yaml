@@ -1,0 +1,9 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: otel-config
+  namespace: open-cluster-management-hub
+spec:
+  customizedVariables:
+    - name: PROM_REMOTE_WRITE_ENDPOINT
+      value: http://hub-control-plane:30090/api/v1/write

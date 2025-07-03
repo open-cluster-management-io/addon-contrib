@@ -1,0 +1,195 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: otel-addon
+spec:
+  addonName: otel
+  agentSpec:
+    workload:
+      manifests:
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: deployment-collector-opentelemetry-collector
+            namespace: open-cluster-management-agent
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/instance: deployment-collector-dev
+                app.kubernetes.io/name: opentelemetry-collector
+                component: standalone-collector
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/instance: deployment-collector-dev
+                  app.kubernetes.io/name: opentelemetry-collector
+                  component: standalone-collector
+              spec:
+                containers:
+                  - args:
+                      - --config=/conf/relay.yaml
+                    command:
+                      - /otelcol-contrib
+                    env:
+                      - name: MY_POD_IP
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: status.podIP
+                      - name: K8S_NODE_NAME
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: spec.nodeName
+                    image: otel/opentelemetry-collector-contrib:0.128.0
+                    imagePullPolicy: IfNotPresent
+                    livenessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /
+                        port: 13133
+                        scheme: HTTP
+                      periodSeconds: 10
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    name: opentelemetry-collector
+                    ports:
+                      - containerPort: 6831
+                        name: jaeger-compact
+                        protocol: UDP
+                      - containerPort: 14250
+                        name: jaeger-grpc
+                        protocol: TCP
+                      - containerPort: 14268
+                        name: jaeger-thrift
+                        protocol: TCP
+                      - containerPort: 4317
+                        name: otlp
+                        protocol: TCP
+                      - containerPort: 4318
+                        name: otlp-http
+                        protocol: TCP
+                      - containerPort: 9411
+                        name: zipkin
+                        protocol: TCP
+                    readinessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /
+                        port: 13133
+                        scheme: HTTP
+                      periodSeconds: 10
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    resources: {}
+                    securityContext: {}
+                    terminationMessagePath: /dev/termination-log
+                    terminationMessagePolicy: File
+                    volumeMounts:
+                      - mountPath: /conf
+                        name: opentelemetry-collector-configmap
+                dnsPolicy: ClusterFirst
+                restartPolicy: Always
+                schedulerName: default-scheduler
+                securityContext: {}
+                serviceAccount: opentelemetry-collector-sa
+                serviceAccountName: opentelemetry-collector-sa
+                terminationGracePeriodSeconds: 30
+                volumes:
+                  - configMap:
+                      defaultMode: 420
+                      items:
+                        - key: relay
+                          path: relay.yaml
+                      name: deployment-collector-opentelemetry-collector
+                    name: opentelemetry-collector-configmap
+        - apiVersion: v1
+          data:
+            relay: |
+              exporters:
+                debug: {}
+                prometheusremotewrite:
+                  endpoint: {{PROM_REMOTE_WRITE_ENDPOINT}}
+                  external_labels:
+                    cluster_name: {{CLUSTER_NAME}}
+              extensions:
+                health_check:
+                  endpoint: ${env:MY_POD_IP}:13133
+              processors:
+                batch: {}
+              receivers:
+                prometheus:
+                  config:
+                    scrape_configs:
+                    - job_name: opentelemetry-collector
+                      metrics_path: /metrics/cadvisor
+                      scheme: https
+                      tls_config:
+                        insecure_skip_verify: true
+                        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                      kubernetes_sd_configs:
+                        - role: node
+                      relabel_configs:
+                        - action: labelmap
+                          regex: __meta_kubernetes_node_label_(.+)
+                      scrape_interval: 10s
+              service:
+                extensions:
+                - health_check
+                pipelines:
+                  metrics:
+                    exporters:
+                    - prometheusremotewrite
+                    processors:
+                    - batch
+                    receivers:
+                    - prometheus
+          kind: ConfigMap
+          metadata:
+            name: deployment-collector-opentelemetry-collector
+            namespace: open-cluster-management-agent
+        - apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: opentelemetry-collector-sa
+            namespace: open-cluster-management-agent
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: otel-clusterrole
+          rules:
+            - nonResourceURLs:
+                - /metrics
+                - /metrics/cadvisor
+              verbs:
+                - get
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+                - nodes/metrics
+              verbs:
+                - get
+                - list
+                - watch
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: otel-clusterrolebinding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: otel-clusterrole
+          subjects:
+            - kind: ServiceAccount
+              name: opentelemetry-collector-sa
+              namespace: default
+  registration:
+  - type: CustomSigner
+  customSigner:
+    signerName: open-cluster-management.io/otel-addon
+    signingCA:
+      name: otel-signer
+  

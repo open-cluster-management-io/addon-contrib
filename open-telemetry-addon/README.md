@@ -3,28 +3,54 @@
 ## What is OtelCollector-Addon?
 
 OtelCollector Addon is a pluggable addon working on the extensibility provided by [addon-framework](https://github.com/open-cluster-management-io/addon-framework)
-which automates the installation of otelCollector on both hub cluster and managed clusters and jaeget-all-in-one on hub cluster for processing and storing the traces.
-
-OtelCollecotr Addon consists of two components:
-
-- __Addon-Manager__: Manages the installation of hub components for setting up the Addon
-
-- __Addon-Agent__: Manages the installation of collector agents in the managed clustres.
-
-The overall architecture is shown below:
-
-![Arch](./hack/picture/arch.png)
+which automates the installation of otelCollector on the managed clusters.
 
 
-### Installing via Helm Chart :
+### Prerequisite
+
+The otel-addon depends on prometheus-stack installed on the hub cluster. Before you get started, you must have a OCM environment setuped. You can also follow our recommended [quick start guide](https://open-cluster-management.io/docs/getting-started/quick-start/) to set up a playgroud OCM environment.
+
+#### Add Helm Repo
 
 ```shell
-$ helm install \
-    -n open-cluster-management-addon --create-namespace \
-    otel-collector charts/otel
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
 ```
 
-### Verifying the addOn :
+#### Install Prometheus
+
+1. You need to create `monitoring` namespace in hub cluster with this command:
+```
+kubectl --context kind-hub create namespace monitoring
+```
+
+2. You have to run the script to generate the certs before installing prometheus with mTLS enabled. The script do the following things:
+- Generate root ca and key
+- Generate client ca and key
+- Generate server cert and key
+- Create prometheus-tls secret in monitoring namespace
+- Create otel-signer secret in open-cluster-management-hub namespace
+
+```shell
+cd hack/cert
+bash ./generate-certs.sh
+```
+
+3. Install Prometheus with the following command:
+
+```shell
+helm --kube-context kind-hub install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  -f ./hack/prom/values.yaml
+```
+
+### Installing the otel-addon
+
+```shell
+oc apply -k deploy
+```
+
+### Verifying the addOn
 ```
 $ kubectl -n open-cluster-management-addon get pod
 NAME                                            READY   STATUS    RESTARTS   AGE

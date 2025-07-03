@@ -1,0 +1,4 @@
+resources:
+- resources/addon-template.yaml
+- resources/addon-deployment-config.yaml
+- resources/cluster-management-addon.yaml
