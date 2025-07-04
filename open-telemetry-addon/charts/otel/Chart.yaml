@@ -1,6 +1,0 @@
-apiVersion: v2
-name: otel-addon
-description: A Helm chart for Otel-Collector OCM Addon
-type: application
-version: 0.1.0
-appVersion: "1.16.0"
