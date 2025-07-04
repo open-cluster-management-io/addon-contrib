@@ -32,8 +32,8 @@ kubectl --context kind-hub create secret tls otel-signer -n open-cluster-managem
   --key=client-ca.key
 
 # replace root-ca.crt in deploy/resources/addon-template.yaml
-awk '{print "              " $0}' hack/certs/root-ca.crt > hack/certs/root-ca.crt.tmp
+awk '{print "              " $0}' root-ca.crt > root-ca.crt.tmp
 sed -i "/PROM_WEB_ROOT_CA/{
-        r hack/certs/root-ca.crt.tmp
+        r root-ca.crt.tmp
         d
-    }" deploy/resources/addon-template.yaml
+    }" ../../deploy/resources/addon-template.yaml

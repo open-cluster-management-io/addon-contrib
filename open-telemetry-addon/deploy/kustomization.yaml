@@ -3,3 +3,5 @@ resources:
 - resources/placement.yaml
 - resources/addon-deployment-config.yaml
 - resources/cluster-management-addon.yaml
+- resources/addonmanager.rolebinding.yaml
+- resources/addonmanager.role.yaml

@@ -5,6 +5,8 @@ metadata:
     addon.open-cluster-management.io/lifecycle: addon-manager
   name: otel
 spec:
+  addOnMeta:
+    displayName: otel addon
   installStrategy:
     type: Placements
     placements:

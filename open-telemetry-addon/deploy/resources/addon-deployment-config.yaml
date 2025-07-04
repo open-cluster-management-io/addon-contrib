@@ -6,4 +6,4 @@ metadata:
 spec:
   customizedVariables:
   - name: PROM_REMOTE_WRITE_ENDPOINT
-    value: http://hub-control-plane:30090/api/v1/write
+    value: https://hub-control-plane:30090/api/v1/write

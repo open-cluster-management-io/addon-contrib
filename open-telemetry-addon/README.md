@@ -49,15 +49,64 @@ helm --kube-context kind-hub install prometheus prometheus-community/kube-promet
 
 ```shell
 kubectl --context kind-hub create namespace open-cluster-management-addon
-oc --context kind-hub apply -k deploy
+kubectl --context kind-hub apply -k deploy
 ```
 
-### Verifying the addOn
+### Verifying the opentelemetry-collector in the managed clusters
 ```
-$ kubectl -n open-cluster-management-addon get pod
-NAME                                            READY   STATUS    RESTARTS   AGE
-jaeger-all-in-one-57dcf4b5-ltt46                1/1     Running   0          65s
-otel-collector-75fd748b4c-cbt7k                 1/1     Running   0          65s
-otel-collector-addon-manager-568885c78b-pl9db   1/1     Running   0          67s
+kubectl --context kind-cluster1 get pod -n open-cluster-management-agent-addon
+NAME                                       READY   STATUS    RESTARTS   AGE
+opentelemetry-collector-66fcdc8779-zvhff   1/1     Running   0          27s
 ```
 
+### Verify container advisor metrics
+```
+curl -k https://hub-control-plane:30090/api/v1/query?query=container_fs_inodes_total | jq .
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "__name__": "container_fs_inodes_total",
+          "beta_kubernetes_io_arch": "amd64",
+          "beta_kubernetes_io_os": "linux",
+          "cluster_name": "cluster1",
+          "device": "overlay_0-157",
+          "id": "/",
+          "instance": "cluster1-control-plane",
+          "job": "opentelemetry-collector",
+          "kubernetes_io_arch": "amd64",
+          "kubernetes_io_hostname": "cluster1-control-plane",
+          "kubernetes_io_os": "linux"
+        },
+        "value": [
+          1751596235.174,
+          "104840504"
+        ]
+      },
+      {
+        "metric": {
+          "__name__": "container_fs_inodes_total",
+          "beta_kubernetes_io_arch": "amd64",
+          "beta_kubernetes_io_os": "linux",
+          "cluster_name": "cluster2",
+          "device": "overlay_0-313",
+          "id": "/",
+          "instance": "cluster2-control-plane",
+          "job": "opentelemetry-collector",
+          "kubernetes_io_arch": "amd64",
+          "kubernetes_io_hostname": "cluster2-control-plane",
+          "kubernetes_io_os": "linux"
+        },
+        "value": [
+          1751596235.174,
+          "104840504"
+        ]
+      }
+      ...
+    ]
+  }
+}
+```
