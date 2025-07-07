@@ -1,9 +1,10 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: addon-manager
+  name: otel-addon-manager
   namespace: open-cluster-management-hub
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
+  resourceNames: ["otel-signer"]
   verbs: ["get", "list", "watch"]

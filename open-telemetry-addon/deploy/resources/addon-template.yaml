@@ -207,7 +207,7 @@ spec:
           subjects:
             - kind: ServiceAccount
               name: opentelemetry-collector-sa
-              namespace: default
+              namespace: open-cluster-management-addon
   registration:
   - type: CustomSigner
     customSigner:
