@@ -10,6 +10,29 @@ IMAGE_REGISTRY ?= quay.io/open-cluster-management
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)
 
+# verify
+verify-gocilint:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.6
+	golangci-lint run --timeout=5m --modules-download-mode vendor ./...
+
+install-golang-gci:
+	go install github.com/daixiang0/gci@v0.13.6
+
+fmt-imports: install-golang-gci
+	gci write --skip-generated -s standard -s default -s "prefix(open-cluster-management.io)" -s "prefix(open-cluster-management.io/ocm)" cmd pkg
+
+verify-fmt-imports: install-golang-gci
+	@output=$$(gci diff --skip-generated -s standard -s default -s "prefix(open-cluster-management.io)" -s "prefix(open-cluster-management.io/ocm)" cmd pkg); \
+	if [ -n "$$output" ]; then \
+	    echo "Diff output is not empty: $$output"; \
+	    echo "Please run 'make fmt-imports' to format the golang files imports automatically."; \
+	    exit 1; \
+	else \
+	    echo "Diff output is empty"; \
+	fi
+
+verify: vendor verify-fmt-imports verify-gocilint
+
 # build
 vendor: 
 	go mod tidy
@@ -23,6 +46,20 @@ build: vendor
 image:
 	docker build -f Dockerfile -t $(IMAGE_NAME) .
 .PHONY: image
+
+image-push:
+	docker push $(IMAGE_NAME)
+.PHONY: image-push
+
+image-manifest:
+	docker manifest create $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)-amd64 \
+		$(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)-arm64
+	docker manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)-amd64 --arch amd64
+	docker manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)-arm64 --arch arm64
+	docker manifest push $(IMAGE_NAME)
 
 # deploy
 deploy: kustomize
@@ -40,3 +77,17 @@ kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE):
 	mkdir -p $(LOCALBIN)
 	curl $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
+
+# test
+test-unit:
+	go test ./...
+.PHONY: test-unit
+
+test-e2e:
+	echo "TODO: Implement e2e tests"
+.PHONY: test-e2e
+
+test-chart:
+	echo "TODO: Implement test-chart"
+	echo "image.repository=$(IMAGE_NAME) image.tag=$(IMAGE_TAG)"
+.PHONY: test-chart

@@ -16,7 +16,7 @@ spec:
       serviceAccount: kueue-addon-controller-sa
       containers:
         - name: kueue-addon-controller
-          image: {{ .Values.image }}:{{ .Values.tag | default (print "v" .Chart.Version) }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag | default (print "v" .Chart.Version) }}
           imagePullPolicy: Always
           args:
             - "/kueue-addon-controller"

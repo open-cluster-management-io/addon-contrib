@@ -9,6 +9,8 @@ import (
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
+	kueueinformers "sigs.k8s.io/kueue/client-go/informers/externalversions"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/admissioncheck"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/kueuesecretcopy"
@@ -20,8 +22,6 @@ import (
 	msacommon "open-cluster-management.io/managed-serviceaccount/pkg/common"
 	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
 	msainformer "open-cluster-management.io/managed-serviceaccount/pkg/generated/informers/externalversions"
-	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
-	kueueinformers "sigs.k8s.io/kueue/client-go/informers/externalversions"
 )
 
 // RunControllerManager starts the controllers on hub to manage spoke cluster registration.

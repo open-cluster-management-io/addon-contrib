@@ -1,0 +1,31 @@
+name: Generate Repository Matrix
+description: Generates a matrix of repositories from the repositories.json file
+inputs:
+  repoRoot:
+    description: The root directory of the repository
+    required: true
+    type: string
+outputs:
+  matrix:
+    description: JSON matrix of repositories
+    value: ${{ steps.generate.outputs.matrix }}
+  repositories:
+    description: Complete repositories configuration as JSON
+    value: ${{ steps.generate.outputs.repositories }}
+runs:
+  using: 'composite'
+  steps:
+    - name: generate matrix
+      id: generate
+      shell: bash
+      run: |
+        set -e
+
+        # Read repositories.json and properly escape for GitHub Actions
+        repositories_json=$(cat ${{ inputs.repoRoot }}/.github/repositories.json | jq -c .)
+        echo "repositories=$repositories_json" >> $GITHUB_OUTPUT
+
+        # Extract repository names for matrix
+        repository_names=$(echo "$repositories_json" | jq -r 'keys')
+        matrix_json=$(echo "$repository_names" | jq -c '{"repository": .}')
+        echo "matrix=$matrix_json" >> $GITHUB_OUTPUT

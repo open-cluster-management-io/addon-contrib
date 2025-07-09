@@ -10,21 +10,21 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
-	sdkv1beta1 "open-cluster-management.io/sdk-go/pkg/apis/cluster/v1beta1"
-	"open-cluster-management.io/sdk-go/pkg/patcher"
-
-	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
-	clusterinformerv1beta1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1beta1"
-	clusterlisterv1beta1 "open-cluster-management.io/api/client/cluster/listers/cluster/v1beta1"
-	clusterapiv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-
-	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
-	"open-cluster-management.io/ocm/pkg/common/helpers"
-	"open-cluster-management.io/ocm/pkg/common/queue"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
 	kueueinformerv1beta1 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta1"
 	kueuelisterv1beta1 "sigs.k8s.io/kueue/client-go/listers/kueue/v1beta1"
+
+	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
+	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	clusterinformerv1beta1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1beta1"
+	clusterlisterv1beta1 "open-cluster-management.io/api/client/cluster/listers/cluster/v1beta1"
+	clusterapiv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	sdkv1beta1 "open-cluster-management.io/sdk-go/pkg/apis/cluster/v1beta1"
+	"open-cluster-management.io/sdk-go/pkg/patcher"
+
+	"open-cluster-management.io/ocm/pkg/common/helpers"
+	"open-cluster-management.io/ocm/pkg/common/queue"
 )
 
 const (
@@ -120,7 +120,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 		mkcluster := &kueuev1beta1.MultiKueueCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: placementName + "-" + cn},
 			Spec: kueuev1beta1.MultiKueueClusterSpec{
-				kueuev1beta1.KubeConfig{
+				KubeConfig: kueuev1beta1.KubeConfig{
 					LocationType: kueuev1beta1.SecretLocationType,
 					Location:     common.GetMultiKueueSecretName(cn),
 				},

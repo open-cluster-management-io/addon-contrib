@@ -1,0 +1,8 @@
+{
+  "kueue-addon": {
+    "e2e-artifacts": ["kueue-addon.tar.gz"]
+  },
+  "resource-usage-collect-addon": {
+    "e2e-artifacts": ["resource-usage-collect-addon.tar.gz"]
+  }
+}
