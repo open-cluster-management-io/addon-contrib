@@ -122,14 +122,18 @@ jobs:
         run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
       - name: build image
         run: |
+          set -e
+          cd ${{ matrix.repo }}
           IMAGE_TAG=latest-${{ matrix.arch }} \
           IMAGE_BUILD_EXTRA_FLAGS="--build-arg OS=linux --build-arg ARCH=${{ matrix.arch }}" \
-            cd ${{ matrix.repo }} && make image
+            make image
       - name: push image
         run: |
+          set -e
+          cd ${{ matrix.repo }}
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
           IMAGE_TAG=latest-${{ matrix.arch }} \
-            cd ${{ matrix.repo }} && make image-push
+            make image-push
 
   image-manifest:
     name: Create and Push Image Manifest
@@ -144,6 +148,8 @@ jobs:
         uses: actions/checkout@v4
       - name: create and push manifest
         run: |
+          set -e
+          cd ${{ matrix.repo }}
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
           IMAGE_TAG=latest \
-            cd ${{ matrix.repo }} && make image-manifest
+            make image-manifest

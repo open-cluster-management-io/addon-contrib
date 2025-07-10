@@ -1,0 +1,105 @@
+name: ImageRelease
+
+on:
+  push:
+    tags:
+      - '*/v*.*.*'
+
+env:
+  # Common versions
+  GO_VERSION: '1.23'
+  GO_REQUIRED_MIN_VERSION: ''
+  GOPATH: '/home/runner/work/addon-contrib/addon-contrib/go'
+  GITHUB_REF: ${{ github.ref }}
+
+defaults:
+  run:
+    working-directory: go/src/open-cluster-management.io/addon-contrib
+
+permissions:
+  contents: read
+
+jobs:
+  env:
+    name: prepare release env
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          path: go/src/open-cluster-management.io/addon-contrib
+
+      - name: prepare release environment
+        id: prepare-env
+        uses: ./go/src/open-cluster-management.io/addon-contrib/.github/actions/prepare-release-env
+        with:
+          github_ref: ${{ github.ref }}
+    outputs:
+      MAJOR_RELEASE_VERSION: ${{ steps.prepare-env.outputs.MAJOR_RELEASE_VERSION }}
+      RELEASE_VERSION: ${{ steps.prepare-env.outputs.RELEASE_VERSION }}
+      MATRIX: ${{ steps.prepare-env.outputs.MATRIX }}
+
+  images:
+    name: images
+    runs-on: ubuntu-latest
+    needs: [ env ]
+    strategy:
+      matrix:
+        arch: [ amd64, arm64 ]
+        repository: ${{ fromJson(needs.env.outputs.MATRIX).repository }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          path: go/src/open-cluster-management.io/addon-contrib
+
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: install imagebuilder
+        run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.16
+
+      - name: pull base image
+        run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
+
+      - name: build image
+        run: |
+          set -e
+          cd ${{ matrix.repository }}
+          IMAGE_TAG=${{ needs.env.outputs.RELEASE_VERSION }}-${{ matrix.arch }} \
+          IMAGE_BUILD_EXTRA_FLAGS="--build-arg OS=linux --build-arg ARCH=${{ matrix.arch }}" \
+            make image
+
+      - name: push image
+        run: |
+          set -e
+          cd ${{ matrix.repository }}
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          IMAGE_TAG=${{ needs.env.outputs.RELEASE_VERSION }}-${{ matrix.arch }} \
+            make image-push
+
+  image-manifest:
+    name: Create and Push Image Manifest
+    runs-on: ubuntu-latest
+    needs: [ env, images ]
+    strategy:
+      matrix:
+        repository: ${{ fromJson(needs.env.outputs.MATRIX).repository }}
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          path: go/src/open-cluster-management.io/addon-contrib
+
+      - name: create
+        run: |
+          set -e
+          cd ${{ matrix.repository }}
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          IMAGE_TAG=${{ needs.env.outputs.RELEASE_VERSION }} \
+            make image-manifest

@@ -19,7 +19,7 @@ outputs:
     value: ${{ steps.env-vars.outputs.TRIMMED_RELEASE_VERSION }}
   MATRIX:
     description: Repository matrix
-    value: ${{ steps.generate-matrix.outputs.matrix }}
+    value: ${{ steps.filter-matrix.outputs.matrix }}
 
 runs:
   using: 'composite'
@@ -50,3 +50,32 @@ runs:
       uses: ./go/src/open-cluster-management.io/addon-contrib/.github/actions/generate-repo-matrix
       with:
         repoRoot: go/src/open-cluster-management.io/addon-contrib
+
+    - name: filter matrix by release prefix
+      id: filter-matrix
+      shell: bash
+      env:
+        GITHUB_REF: ${{ inputs.github_ref }}
+      run: |
+        set -e
+
+        # Get the release prefix from the GitHub reference
+        RELEASE_PREFIX=${GITHUB_REF%/*}
+        RELEASE_PREFIX=${RELEASE_PREFIX##*/}
+
+        # Get the full repositories configuration
+        repositories_json='${{ steps.generate-matrix.outputs.repositories }}'
+
+        # Check if RELEASE_PREFIX exists in repositories
+        if echo "$repositories_json" | jq -e "has(\"$RELEASE_PREFIX\")" > /dev/null; then
+          # RELEASE_PREFIX exists, create matrix with only this repository
+          filtered_repos_json=$(echo "$repositories_json" | jq -c "{\"$RELEASE_PREFIX\": .[\"$RELEASE_PREFIX\"]}")
+          matrix_json=$(echo "[\"$RELEASE_PREFIX\"]" | jq -c '{"repository": .}')
+          
+          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "Found matching repository: $RELEASE_PREFIX"
+        else
+          # RELEASE_PREFIX doesn't exist, use empty matrix
+          echo "matrix=" >> $GITHUB_OUTPUT
+          echo "No matching repository found for prefix: $RELEASE_PREFIX"
+        fi
