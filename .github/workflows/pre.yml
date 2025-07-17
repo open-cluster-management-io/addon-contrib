@@ -2,8 +2,6 @@ name: pre
 
 on:
   pull_request:
-  pull_request_target:
-    types: [unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -12,92 +10,13 @@ concurrency:
 
 jobs:
   generate-matrix:
-    runs-on: ubuntu-latest
-    # Skip this job (and subsequently all other pre jobs) if the PR has the `skip-ci` label
-    if: |
-      ! contains(github.event.pull_request.labels.*.name, 'skip-ci')
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      matrix: ${{ steps.generate.outputs.matrix }}
-      repositories: ${{ steps.repo-matrix.outputs.repositories }}
-      artifacts: ${{ steps.generate.outputs.artifacts }}
-    steps:
-    - name: Checkout
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      with:
-        fetch-depth: 0
-        ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
-    - name: Compute diff refs
-      id: compute-refs
-      run: |
-        set -e
-
-        BASE_SHA=${{ github.event.pull_request.base.sha }}
-        HEAD_SHA=${{ github.event.after || github.event.pull_request.head.sha }}
-
-        # Ensure we have both the base and head commits
-        git fetch --depth=1 origin $BASE_SHA
-        git fetch --depth=1 origin $HEAD_SHA
-        echo "BASE_SHA=$BASE_SHA" >> $GITHUB_ENV
-        echo "HEAD_SHA=$HEAD_SHA" >> $GITHUB_ENV
-
-        echo "Diff will compare main ($BASE_SHA) with $HEAD_SHA"
-
-    - name: Generate repository matrix
-      id: repo-matrix
-      uses: ./.github/actions/generate-repo-matrix
-      with:
-        repoRoot: "."
-
-    - name: Build changed project matrix
-      id: generate
-      run: |
-        set -e
-
-        # Get repository names and check for changes
-        repositories_json='${{ steps.repo-matrix.outputs.repositories }}'
-        changed_repos=()
-
-        # Check each repository for changes
-        while IFS= read -r repo; do
-          if git diff --name-only $BASE_SHA $HEAD_SHA | grep "^$repo/" > /dev/null 2>&1; then
-            changed_repos+=("$repo")
-          fi
-        done < <(echo "$repositories_json" | jq -r 'keys[]')
-
-        if [ ${#changed_repos[@]} -eq 0 ]; then
-          echo "No changes detected for any project"
-          echo "matrix=" >> $GITHUB_OUTPUT
-          echo "artifacts={}" >> $GITHUB_OUTPUT
-        else
-          # Convert changed repos array to JSON
-          changed_repos_json=$(printf '%s\n' "${changed_repos[@]}" | jq -R . | jq -s .)
-          matrixJson=$(echo "$changed_repos_json" | jq -c '{"repo": .}')
-
-          # Generate artifacts JSON with workspace prefix
-          artifacts_json=$(echo "$repositories_json" | jq -c \
-            --argjson changed_repos "$changed_repos_json" \
-            --arg workspace "${{ github.workspace }}" \
-            'to_entries |
-              map(select(.key as $repo | $changed_repos | index($repo) != null)) |
-              from_entries |
-              with_entries(.key as $repo | .value = (.value["e2e-artifacts"] | map($workspace + "/" + $repo + "/" + .) | join("\n")))')
-
-          echo "matrix=$matrixJson" >> $GITHUB_OUTPUT
-          echo "artifacts=$artifacts_json" >> $GITHUB_OUTPUT
-        fi
-
-        echo "Matrix: $matrixJson"
-        echo "Artifacts: $artifacts_json"
+    uses: ./.github/workflows/generate-matrix.yaml
+    secrets: inherit
 
   call-test:
     name: test
     needs: generate-matrix
-    if: |
-      needs.generate-matrix.outputs.matrix != ''
+    if: needs.generate-matrix.outputs.matrix != ''
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
@@ -109,8 +28,7 @@ jobs:
   call-e2e:
     name: e2e
     needs: generate-matrix
-    if: |
-      needs.generate-matrix.outputs.matrix != ''
+    if: needs.generate-matrix.outputs.matrix != ''
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}

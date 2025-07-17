@@ -63,7 +63,7 @@ You can install the addons via the helm charts.
 
 ```bash
 helm install kueue-addon charts/kueue-addon/ \
-  -n open-cluster-management-addon --create-namespace 
+  -n open-cluster-management-addon --create-namespace
 ```
 
 To confirm the installation from hub:
