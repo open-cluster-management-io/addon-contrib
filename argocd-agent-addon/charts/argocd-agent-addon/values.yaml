@@ -1,7 +1,6 @@
 global:
   imageOverrides:
-    agentPrincipalImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-principal:latest
-    agentAgentImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent-agent:latest
+    argocdAgentImage: ghcr.io/argoproj-labs/argocd-agent/argocd-agent:latest
   imagePullPolicy: IfNotPresent
 
 agent:
