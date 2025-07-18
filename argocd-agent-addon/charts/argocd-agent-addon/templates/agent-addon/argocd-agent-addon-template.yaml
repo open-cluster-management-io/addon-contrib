@@ -41,13 +41,7 @@ spec:
           rules:
             - apiGroups: [""]
               resources: [namespaces]
-              verbs: [get, list, watch]
-            - apiGroups: [argoproj.io]
-              resources: [appprojects]
-              verbs: [get, list, watch]
-            - apiGroups: [argoproj.io]
-              resources: [applications]
-              verbs: [create, get, list, watch, update, delete, patch]
+              verbs: [list, watch]
         - apiVersion: apps/v1
           kind: Deployment
           metadata:
@@ -71,7 +65,7 @@ spec:
               spec:
                 containers:
                   - args:
-                      - /usr/local/bin/argocd-agent-agent
+                      - agent
                     env:
                     - name: ARGOCD_AGENT_REMOTE_SERVER
                       valueFrom:
@@ -133,7 +127,7 @@ spec:
                           name: argocd-agent-params
                           key: agent.creds
                           optional: true
-                    image: {{ .Values.global.imageOverrides.agentAgentImage }}
+                    image: {{ .Values.global.imageOverrides.argocdAgentImage }}
                     imagePullPolicy: {{ .Values.global.imagePullPolicy }}
                     name: argocd-agent-agent
                     ports:

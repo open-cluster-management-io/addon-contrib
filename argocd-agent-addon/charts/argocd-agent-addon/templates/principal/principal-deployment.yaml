@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - args:
-            - /usr/local/bin/argocd-agent-principal
+            - principal
           env:
           - name: ARGOCD_PRINCIPAL_ENABLE_RESOURCE_PROXY
             value: "false"
@@ -138,7 +138,7 @@ spec:
                 name: argocd-agent-params
                 key: principal.auth
                 optional: true
-          image: {{ .Values.global.imageOverrides.agentPrincipalImage }}
+          image: {{ .Values.global.imageOverrides.argocdAgentImage }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           name: argocd-agent-principal
           ports:
