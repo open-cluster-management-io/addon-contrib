@@ -4,7 +4,7 @@
 # Image configuration
 image:
   repository: quay.io/open-cluster-management/kueue-addon
-  tag: latest
+  tag:
 
 # Skip cluster set binding
 skipClusterSetBinding: false
