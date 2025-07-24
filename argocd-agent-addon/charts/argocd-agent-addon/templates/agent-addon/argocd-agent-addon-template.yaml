@@ -127,12 +127,71 @@ spec:
                           name: argocd-agent-params
                           key: agent.creds
                           optional: true
+                    - name: ARGOCD_AGENT_TLS_SECRET_NAME
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.tls.secret-name
+                          optional: true
+                    - name: ARGOCD_AGENT_TLS_ROOT_CA_SECRET_NAME
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.tls.root-ca-secret-name
+                          optional: true
+                    - name: ARGOCD_AGENT_METRICS_PORT
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.metrics.port
+                          optional: true
+                    - name: ARGOCD_AGENT_HEALTH_CHECK_PORT
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.healthz.port
+                          optional: true
+                    - name: REDIS_ADDR
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.redis.address
+                          optional: true
+                    {{- if .Values.agent.redis.secretName }}
+                    - name: REDIS_USERNAME
+                      valueFrom:
+                        secretKeyRef:
+                          name: {{ .Values.agent.redis.secretName }}
+                          key: username
+                          optional: true
+                    - name: REDIS_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: {{ .Values.agent.redis.secretName }}
+                          key: password
+                          optional: true
+                    {{- else }}
+                    - name: REDIS_USERNAME
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.redis.username
+                          optional: true
+                    - name: REDIS_PASSWORD
+                      valueFrom:
+                        configMapKeyRef:
+                          name: argocd-agent-params
+                          key: agent.redis.password
+                          optional: true
+                    {{- end }}
                     image: {{ .Values.global.imageOverrides.argocdAgentImage }}
                     imagePullPolicy: {{ .Values.global.imagePullPolicy }}
                     name: argocd-agent-agent
                     ports:
-                      - containerPort: 8000
+                      - containerPort: 8181
                         name: metrics
+                      - containerPort: 8002
+                        name: healthz
                     securityContext:
                       capabilities:
                         drop:
@@ -162,7 +221,7 @@ spec:
                   secret:
                     secretName: argocd-agent-ca
                     items:
-                    - key: ca.crt
+                    - key: tls.crt
                       path: ca.crt
                     optional: true
         - apiVersion: v1
@@ -174,6 +233,8 @@ spec:
             agent.mode: {{ .Values.agent.mode | quote }}
             agent.creds: "mtls:open-cluster-management:cluster:([^:]+):addon:argocd-agent"
             agent.tls.client.insecure: "false"
+            agent.tls.secret-name: "argocd-agent-client-tls"
+            agent.tls.root-ca-secret-name: "argocd-agent-ca"
             agent.tls.root-ca-path: "/app/config/ca/ca.crt"
             agent.tls.client.cert-path: "/app/config/tls/tls.crt"
             agent.tls.client.key-path: "/app/config/tls/tls.key"
@@ -181,6 +242,11 @@ spec:
             agent.namespace: "argocd"
             agent.server.address: {{ .Values.agent.principal.server.address | quote }}
             agent.server.port: {{ .Values.agent.principal.server.port | quote }}
+            agent.metrics.port: "8181"
+            agent.healthz.port: "8002"
+            agent.redis.address: {{ .Values.agent.principal.redis.address | default "argocd-redis:6379" | quote }}
+            agent.redis.username: {{ .Values.agent.redis.username | default "" | quote }}
+            agent.redis.password: {{ .Values.agent.redis.password | default "" | quote }}
         - apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
           metadata:
