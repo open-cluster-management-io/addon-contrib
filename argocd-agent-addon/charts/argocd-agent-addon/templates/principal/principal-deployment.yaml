@@ -23,7 +23,7 @@ spec:
             - principal
           env:
           - name: ARGOCD_PRINCIPAL_ENABLE_RESOURCE_PROXY
-            value: "false"
+            value: "true"
           - name: ARGOCD_PRINCIPAL_LISTEN_HOST
             valueFrom:
               configMapKeyRef:
@@ -53,6 +53,12 @@ spec:
               configMapKeyRef:
                 name: argocd-agent-params
                 key: principal.metrics.enabled
+                optional: true
+          - name: ARGOCD_PRINCIPAL_HEALTH_CHECK_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.healthz.port
                 optional: true
           - name: ARGOCD_PRINCIPAL_NAMESPACE
             valueFrom:
@@ -84,6 +90,12 @@ spec:
                 name: argocd-agent-params
                 key: principal.namespace-create.labels
                 optional: true
+          - name: ARGOCD_PRINCIPAL_TLS_SECRET_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.tls.secret-name
+                optional: true
           - name: ARGOCD_PRINCIPAL_TLS_SERVER_CERT_PATH
             valueFrom:
               configMapKeyRef:
@@ -108,6 +120,12 @@ spec:
                 name: argocd-agent-params
                 key: principal.tls.client-cert.require
                 optional: true
+          - name: ARGOCD_PRINCIPAL_TLS_SERVER_ROOT_CA_SECRET_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.tls.server.root-ca-secret-name
+                optional: true
           - name: ARGOCD_PRINCIPAL_TLS_SERVER_ROOT_CA_PATH
             valueFrom:
               configMapKeyRef:
@@ -120,11 +138,47 @@ spec:
                 name: argocd-agent-params
                 key: principal.tls.client-cert.match-subject
                 optional: true
+          - name: ARGOCD_PRINCIPAL_RESOURCE_PROXY_SECRET_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.resource-proxy.secret-name
+                optional: true
+          - name: ARGOCD_PRINCIPAL_RESOURCE_PROXY_TLS_CERT_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.resource-proxy.tls.cert-path
+                optional: true
+          - name: ARGOCD_PRINCIPAL_RESOURCE_PROXY_TLS_KEY_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.resource-proxy.tls.key-path
+                optional: true
+          - name: ARGOCD_PRINCIPAL_RESOURCE_PROXY_CA_SECRET_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.resource-proxy.ca.secret-name
+                optional: true
+          - name: ARGOCD_PRINCIPAL_RESOURCE_PROXY_CA_PATH
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.resource-proxy.ca.path
+                optional: true
           - name: ARGOCD_PRINCIPAL_JWT_ALLOW_GENERATE
             valueFrom:
               configMapKeyRef:
                 name: argocd-agent-params
                 key: principal.jwt.allow-generate
+                optional: true
+          - name: ARGOCD_PRINCIPAL_JWT_SECRET_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.jwt.secret-name
                 optional: true
           - name: ARGOCD_PRINCIPAL_JWT_KEY_PATH
             valueFrom:
@@ -138,6 +192,18 @@ spec:
                 name: argocd-agent-params
                 key: principal.auth
                 optional: true
+          - name: ARGOCD_PRINCIPAL_REDIS_SERVER_ADDRESS
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.redis.server.address
+                optional: true
+          - name: ARGOCD_PRINCIPAL_REDIS_COMPRESSION_TYPE
+            valueFrom:
+              configMapKeyRef:
+                name: argocd-agent-params
+                key: principal.redis.compression.type
+                optional: true
           image: {{ .Values.global.imageOverrides.argocdAgentImage }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           name: argocd-agent-principal
@@ -146,6 +212,8 @@ spec:
               name: principal
             - containerPort: 8000
               name: metrics
+            - containerPort: 8003
+              name: healthz
           securityContext:
             capabilities:
               drop:
@@ -170,6 +238,7 @@ spec:
           items:
           - key: jwt.key
             path: jwt.key
+          optional: true
       - name: tls-secret
         secret:
           secretName: argocd-agent-tls
@@ -178,9 +247,11 @@ spec:
             path: tls.key
           - key: tls.crt
             path: tls.crt
+          optional: true
       - name: ca-secret
         secret:
           secretName: argocd-agent-ca
           items:
           - key: tls.crt
             path: ca.crt
+          optional: true
