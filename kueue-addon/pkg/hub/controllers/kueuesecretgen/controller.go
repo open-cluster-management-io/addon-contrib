@@ -66,6 +66,8 @@ func NewkueueSecretGenController(
 		ToController("kueueSecretGenController", recorder)
 }
 
+// sync ensures ClusterPermission and ManagedServiceAccount are present for the ManagedCluster.
+// If the cluster is being deleted, it cleans up these resources.
 func (c *kueueSecretGenController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	managedClusterName := syncCtx.QueueKey()
 	logger := klog.FromContext(ctx)
@@ -80,7 +82,7 @@ func (c *kueueSecretGenController) sync(ctx context.Context, syncCtx factory.Syn
 		return fmt.Errorf("failed to get managed cluster %s: %v", managedClusterName, err)
 	}
 
-	// if the managed cluster is deleting, delete the clusterpermission, managedserviceaccount as well.
+	// If the managed cluster is deleting, delete the clusterpermission, managedserviceaccount as well.
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		logger.Info("Managed cluster is being deleted, cleaning up resources", "cluster", managedClusterName)
 
