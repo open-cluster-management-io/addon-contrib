@@ -108,6 +108,12 @@ federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3
   ```
 </details>
 
+<details>
+
+<summary><strong>Optional: Install OTel Addon</strong></summary>
+  Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
+</details>
+
 --- 
 
 ### Deploy the Federated Learning Instance
