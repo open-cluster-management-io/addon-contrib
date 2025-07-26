@@ -1,0 +1,19 @@
+prometheus:
+  prometheusSpec:
+    enableRemoteWriteReceiver: true
+    web:
+      tlsConfig:
+        keySecret:
+          key: server.key
+          name: prometheus-tls
+        cert:
+          secret:
+            key: server.crt
+            name: prometheus-tls
+        client_ca:
+          secret:
+            key: client-ca.crt
+            name: prometheus-tls
+        clientAuthType: RequestClientCert
+  service:
+    type: NodePort

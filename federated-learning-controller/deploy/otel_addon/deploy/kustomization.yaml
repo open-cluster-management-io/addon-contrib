@@ -1,0 +1,7 @@
+resources:
+- resources/addon-template.yaml
+- resources/placement.yaml
+- resources/cluster-management-addon.yaml
+- resources/addon-deployment-config.yaml
+- resources/addonmanager.role.yaml
+- resources/addonmanager.rolebinding.yaml
