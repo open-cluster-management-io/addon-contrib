@@ -24,13 +24,7 @@ Before you begin, ensure you have the following tools installed:
 
 ## Test Environment Setup
 
-A setup script is provided to create a complete three-cluster OCM test environment (1 hub, 2 spokes).
-
-```bash
-bash ./local-up.sh
-```
-
-After the script completes, you can verify that the clusters are registered with the hub:
+Please verify that the clusters are registered with the hub:
 
 ```bash
 kubectl --context kind-hub get managedclusters
@@ -61,7 +55,7 @@ kubectl --context kind-hub create namespace monitoring
 Next, run the certificate generation script. This script automates the creation of the necessary Certificate Authorities (CAs) and TLS certificates for securing communication (mTLS) between Prometheus and the OTel collectors. It will also create the required Kubernetes secrets.
 
 ```bash
-cd hack/certs
+cd federated-learning-controller/deploy/otel_addon/hack/certs
 bash ./generate-certs.sh
 cd ../..
 ```
@@ -110,19 +104,71 @@ After all components are deployed, you can verify that metrics are being collect
 
 Run a query for a Kepler metric, such as `kepler_container_joules_total`. The results should show time series with distinct `cluster_name` labels (`hub`, `cluster1`, `cluster2`), confirming that metrics are being successfully aggregated from all clusters.
 
-### Example PromQL Queries
-
-*   **Power consumption rate on the hub cluster:**
-    ```promql
-    rate(kepler_container_joules_total{cluster_name="hub"}[5m])
-    ```
-
-*   **CPU usage rate on cluster1:**
-    ```promql
-    rate(container_cpu_usage_seconds_total{cluster_name="cluster1"}[5m])
-    ```
-
-*   **CPU usage from a specific namespace on cluster2:**
-    ```promql
-    container_cpu_usage_seconds_total{exported_namespace="open-cluster-management", cluster_name="cluster2"}
-    ```
+```bash
+$ curl -ksS https://172.18.0.2:30090/api/v1/query?query=kepler_container_joules_total | jq         
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "__name__": "kepler_container_joules_total",
+          "cluster_name": "local-cluster",
+          "container_id": "037ac5839960d853b607d77a8501c6ddc244cbe22f3e6994508662b5ea1376eb",
+          "container_name": "klusterlet",
+          "container_namespace": "open-cluster-management",
+          "instance": "10.244.0.42:9102",
+          "job": "kepler",
+          "k8s_container_name": "kepler-exporter",
+          "k8s_daemonset_name": "kepler-exporter",
+          "k8s_namespace_name": "open-cluster-management-agent-addon",
+          "k8s_node_name": "hub-control-plane",
+          "k8s_pod_name": "kepler-exporter-sdljk",
+          "k8s_pod_uid": "9c846e33-5e18-4150-9b9e-1517104b6972",
+          "mode": "dynamic",
+          "pod_name": "klusterlet-7d8bd449cc-zftcw",
+          "server_address": "10.244.0.42",
+          "server_port": "9102",
+          "service_instance_id": "10.244.0.42:9102",
+          "service_name": "kepler",
+          "url_scheme": "http"
+        },
+        "value": [
+          1753535725.037,
+          "5.778"
+        ]
+      },
+      {
+        "metric": {
+          "__name__": "kepler_container_joules_total",
+          "cluster_name": "local-cluster",
+          "container_id": "8abc271d1180f59ee706546513f07e34f2dac64f3c9d91d3641007e90c5fefc3",
+          "container_name": "klusterlet",
+          "container_namespace": "open-cluster-management",
+          "instance": "10.244.0.42:9102",
+          "job": "kepler",
+          "k8s_container_name": "kepler-exporter",
+          "k8s_daemonset_name": "kepler-exporter",
+          "k8s_namespace_name": "open-cluster-management-agent-addon",
+          "k8s_node_name": "hub-control-plane",
+          "k8s_pod_name": "kepler-exporter-sdljk",
+          "k8s_pod_uid": "9c846e33-5e18-4150-9b9e-1517104b6972",
+          "mode": "idle",
+          "pod_name": "klusterlet-7d8bd449cc-cj52x",
+          "server_address": "10.244.0.42",
+          "server_port": "9102",
+          "service_instance_id": "10.244.0.42:9102",
+          "service_name": "kepler",
+          "url_scheme": "http"
+        },
+        "value": [
+          1753535725.037,
+          "0"
+        ]
+      },
+      ...
+    ]
+  }
+}
+```

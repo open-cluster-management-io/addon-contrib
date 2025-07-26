@@ -39,17 +39,29 @@ curl -L https://raw.githubusercontent.com/open-cluster-management-io/clusteradm/
 #### 2. Create hub and managed clusters with `kind`
 
 ```bash
-curl -L https://raw.githubusercontent.com/open-cluster-management-io/OCM/main/solutions/setup-dev-environment/local-up.sh | bash
+bash ./local-up.sh
 ```
 
 #### 3. Verify cluster setup
 
+After the script completes, you can verify that the clusters are registered with the hub:
+
 ```bash
-$ kubectl get mcl
-NAME       HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
-cluster1   true           https://cluster1-control-plane:6443   True     True        2m
-cluster2   true           https://cluster2-control-plane:6443   True     True        3m
+kubectl --context kind-hub get managedclusters
 ```
+
+You should see an output similar to this:
+
+```text
+NAME            HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
+cluster1        true           https://cluster1-control-plane:6443   True     True        3h36m
+cluster2        true           https://cluster2-control-plane:6443   True     True        3h36m
+local-cluster   true           https://hub-control-plane:6443        True     True        3h35m
+```
+
+#### Optional: Install OTel Addon
+
+Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
 
 --- 
 
@@ -90,10 +102,6 @@ cluster-manager-d9db64db5-t7grh                 1/1     Running     0          5
 cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5m
 federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
 ```
-
-### Optional: Install OTel Addon
-
-Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
 
 <details>
 
