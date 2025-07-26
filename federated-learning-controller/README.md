@@ -91,6 +91,10 @@ cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5
 federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
 ```
 
+### Optional: Install OTel Addon
+
+Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
+
 <details>
 
 <summary><strong>Alternatively: Run the Controller Locally</strong></summary>
@@ -106,12 +110,6 @@ federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3
   ```sh
   make run
   ```
-</details>
-
-<details>
-
-<summary><strong>Optional: Install OTel Addon</strong></summary>
-  Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
 </details>
 
 --- 
