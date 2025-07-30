@@ -1,6 +1,7 @@
 REGISTRY ?= quay.io/open-cluster-management
 # Image URL to use all building/pushing image targets
 IMG ?= $(REGISTRY)/federated-learning-controller:latest
+SIDECAR_IMG ?= $(REGISTRY)/fl-sidecar:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.31.0
 
@@ -108,6 +109,10 @@ run: manifests generate fmt vet ## Run a controller from your host.
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG} .
 
+.PHONY: docker-build-sidecar
+docker-build-sidecar: ## Build docker image with the sidecar.
+	$(MAKE) -C internal/sidecar build-app-image REGISTRY=${REGISTRY} IMAGE_TAG=$(VERSION)
+
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
@@ -120,6 +125,9 @@ docker-platform-build: ## Build docker image for multiple platforms (linux/amd64
 .PHONY: docker-platform-push
 docker-platform-push: ## Build and push docker image for multiple platforms (linux/amd64,linux/arm64).
 	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 --push -t ${IMG} .
+.PHONY: docker-push-sidecar
+docker-push-sidecar: ## Push docker image with the sidecar.
+	$(MAKE) -C internal/sidecar push-app-image REGISTRY=${REGISTRY} IMAGE_TAG=$(VERSION)
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
