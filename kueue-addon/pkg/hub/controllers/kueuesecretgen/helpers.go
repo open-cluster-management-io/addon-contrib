@@ -53,8 +53,11 @@ func applyClusterPermission(
 		return fmt.Errorf("manifest %q is not a ClusterPermission", file)
 	}
 
-	// Set the namespace to the cluster name
+	// Set the ClusterPermission and subject
+	required.Name = common.MultiKueueResourceName
 	required.Namespace = clusterName
+	required.Spec.ClusterRoleBinding.Subject.Name = common.MultiKueueResourceName
+	required.Spec.ClusterRoleBinding.Subject.Namespace = "open-cluster-management-agent-addon"
 
 	// Try to get existing ClusterPermission
 	existing, err := permissionClient.ApiV1alpha1().ClusterPermissions(clusterName).Get(ctx, required.Name, metav1.GetOptions{})

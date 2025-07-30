@@ -30,7 +30,8 @@ type kueueSecretCopyController struct {
 	eventRecorder events.Recorder
 }
 
-// NewKueueSecretCopyController creates a new controller that copies secrets from cluster namespace to kueue namespace
+// NewKueueSecretCopyController returns a controller that watches for multikueue secrets in all cluster namespaces
+// and ensures a kubeconfig Secret is created/updated in the kueue namespace.
 func NewKueueSecretCopyController(
 	kubeClient kubernetes.Interface,
 	secretInformer informerv1.SecretInformer,
@@ -50,7 +51,7 @@ func NewKueueSecretCopyController(
 			},
 			func(obj interface{}) bool {
 				accessor, _ := meta.Accessor(obj)
-				// filter multikueue secret
+				// Filter multikueue secret
 				return accessor.GetName() == common.MultiKueueResourceName
 			},
 			secretInformer.Informer()).
@@ -58,6 +59,7 @@ func NewKueueSecretCopyController(
 		ToController("KueueSecretCopyController", recorder)
 }
 
+// Sync copies the multikueue ServiceAccount secret from the cluster namespace to the kueue namespace as a kubeconfig Secret.
 func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	key := syncCtx.QueueKey()
 	logger := klog.FromContext(ctx)
@@ -70,18 +72,27 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 
 	origSecret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		logger.Info("secret not found", "secret", name, "namespace", namespace)
+		logger.Info("Secret not found, deleting corresponding kubeconfig secret", "secret", name, "namespace", namespace)
+		// Delete the corresponding kubeconfig secret in kueue namespace when source secret is not found
+		kubeconfigSecretName := common.GetMultiKueueSecretName(namespace)
+		err = c.kubeClient.CoreV1().Secrets(common.KueueNamespace).Delete(ctx, kubeconfigSecretName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete kubeconfig secret %s: %v", kubeconfigSecretName, err)
+		}
+		if err == nil {
+			logger.Info("Deleted kubeconfig secret", "secret", kubeconfigSecretName, "namespace", common.KueueNamespace)
+		}
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	// get cluster url
+	// Get cluster url from ManagedCluster
 	clusterName := namespace
 	mcl, err := c.clusterLister.Get(clusterName)
 	if errors.IsNotFound(err) {
-		logger.Info("managed cluster not found", "cluster", clusterName)
+		logger.Info("ManagedCluster not found", "cluster", clusterName)
 		return nil
 	}
 	if err != nil {
@@ -93,13 +104,13 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	}
 	url := mcl.Spec.ManagedClusterClientConfigs[0].URL
 
-	// generate kubeconfig secret
-	kubeconfSecret, err := c.generateKueConfigSecret(origSecret, url, name)
+	// Generate the kubeconfig Secret
+	kubeconfSecret, err := c.generateKueConfigSecret(origSecret, url, clusterName)
 	if err != nil {
 		return err
 	}
 	if kubeconfSecret == nil {
-		logger.Info("kubeconfig secret is not ready")
+		logger.Info("Kubeconfig secret is not ready")
 		return nil
 	}
 
@@ -108,6 +119,7 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	return err
 }
 
+// generateKueConfigSecret creates a kubeconfig Secret for the given cluster using the original ServiceAccount secret.
 func (c *kueueSecretCopyController) generateKueConfigSecret(secret *v1.Secret, clusterAddr, clusterName string) (*v1.Secret, error) {
 	saToken, ok := secret.Data["token"]
 	if !ok {
@@ -121,8 +133,7 @@ func (c *kueueSecretCopyController) generateKueConfigSecret(secret *v1.Secret, c
 
 	kubeconfigStr := generateKueConfigStr(base64.StdEncoding.EncodeToString(caCert), clusterAddr, clusterName, secret.Name, saToken)
 
-	// Create the Secret containing kubeconfig
-	kubeconfSecret := &v1.Secret{
+	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.GetMultiKueueSecretName(secret.Namespace),
 			Namespace: common.KueueNamespace,
@@ -130,11 +141,10 @@ func (c *kueueSecretCopyController) generateKueConfigSecret(secret *v1.Secret, c
 		Data: map[string][]byte{
 			"kubeconfig": []byte(kubeconfigStr),
 		},
-	}
-
-	return kubeconfSecret, nil
+	}, nil
 }
 
+// generateKueConfigStr returns a kubeconfig YAML string for the given cluster and ServiceAccount token.
 func generateKueConfigStr(caCert, clusterAddr, clusterName, userName string, saToken []byte) string {
 	return fmt.Sprintf(`apiVersion: v1
 clusters:

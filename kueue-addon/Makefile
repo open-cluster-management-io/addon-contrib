@@ -79,9 +79,45 @@ $(KUSTOMIZE):
 	curl $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
 
 # test
+TEST_TMP :=/tmp
+export KUBEBUILDER_ASSETS ?=$(TEST_TMP)/kubebuilder/bin
+
+K8S_VERSION ?=1.30.0
+GOHOSTOS ?=$(shell go env GOHOSTOS)
+GOHOSTARCH ?=$(shell go env GOHOSTARCH)
+KB_TOOLS_ARCHIVE_NAME :=kubebuilder-tools-$(K8S_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
+KB_TOOLS_ARCHIVE_PATH := $(TEST_TMP)/$(KB_TOOLS_ARCHIVE_NAME)
+GO_TEST_PACKAGES :=./pkg/...
+GO_TEST_FLAGS := -race -coverprofile=coverage.out
+
+# download the kubebuilder-tools to get kube-apiserver binaries from it
+ensure-kubebuilder-tools:
+ifeq "" "$(wildcard $(KUBEBUILDER_ASSETS))"
+	$(info Downloading kube-apiserver into '$(KUBEBUILDER_ASSETS)')
+	mkdir -p '$(KUBEBUILDER_ASSETS)'
+	curl -s -f -L https://storage.googleapis.com/kubebuilder-tools/$(KB_TOOLS_ARCHIVE_NAME) -o '$(KB_TOOLS_ARCHIVE_PATH)'
+	tar -C '$(KUBEBUILDER_ASSETS)' --strip-components=2 -zvxf '$(KB_TOOLS_ARCHIVE_PATH)'
+else
+	$(info Using existing kube-apiserver from "$(KUBEBUILDER_ASSETS)")
+endif
+.PHONY: ensure-kubebuilder-tools
+
+clean-integration-test:
+	$(RM) '$(KB_TOOLS_ARCHIVE_PATH)'
+	rm -rf $(TEST_TMP)/kubebuilder
+	$(RM) ./*integration.test
+.PHONY: clean-integration-test
+
+clean: clean-integration-test
+
 test-unit:
-	go test ./...
+	go test $(GO_TEST_FLAGS) $(GO_TEST_PACKAGES)
 .PHONY: test-unit
+
+test-integration: ensure-kubebuilder-tools
+	go test -c ./test/integration -o ./kueue-integration.test -tags=integration
+	./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+.PHONY: test-integration
 
 test-e2e:
 	echo "TODO: Implement e2e tests"
