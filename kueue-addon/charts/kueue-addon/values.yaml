@@ -5,6 +5,7 @@
 image:
   repository: quay.io/open-cluster-management/kueue-addon
   tag:
+  pullPolicy: IfNotPresent
 
 # Skip cluster set binding
 skipClusterSetBinding: false
