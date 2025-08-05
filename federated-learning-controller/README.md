@@ -53,7 +53,7 @@ cluster2   true           https://cluster2-control-plane:6443   True     True   
 
 #### Optional: Configure Environment for Observability
 
-
+Please refer to the [Observability Setup](docs/configure-environment-observability.md) documentation for more details.
 
 --- 
 
@@ -94,10 +94,6 @@ cluster-manager-d9db64db5-t7grh                 1/1     Running     0          5
 cluster-manager-d9db64db5-wndd8                 1/1     Running     0          5m
 federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3m
 ```
-
-### Optional: Install OTel Addon
-
-Please refer to the [OTel Addon Installation](docs/Install-OTel-Addon.md) documentation for more details.
 
 <details>
 
