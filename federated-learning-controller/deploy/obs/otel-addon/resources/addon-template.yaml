@@ -1,0 +1,479 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: otel-addon
+spec:
+  addonName: otel-addon
+  agentSpec:
+    workload:
+      manifests:
+        ## kepler
+        - apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: kepler-sa
+            namespace: open-cluster-management-addon
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: kepler-clusterrole
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - nodes/metrics
+                - nodes/proxy
+                - nodes/stats
+                - pods
+              verbs:
+                - get
+                - watch
+                - list
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: kepler-clusterrole-binding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kepler-clusterrole
+          subjects:
+            - kind: ServiceAccount
+              name: kepler-sa
+              namespace: open-cluster-management-addon
+        - apiVersion: v1
+          data:
+            BIND_ADDRESS: 0.0.0.0:9102
+            CPU_ARCH_OVERRIDE: ""
+            ENABLE_EBPF_CGROUPID: "true"
+            ENABLE_GPU: "true"
+            ENABLE_PROCESS_METRICS: "false"
+            ENABLE_QAT: "false"
+            EXPOSE_CGROUP_METRICS: "false"
+            EXPOSE_HW_COUNTER_METRICS: "true"
+            EXPOSE_IRQ_COUNTER_METRICS: "true"
+            KEPLER_LOG_LEVEL: "1"
+            KEPLER_NAMESPACE: open-cluster-management-addon
+            METRIC_PATH: /metrics
+            MODEL_CONFIG: |
+              CONTAINER_COMPONENTS_ESTIMATOR=false
+            PROMETHEUS_SCRAPE_INTERVAL: 30s
+            REDFISH_PROBE_INTERVAL_IN_SECONDS: "60"
+            REDFISH_SKIP_SSL_VERIFY: "true"
+          kind: ConfigMap
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: kepler-cfm
+            namespace: open-cluster-management-addon
+        - apiVersion: v1
+          data:
+            redfish.csv: |
+              eW91cl9rdWJlbGV0X25vZGVfbmFtZSxyZWRmaXNoX3VzZXJuYW1lLHJlZGZpc2hfcGFzc3
+              dvcmQsaHR0cHM6Ly9yZWRmaXNoX2lwX29yX2hvc3RuYW1lCg==
+          kind: Secret
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: redfish-4kh9d7bc7m
+            namespace: open-cluster-management-addon
+          type: Opaque
+        - apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              app.kubernetes.io/component: exporter
+              app.kubernetes.io/name: kepler-exporter
+              sustainable-computing.io/app: kepler
+            name: kepler-exporter
+            namespace: open-cluster-management-addon
+          spec:
+            clusterIP: None
+            ports:
+              - name: http
+                port: 9102
+                targetPort: http
+            selector:
+              app.kubernetes.io/component: exporter
+              app.kubernetes.io/name: kepler-exporter
+              sustainable-computing.io/app: kepler
+        - apiVersion: apps/v1
+          kind: DaemonSet
+          metadata:
+            labels:
+              sustainable-computing.io/app: kepler
+            name: kepler-exporter
+            namespace: open-cluster-management-addon
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: exporter
+                app.kubernetes.io/name: kepler-exporter
+                sustainable-computing.io/app: kepler
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: exporter
+                  app.kubernetes.io/name: kepler-exporter
+                  sustainable-computing.io/app: kepler
+              spec:
+                containers:
+                  - args:
+                      - /usr/bin/kepler -v=1 -redfish-cred-file-path=/etc/redfish/redfish.csv
+                    command:
+                      - /bin/sh
+                      - -c
+                    env:
+                      - name: NODE_IP
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: status.hostIP
+                      - name: NODE_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: spec.nodeName
+                    image: quay.io/sustainable_computing_io/kepler:release-0.9
+                    imagePullPolicy: Always
+                    livenessProbe:
+                      failureThreshold: 5
+                      httpGet:
+                        path: /healthz
+                        port: 9102
+                        scheme: HTTP
+                      initialDelaySeconds: 10
+                      periodSeconds: 60
+                      successThreshold: 1
+                      timeoutSeconds: 10
+                    name: kepler-exporter
+                    ports:
+                      - containerPort: 9102
+                        name: http
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 400Mi
+                    securityContext:
+                      privileged: true
+                    volumeMounts:
+                      - mountPath: /lib/modules
+                        name: lib-modules
+                        readOnly: true
+                      - mountPath: /sys
+                        name: tracing
+                        readOnly: true
+                      - mountPath: /proc
+                        name: proc
+                      - mountPath: /var/run
+                        name: var-run
+                      - mountPath: /etc/kepler/kepler.config
+                        name: cfm
+                        readOnly: true
+                      - mountPath: /etc/redfish
+                        name: redfish
+                        readOnly: true
+                dnsPolicy: ClusterFirstWithHostNet
+                hostPID: true
+                serviceAccountName: kepler-sa
+                tolerations:
+                  - effect: NoSchedule
+                    key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                  - effect: NoSchedule
+                    key: node-role.kubernetes.io/master
+                    operator: Exists
+                volumes:
+                  - hostPath:
+                      path: /lib/modules
+                      type: Directory
+                    name: lib-modules
+                  - hostPath:
+                      path: /sys
+                      type: Directory
+                    name: tracing
+                  - hostPath:
+                      path: /proc
+                      type: Directory
+                    name: proc
+                  - hostPath:
+                      path: /var/run
+                      type: Directory
+                    name: var-run
+                  - configMap:
+                      name: kepler-cfm
+                    name: cfm
+                  - name: redfish
+                    secret:
+                      secretName: redfish-4kh9d7bc7m
+
+
+
+
+
+        # otel collector
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: opentelemetry-collector
+            namespace: open-cluster-management-addon
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/instance: opentelemetry-collector
+                app.kubernetes.io/name: opentelemetry-collector
+                component: standalone-collector
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/instance: opentelemetry-collector
+                  app.kubernetes.io/name: opentelemetry-collector
+                  component: standalone-collector
+              spec:
+                containers:
+                  - args:
+                      - --config=/conf/relay.yaml
+                    command:
+                      - /otelcol-contrib
+                    env:
+                      - name: MY_POD_IP
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: status.podIP
+                      - name: K8S_NODE_NAME
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: spec.nodeName
+                    image: otel/opentelemetry-collector-contrib:0.128.0
+                    imagePullPolicy: IfNotPresent
+                    livenessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /
+                        port: 13133
+                        scheme: HTTP
+                      periodSeconds: 10
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    name: opentelemetry-collector
+                    ports:
+                      - containerPort: 6831
+                        name: jaeger-compact
+                        protocol: UDP
+                      - containerPort: 14250
+                        name: jaeger-grpc
+                        protocol: TCP
+                      - containerPort: 14268
+                        name: jaeger-thrift
+                        protocol: TCP
+                      - containerPort: 4317
+                        name: otlp
+                        protocol: TCP
+                      - containerPort: 4318
+                        name: otlp-http
+                        protocol: TCP
+                      - containerPort: 9411
+                        name: zipkin
+                        protocol: TCP
+                    readinessProbe:
+                      failureThreshold: 3
+                      httpGet:
+                        path: /
+                        port: 13133
+                        scheme: HTTP
+                      periodSeconds: 10
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    resources: {}
+                    securityContext: {}
+                    terminationMessagePath: /dev/termination-log
+                    terminationMessagePolicy: File
+                    volumeMounts:
+                    - mountPath: /conf
+                      name: opentelemetry-collector-configmap
+                    - mountPath: /prom-certs
+                      name: prom-web-root-ca
+                dnsPolicy: ClusterFirst
+                restartPolicy: Always
+                schedulerName: default-scheduler
+                securityContext: {}
+                serviceAccount: opentelemetry-collector-sa
+                serviceAccountName: opentelemetry-collector-sa
+                terminationGracePeriodSeconds: 30
+                volumes:
+                - configMap:
+                    defaultMode: 420
+                    items:
+                      - key: relay
+                        path: relay.yaml
+                    name: opentelemetry-collector
+                  name: opentelemetry-collector-configmap
+                - configMap:
+                    defaultMode: 420
+                    items:
+                      - key: ca.crt
+                        path: ca.crt
+                    name: prom-web-root-ca
+                  name: prom-web-root-ca
+        - apiVersion: v1
+          data:
+            relay: |
+              exporters:
+                debug: {}
+                prometheusremotewrite:
+                  endpoint: {{PROM_REMOTE_WRITE_ENDPOINT}}
+                  resource_to_telemetry_conversion:
+                    enabled: true
+                  tls:
+                    insecure: false
+                    cert_file: /managed/open-cluster-management.io-otel-addon/tls.crt
+                    key_file: /managed/open-cluster-management.io-otel-addon/tls.key
+                    ca_file: /prom-certs/ca.crt
+                  external_labels:
+                    cluster_name: {{CLUSTER_NAME}}
+              extensions:
+                health_check:
+                  endpoint: ${env:MY_POD_IP}:13133
+              processors:
+                batch: {}
+              receivers:
+                otlp:
+                  protocols:
+                    grpc:
+                      endpoint: 0.0.0.0:4317
+                    http:
+                      endpoint: 0.0.0.0:4318
+                prometheus:
+                  config:
+                    scrape_configs:
+                      - job_name: 'cadvisor'
+                        metrics_path: /metrics/cadvisor
+                        scheme: https
+                        tls_config:
+                          insecure_skip_verify: true
+                          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                        kubernetes_sd_configs:
+                          - role: node
+                        relabel_configs:
+                          - action: labelmap
+                            regex: __meta_kubernetes_node_label_(.+)
+                        scrape_interval: 10s
+                      - job_name: 'kepler'
+                        kubernetes_sd_configs:
+                          - role: pod
+                        relabel_configs:
+                          - source_labels: [__meta_kubernetes_namespace]
+                            action: keep
+                            regex: open-cluster-management-agent-addon
+                          - source_labels: [__meta_kubernetes_pod_label_sustainable_computing_io_app]
+                            action: keep
+                            regex: kepler
+                          - source_labels: [__address__, __meta_kubernetes_pod_container_port_number]
+                            action: replace
+                            regex: ([^:]+):(?:\d+);(\d+)
+                            replacement: $${1}:$${2}
+                            target_label: __address__
+                          - source_labels: [__meta_kubernetes_node_name]
+                            action: replace
+                            target_label: instance
+                        scrape_interval: 10s
+                    
+              service:
+                extensions:
+                - health_check
+                pipelines:
+                  metrics:
+                    exporters:
+                    - prometheusremotewrite
+                    processors:
+                    - batch
+                    receivers:
+                    - prometheus
+                    - otlp
+          kind: ConfigMap
+          metadata:
+            name: opentelemetry-collector
+            namespace: open-cluster-management-addon
+        - apiVersion: v1
+          data:
+            ca.crt: |
+              PROM_WEB_ROOT_CA
+          kind: ConfigMap
+          metadata:
+            name: prom-web-root-ca
+            namespace: open-cluster-management-addon
+        - apiVersion: v1
+          kind: Service
+          metadata:
+            name: otel-collector
+            namespace: open-cluster-management-addon
+            labels:
+              app.kubernetes.io/instance: opentelemetry-collector
+              app.kubernetes.io/name: opentelemetry-collector
+              component: otel-collector-svc
+          spec:
+            ports:
+            - name: otlp-grpc # Default endpoint for OpenTelemetry gRPC receiver.
+              port: 4317
+              protocol: TCP
+              targetPort: 4317
+            - name: otlp-http # Default endpoint for OpenTelemetry HTTP receiver.
+              port: 4318
+              protocol: TCP
+              targetPort: 4318
+            selector:
+              component: standalone-collector
+        - apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: opentelemetry-collector-sa
+            namespace: open-cluster-management-addon
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: otel-clusterrole
+          rules:
+            - nonResourceURLs:
+                - /metrics
+                - /metrics/cadvisor
+              verbs:
+                - get
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+                - nodes/metrics
+                - nodes/proxy
+                - nodes/stats
+                - services
+                - pods
+              verbs:
+                - get
+                - list
+                - watch
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: otel-clusterrolebinding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: otel-clusterrole
+          subjects:
+            - kind: ServiceAccount
+              name: opentelemetry-collector-sa
+              namespace: open-cluster-management-addon
+  registration:
+    - type: CustomSigner
+      customSigner:
+        signerName: open-cluster-management.io/otel-addon
+        signingCA:
+          name: otel-signer

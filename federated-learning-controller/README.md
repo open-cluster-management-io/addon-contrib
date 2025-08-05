@@ -51,6 +51,10 @@ cluster1   true           https://cluster1-control-plane:6443   True     True   
 cluster2   true           https://cluster2-control-plane:6443   True     True        3m
 ```
 
+#### Optional: Configure Environment for Observability
+
+Please refer to the [Observability Setup](docs/configure-environment-observability.md) documentation for more details.
+
 --- 
 
 ### Deploy Federated Learning Controller
