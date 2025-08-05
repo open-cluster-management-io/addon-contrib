@@ -20,7 +20,7 @@ require (
 	open-cluster-management.io/ocm v1.0.0
 	open-cluster-management.io/sdk-go v1.0.0
 	sigs.k8s.io/controller-runtime v0.20.3
-	sigs.k8s.io/kueue v0.11.8
+	sigs.k8s.io/kueue v0.11.9
 )
 
 require (

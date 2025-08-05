@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
+	"open-cluster-management.io/addon-contrib/kueue-addon/test/helper"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 )
 
@@ -42,56 +43,56 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 		// Create kueue-system namespace if it doesn't exist
 		_, err := hubKubeClient.CoreV1().Namespaces().Get(ctx, kueueNamespace, metav1.GetOptions{})
 		if errors.IsNotFound(err) {
-			createKueueNamespace(ctx, hubKubeClient, kueueNamespace)
+			helper.CreateKueueNamespace(ctx, hubKubeClient, kueueNamespace)
 		}
 
 		// Create managed clusters
-		createManagedCluster(ctx, hubKubeClient, hubClusterClient, cluster1)
-		createManagedCluster(ctx, hubKubeClient, hubClusterClient, cluster2)
+		helper.CreateManagedCluster(ctx, hubKubeClient, hubClusterClient, cluster1)
+		helper.CreateManagedCluster(ctx, hubKubeClient, hubClusterClient, cluster2)
 
 		// Create admission check
-		createAdmissionCheck(ctx, hubKueueClient, acName, placementName)
+		helper.CreateAdmissionCheck(ctx, hubKueueClient, acName, placementName)
 	})
 
 	// AfterEach for cleanup
 	ginkgo.AfterEach(func() {
 		// Clean up admission checks
-		removeAdmissionCheck(ctx, hubKueueClient, acName)
+		helper.RemoveAdmissionCheck(ctx, hubKueueClient, acName)
 
 		// Clean up placements and placement decisions
-		removePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName)
+		helper.RemovePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName)
 
 		// Clean up managed clusters
 		for _, clusterName := range managedClusters {
-			removeSecret(ctx, hubKubeClient, clusterName, common.MultiKueueResourceName)
-			removeManagedCluster(ctx, hubClusterClient, clusterName)
+			helper.RemoveSecret(ctx, hubKubeClient, clusterName, common.MultiKueueResourceName)
+			helper.RemoveManagedCluster(ctx, hubClusterClient, clusterName)
 		}
 	})
 
 	ginkgo.Context("AdmissionCheck generate MultiKueueConfig and MultiKueueClusters", func() {
 		ginkgo.It("should create MultiKueueConfig and MultiKueueClusters for clusters in PlacementDecision", func() {
 			// Create placement with decision
-			createPlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
+			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
 
 			// Assert MultiKueueConfig is created with correct cluster names
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
-			// Assert MultiKueueClusters are created
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
 			// Assert AdmissionCheck status condition is set to True
-			assertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
+			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
 		})
 
 		ginkgo.It("should update MultiKueueClusters when PlacementDecision changes", func() {
 			// Create placement with initial decision
-			createPlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1})
+			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1})
 
 			// Assert MultiKueueConfig is created with initial cluster
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1})
 
-			// Assert MultiKueueClusters are created with initial cluster
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1})
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1})
 
 			// Update PlacementDecision to add cluster2
 			gomega.Eventually(func() error {
@@ -106,24 +107,24 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			}, 5*time.Second, eventuallyInterval).Should(gomega.Succeed())
 
 			// Assert MultiKueueConfig is updated with both clusters
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
-			// Assert MultiKueueClusters are updated with both clusters
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
 			// Assert condition remains True after update
-			assertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
+			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
 		})
 
 		ginkgo.It("should delete MultiKueueCluster when a cluster is removed from PlacementDecision", func() {
 			// Create placement with initial decision
-			createPlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
+			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
 
 			// Assert MultiKueueConfig is created with both clusters
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
-			// Assert MultiKueueClusters are created with both clusters
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1, cluster2})
 
 			// Remove cluster2 from PlacementDecision
 			gomega.Eventually(func() error {
@@ -138,27 +139,24 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			}, 5*time.Second, eventuallyInterval).Should(gomega.Succeed())
 
 			// Assert MultiKueueConfig is updated with only cluster1
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1})
 
-			// Assert MultiKueueClusters are updated with only cluster1
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1})
-
-			// Assert specific MultiKueueCluster for cluster2 is deleted
-			assertMultiKueueClusterNotExists(ctx, hubKueueClient, placementName+"-"+cluster2)
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1})
 
 			// Assert condition remains True after cluster removal
-			assertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
+			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
 		})
 
 		ginkgo.It("should delete MultiKueueConfig when no clusters are in PlacementDecision", func() {
 			// Create placement with initial decision
-			createPlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1})
+			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1})
 
 			// Assert MultiKueueConfig is created with cluster1
-			assertMultiKueueConfigCreated(ctx, hubKueueClient, placementName, []string{cluster1})
+			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, placementName, []string{cluster1})
 
-			// Assert MultiKueueClusters are created with cluster1
-			assertMultiKueueClustersCreated(ctx, hubKueueClient, placementName, []string{cluster1})
+			// Assert MultiKueueClusters exist with correct names
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{cluster1})
 
 			// Remove all clusters from PlacementDecision
 			gomega.Eventually(func() error {
@@ -173,13 +171,13 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			}, 5*time.Second, eventuallyInterval).Should(gomega.Succeed())
 
 			// Assert MultiKueueConfig is deleted
-			assertMultiKueueConfigNotExists(ctx, hubKueueClient, placementName)
+			helper.AssertMultiKueueConfigNotExists(ctx, hubKueueClient, placementName)
 
 			// Assert MultiKueueClusters are deleted
-			assertMultiKueueClusterNotExists(ctx, hubKueueClient, placementName+"-"+cluster1)
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, placementName, []string{})
 
 			// Assert condition is set to False when no clusters are available
-			assertAdmissionCheckConditionFalse(ctx, hubKueueClient, acName)
+			helper.AssertAdmissionCheckConditionFalse(ctx, hubKueueClient, acName)
 		})
 	})
 
@@ -222,7 +220,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.Succeed())
 
 			// Delete the ManagedCluster to set deletion timestamp
-			removeManagedCluster(ctx, hubClusterClient, cluster1)
+			helper.RemoveManagedCluster(ctx, hubClusterClient, cluster1)
 
 			// The controller should clean up resources when cluster has deletion timestamp
 			gomega.Eventually(func() bool {
@@ -253,7 +251,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
 
 			// Simulate create multikueue secret
-			createMsaSecret(ctx, hubKubeClient, cluster1)
+			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
 
 			// Assert kubeconfig secret is created in kueue namespace
 			gomega.Eventually(func() bool {
@@ -266,7 +264,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
 
 			// Simulate create multikueue secret
-			createMsaSecret(ctx, hubKubeClient, cluster1)
+			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
 
 			// Wait for kubeconfig secret to be created
 			gomega.Eventually(func() bool {
@@ -298,7 +296,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
 
 			// Create multikueue secret
-			createMsaSecret(ctx, hubKubeClient, cluster1)
+			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
 
 			// Wait for kubeconfig secret to be created
 			gomega.Eventually(func() bool {

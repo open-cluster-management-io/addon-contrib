@@ -6,33 +6,196 @@ metadata:
 spec:
   clusterRole:
     rules:
-    - apiGroups: ["batch"]
-      resources: ["jobs"]
-      verbs: ["create", "delete", "get", "list", "watch"]
-    - apiGroups: ["batch"]
-      resources: ["jobs/status"]
-      verbs: ["get"]
-    - apiGroups: ["jobset.x-k8s.io"]
-      resources: ["jobsets"]
-      verbs: ["create", "delete", "get", "list", "watch"]
-    - apiGroups: ["jobset.x-k8s.io"]
-      resources: ["jobsets/status"]
-      verbs: ["get"]
-    - apiGroups: ["kueue.x-k8s.io"]
-      resources: ["workloads"]
-      verbs: ["create", "delete", "get", "list", "watch"]
-    - apiGroups: ["kueue.x-k8s.io"]
-      resources: ["workloads/status"]
-      verbs: ["get", "patch", "update"]
-    - apiGroups: ["kubeflow.org"]
-      resources: ["tfjobs", "paddlejobs", "pytorchjobs", "xgboostjobs", "mpijobs"]
-      verbs: ["create", "delete", "get", "list", "watch"]
-    - apiGroups: ["kubeflow.org"]
-      resources: ["tfjobs/status", "paddlejobs/status", "pytorchjobs/status", "xgboostjobs/status", "mpijobs/status"]
-      verbs: ["get"]
+    - apiGroups:
+      - batch
+      resources:
+      - jobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - batch
+      resources:
+      - jobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - ''
+      resources:
+      - pods
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - jobset.x-k8s.io
+      resources:
+      - jobsets
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - jobset.x-k8s.io
+      resources:
+      - jobsets/status
+      verbs:
+      - get
+    - apiGroups:
+      - kueue.x-k8s.io
+      resources:
+      - workloads
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kueue.x-k8s.io
+      resources:
+      - workloads/status
+      verbs:
+      - get
+      - patch
+      - update
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - tfjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - tfjobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - paddlejobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - paddlejobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - pytorchjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - pytorchjobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - xgboostjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - xgboostjobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - mpijobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - mpijobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayjobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayclusters
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayclusters/status
+      verbs:
+      - get
+    - apiGroups:
+      - workload.codeflare.dev
+      resources:
+      - appwrappers
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - workload.codeflare.dev
+      resources:
+      - appwrappers/status
+      verbs:
+      - get
   clusterRoleBinding:
     subject:
       kind: ServiceAccount
       name: placeholder
       namespace: placeholder
-

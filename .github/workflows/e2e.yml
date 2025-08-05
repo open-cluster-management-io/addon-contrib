@@ -31,9 +31,34 @@ jobs:
         with:
           go-version: 1.24
 
+      - name: Setup kind
+        uses: engineerd/setup-kind@v0.6.2
+        with:
+          version: v0.24.0
+
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.29.0'
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.14.0'
+
+      - name: Install Clusteradm
+        run: |
+          go install open-cluster-management.io/clusteradm/cmd/clusteradm@latest
+
+      - name: Set KUBECONFIG
+        run: |
+          mkdir -p /home/runner/.kube
+
       - name: Test E2E
         run: |
           cd ${{ inputs.repo }} && make test-e2e
+        env:
+          KUBECONFIG: /home/runner/.kube/config
 
       - name: Upload Artifacts
         if: |
