@@ -69,7 +69,7 @@ kubectl --context kind-hub create namespace monitoring
 Next, run the certificate generation script. This script automates the creation of the necessary Certificate Authorities (CAs) and TLS certificates for securing communication (mTLS) between Prometheus and the OTel collectors. It will also create the required Kubernetes secrets.
 
 ```bash
-cd federated-learning-controller/deploy/otel_addon/hack/certs
+cd federated-learning-controller/deploy/obs/hack/certs
 ./generate-certs.sh
 cd ../..
 ```
