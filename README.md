@@ -1,14 +1,31 @@
 # Addon-Contrib
 
-This repository hosts a collection of Open Cluster Management (OCM) addons for staging and testing Proof of Concept (PoC) purposes.
+This repository hosts a collection of Open Cluster Management (OCM) addons for staging and testing purposes.
 
 ## Overview
 
 OCM is a project that provides a unified way to manage multiple Kubernetes clusters.
 This repository is intended for the development, staging, and testing of various OCM addons.
 
-Addons in this repository are designed to extend the capabilities of the OCM deployment,
-allowing for enhanced AI integration, IoT layer, cluster proxy, telemetry, resource usage collection and more.
+Addons in this repository are designed to extend the capabilities of OCM deployments,
+providing specialized functionality for workload scheduling, application deployment, observability, 
+device management, data orchestration, and federated learning across multiple clusters.
+
+## Available Addons
+
+This repository contains the following OCM addons:
+
+- **argocd-agent-addon**: Integrates Argo CD Agent for highly scalable application deployment across managed clusters
+- **clusternet-addon**: Provides Clusternet integration for enhanced cluster networking capabilities
+- **device-addon**: Enables device management functionality within the OCM ecosystem
+- **federated-learning-controller**: Implements federated learning capabilities across distributed clusters
+- **fluid-addon**: Integrates Fluid for data orchestration and management in multicluster environments
+- **hellospoke-addon**: A simple example addon demonstrating basic OCM addon development patterns
+- **kueue-addon**: Integrates Kueue for advanced multicluster batch job scheduling and queue management
+- **open-telemetry-addon**: Deploys OpenTelemetry collectors for comprehensive observability and metrics collection
+- **resource-usage-collect-addon**: Collects and aggregates resource usage metrics across managed clusters
+
+Each addon directory contains its own README with specific installation and usage instructions.
 
 ## Onboarding a New Project
 
@@ -33,7 +50,7 @@ All projects must define the following `make` targets:
 - `verify`: Import statement formatting verification using `gci` and static code analysis and linting using `golangci-lint`
 - `build`: Compile the Go application into a statically linked binary with debug information stripped for optimal container deployment
 - `test-unit`: Invoke unit tests and return an exit code accordingly.
-- `test-chart`: Invoke scripts to verify your chart can be installed succefully.
+- `test-chart`: Invoke scripts to verify your chart can be installed successfully.
 - `test-e2e`: Invoke end-to-end tests and return an exit code accordingly.
 - `image`: Build all container image.
 - `image-push`: Push all container images.
@@ -76,10 +93,10 @@ See [Release](./.github/workflows/release.yml), [ReleaseImage](./.github/workflo
 
 ## Governance
 
-- addon-contrib is a sub-project of the OCM main project, complying with the rules of OCM main projects.
-- addon-contrib does not have independent leadership, adopting the same leadership strategy as the OCM main project.
+addon-contrib operates under the governance structure of the Open Cluster Management (OCM) project:
 
-## Repository Structure
-
-The repository is organized into directories, each containing the source code and configuration files for a specific addon.
-
+- **Project Status**: addon-contrib is a sub-project of the OCM main project and complies with all OCM project rules and guidelines
+- **Leadership**: addon-contrib does not have independent leadership and follows the same leadership strategy as the OCM main project
+- **Maintainership**: Each addon has its own maintainers listed in the respective OWNERS files, while overall repository governance follows OCM standards
+- **Community Guidelines**: All contributions must adhere to the OCM Code of Conduct and contribution guidelines
+- **Decision Making**: Technical decisions follow the same consensus-based approach used across the OCM ecosystem
