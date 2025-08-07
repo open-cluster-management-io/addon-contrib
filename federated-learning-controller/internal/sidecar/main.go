@@ -17,12 +17,14 @@ var (
 	metricFile       string
 	endpoint         string
 	reporterInterval int
+	jobName          string
 )
 
 func main() {
 	flag.StringVar(&metricFile, "metricfile", "", "Path to the metric file")
 	flag.StringVar(&endpoint, "endpoint", "", "Target endpoint address")
 	flag.IntVar(&reporterInterval, "interval", 60, "Reporter automatic push interval in seconds")
+	flag.StringVar(&jobName, "jobname", "federated-learning-obs-sidecar", "Job name for the metric service")
 	flag.Parse()
 
 	if metricFile == "" || endpoint == "" {
@@ -42,7 +44,7 @@ func main() {
 		cancel()
 	}()
 
-	reporter, err := exporter.NewReporter(ctx, endpoint, reporterInterval)
+	reporter, err := exporter.NewReporter(ctx, endpoint, reporterInterval, jobName)
 	if err != nil {
 		log.Fatalf("Init metrics reporter failed: %v", err)
 	}

@@ -24,7 +24,7 @@ type Reporter struct {
 	callbackRegistration metric.Registration
 }
 
-func NewReporter(ctx context.Context, endpoint string, interval int) (*Reporter, error) {
+func NewReporter(ctx context.Context, endpoint string, interval int, jobName string) (*Reporter, error) {
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
 		otlpmetricgrpc.WithInsecure(),
@@ -41,7 +41,7 @@ func NewReporter(ctx context.Context, endpoint string, interval int) (*Reporter,
 		resource.Default(),
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String("fl_sidecar"),
+			semconv.ServiceNameKey.String(jobName),
 			semconv.K8SNamespaceNameKey.String(namespace),
 			semconv.K8SPodNameKey.String(podName),
 		),

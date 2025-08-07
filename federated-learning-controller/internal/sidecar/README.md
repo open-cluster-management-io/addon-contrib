@@ -15,6 +15,7 @@ go run main.go -metricfile <path-to-metric-file> -endpoint <otlp-grpc-endpoint>
   * `-metricfile` (required): The file path for the metrics that the sidecar should watch.
   * `-endpoint` (required): The OTLP/gRPC endpoint of the OpenTelemetry collector (e.g., `localhost:4317`).
   * `-interval` (optional): The interval in seconds for the reporter to automatically push metrics. The default is 60 seconds.
+  * `-jobname` (optional): The name of the job. If not specified, the sidecar will use the default value `federated-learning-obs-sidecar`.
 
 ### Metric File Format
 
