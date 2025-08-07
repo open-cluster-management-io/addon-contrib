@@ -7,6 +7,8 @@ from torch.optim.lr_scheduler import StepLR
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 from app_torch.task import Net, get_weights, load_data, set_weights, test, train
+import json
+import os
 
 
 # Define Flower Client and client_fn
@@ -32,6 +34,17 @@ class FlowerClient(NumPyClient):
             # test_loss = test(model, device, test_loader)
             # test_losses.append(test_loss)
             loss = train(self.net, self.device, self.trainloader, optimizer, epoch)
+            metrics = {
+                "round": config["server_round"],
+                "epoch": epoch,
+                "train_loss": loss,
+            }
+            try:
+                os.makedirs('/metrics', exist_ok=True)
+                with open('/metrics/metric.json', 'w', encoding='utf-8') as f:
+                    json.dump(metrics, f, ensure_ascii=False)
+            except Exception as e:
+                print("write json file error: ", e)
             epoch_loss += loss
             scheduler.step()
             
@@ -45,7 +58,17 @@ class FlowerClient(NumPyClient):
         set_weights(self.net, parameters)
         
         loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"Loss: {loss}, Accuracy: {accuracy}")
+        print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
+        metrics = {
+            "evaluation_loss": loss,
+            "accuracy": accuracy,
+        }
+        try:
+            os.makedirs('/metrics', exist_ok=True)
+            with open('/metrics/metric.json', 'w', encoding='utf-8') as f:
+                json.dump(metrics, f, ensure_ascii=False)
+        except Exception as e:
+            print("write json file error: ", e)
         return loss, len(self.valloader.dataset), {"accuracy": accuracy}
 
 def client_fn(context: Context):
