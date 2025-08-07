@@ -105,7 +105,7 @@ kubectl --context kind-hub create namespace open-cluster-management-addon
 Then, apply the Kustomization to deploy the add-on resources:
 
 ```bash
-kubectl --context kind-hub apply -k deploy
+kubectl --context kind-hub apply -k otel-addon
 ```
 
 The OCM add-on manager will now distribute the OTel collector and Kepler to the managed clusters as defined by the `Placement` resource.
