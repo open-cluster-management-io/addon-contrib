@@ -97,7 +97,7 @@ helm --kube-context kind-hub install prometheus prometheus-community/kube-promet
 
 This add-on deploys the necessary components (Kepler exporter and OTel collector) to the managed clusters via OCM's add-on framework.
 
-First, create a namespace for the add-on on all clusters:
+First, create a namespace for the add-on on hub cluster:
 ```bash
 kubectl --context kind-hub create namespace open-cluster-management-addon
 ```
