@@ -38,3 +38,31 @@ clusterQueue:
 localQueue:
   name: user-queue
   namespace: default
+
+# This is the namespace where the kueue controller is installed, will copy the multikueue secret to this namespace
+# Default is kueue-system
+kueue:
+  namespace: "kueue-system"
+
+# Install Kueue via Operator
+installKueueViaOperator: false
+
+# Kueue Operator configuration
+kueueOperator:
+  name: kueue-operator
+  namespace: openshift-kueue-operator
+  operatorGroupName: openshift-kueue-operator
+  channel: stable-v1.0
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: kueue-operator.v1.0.0
+
+# Cert Manager Operator configuration
+certManagerOperator:
+  name: openshift-cert-manager-operator
+  namespace: cert-manager-operator
+  operatorGroupName: cert-manager-operator
+  channel: stable-v1
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: cert-manager-operator.v1.16.1
