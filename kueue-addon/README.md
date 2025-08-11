@@ -21,7 +21,86 @@ This repository contains the kueue addon controller and addon chart to deploy re
 
 ### Architecture Overview
 
-![Architecture Diagram](./arch.png)
+```mermaid
+graph TB
+    %% User
+    User((User))
+    
+    subgraph Hub["Hub Cluster"]
+        subgraph OCM["Open Cluster Management (OCM)"]
+            MSA["ManagedServiceAccount<br/>ClusterPermission"]
+            PL["Placement"]
+            PD["PlacementDecision"]
+            
+            subgraph KA["Kueue Addon"]
+                AT["Addon Template<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueues"]
+                
+                subgraph KC["Kueue addon controller"]
+                    CC["credential controller"]
+                    AC["admission check controller"]
+                end
+            end
+
+        end
+        
+        subgraph Kueue["Kueue"]
+            SEC["Secrets<br/>(kubeconfig for clusters)"]
+            ACR["AdmissionCheck"]
+            MKC["MultiKueueConfig<br/>MultiKueueClusters"]
+        end
+    end
+    
+    subgraph C1["Cluster1"]
+        KR1["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+    end
+    
+    subgraph C2["Cluster2"]
+        KR2["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+    end
+    
+    subgraph C3["Cluster3"]
+        KR3["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+    end
+    
+    %% User interactions
+    User -.->|Create| PL
+    User -.->|Create| ACR
+    
+    %% Credential Controller actions
+    CC -.->|Create| MSA
+    CC -.->|Generate| SEC
+    
+    %% Admission Check Controller actions
+    AC -.->|Watch| PL
+    AC -.->|Watch| PD
+    AC -.->|Watch| ACR
+    AC -.->|Create| MKC
+    
+    %% Deployment flows
+    AT -.->|Deploy| KR1
+    AT -.->|Deploy| KR2
+    AT -.->|Deploy| KR3
+    
+    SEC -.->|Connect| C1
+    SEC -.->|Connect| C2
+    SEC -.->|Connect| C3
+    
+    %% Styling
+    classDef hubCluster fill:#e1f5fe
+    classDef addon fill:#f3e5f5
+    classDef controller fill:#fff3e0
+    classDef kueue fill:#e8f5e8
+    classDef cluster fill:#fce4ec
+    classDef user fill:#fff9c4
+    
+    class Hub hubCluster
+    class KA,AT addon
+    class CC,AC controller
+    class Kueue kueue
+    class C1,C2,C3 cluster
+    class KR1,KR2,KR3 kueue
+    class User user
+```
 
 ### Kueue addon controller
 This controller is running on the hub, contains a credential controller and an admission check controller.
