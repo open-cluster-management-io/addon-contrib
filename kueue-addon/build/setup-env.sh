@@ -123,6 +123,13 @@ install_ocm_addons() {
      --set enableAddOnDeploymentConfig=true \
      --set hubDeployMode=AddOnTemplate
 
+  echo "Install cluster-proxy"
+  helm upgrade --install \
+    -n open-cluster-management-addon --create-namespace \
+    cluster-proxy ocm/cluster-proxy \
+    --set installByPlacement.placementName=global \
+    --set installByPlacement.placementNamespace=open-cluster-management-addon
+
   echo "Install cluster-permission"
   helm upgrade --install \
     -n open-cluster-management --create-namespace \
