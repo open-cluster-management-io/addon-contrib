@@ -11,19 +11,7 @@ agent:
     tlscrt: ""
     tlskey: ""
     jwtkey: ""
-  redis:
-    username: ""
-    password: ""
   principal:
     server:
       address: ""
       port: 443
-    redis:
-      address: "argocd-redis:6379"
-      compressionType: "gzip"
-    resourceProxy:
-      enabled: true
-    healthCheck:
-      enabled: true
-    metrics:
-      enabled: true
