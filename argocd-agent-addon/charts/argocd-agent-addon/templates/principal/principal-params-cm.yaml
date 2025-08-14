@@ -20,9 +20,6 @@ data:
   principal.metrics.port: "8000"
   # principal.metrics.enabled: Whether the metrics server should be started.
   principal.metrics.enabled: "true"
-  # principal.healthz.port: The port the health check server should listen on.
-  # Default: 8003
-  principal.healthz.port: "8003"
   # principal.namespace: The namespace the principal will operate in. If left
   # blank, the namespace where the pod is running in will be used.
   # Default: ""
@@ -46,9 +43,6 @@ data:
   # "key=value". Empty values are not allowed. Multiple labels can be given
   # as a comma separated list, e.g. "foo=bar,bar=baz"
   principal.namespace-create.labels: ""
-  # principal.tls.secret-name: The name of the secret containing the TLS certificate and key.
-  # Default: "argocd-agent-principal-tls"
-  principal.tls.secret-name: "argocd-agent-principal-tls"
   # principal.tls.server.cert-path: Path to the TLS certificate to be used by
   # the gRPC server.
   # Default: ""
@@ -62,49 +56,23 @@ data:
   # configured. This is insecure. Do only use for development.
   # Default: false
   principal.tls.server.allow-generate: "false"
-  # principal.tls.client-cert.require: Whether to require client certs from
-  # agents upon connection.
-  # Default: false
-  principal.tls.client-cert.require: "true"
-  # principal.tls.server.root-ca-secret-name: The name of the secret containing the root CA TLS certificate.
-  # Default: "argocd-agent-ca"
-  principal.tls.server.root-ca-secret-name: "argocd-agent-ca"
   # principal.tls.server.root-ca-path: Path to a TLS root certificate authority
   # to be used to validate agent's client certificates against.
   # Default: ""
   principal.tls.server.root-ca-path: "/app/config/ca/ca.crt"
+  # principal.tls.client-cert.require: Whether to require client certs from
+  # agents upon connection.
+  # Default: false
+  principal.tls.client-cert.require: "true"
   # principal.tls.client-cert.match-subject: Whether to match the subject field
   # in a client certificate presented by an agent to the agent's name.
   # Default: false
   principal.tls.client-cert.match-subject: "false"
-  # principal.resource-proxy.secret-name: The name of the secret containing
-  # the TLS certificate and key for the resource proxy.
-  # Default: "argocd-agent-resource-proxy-tls"
-  principal.resource-proxy.secret-name: "argocd-agent-resource-proxy-tls"
-  # principal.resource-proxy.tls.cert-path: Path to the TLS certificate to be used by
-  # the resource proxy.
-  # Default: ""
-  principal.resource-proxy.tls.cert-path: ""
-  # principal.resource-proxy.tls.key-path: Path to the TLS private key to be used by
-  # the resource proxy.
-  # Default: ""
-  principal.resource-proxy.tls.key-path: ""
-  # principal.resource-proxy.ca.secret-name: The name of the secret containing
-  # the CA certificate for the resource proxy.
-  # Default: "argocd-agent-ca"
-  principal.resource-proxy.ca.secret-name: "argocd-agent-ca"
-  # principal.resource-proxy.ca.path: Path to the CA certificate to be used by
-  # the resource proxy.
-  # Default: ""
-  principal.resource-proxy.ca.path: ""
   # principal.jwt.allow-generate: Whether to allow the principal to generate
   # its own private key for signing JWT tokens. This is insecure. Do only use
   # for development.
   # Default: false
   principal.jwt.allow-generate: "false"
-  # principal.jwt.secret-name: The name of the secret containing the JWT signing key.
-  # Default: "argocd-agent-jwt"
-  principal.jwt.secret-name: "argocd-agent-jwt"
   # principal.jwt.key-path: Path to the private key to be used for signing JWT
   # tokens.
   principal.jwt.key-path: "/app/config/jwt/jwt.key"
@@ -117,9 +85,3 @@ data:
   #   extracting the agent ID from client cert subject.
   # Default: userpass:_path_to_encrypted_creds_
   principal.auth: "mtls:open-cluster-management:cluster:([^:]+):addon:argocd-agent"
-  # principal.redis.server.address: Redis server hostname and port (e.g. argocd-redis:6379).
-  # Default: "argocd-redis:6379"
-  principal.redis.server.address: {{ .Values.agent.principal.redis.address | default "argocd-redis:6379" | quote }}
-  # principal.redis.compression.type: Compression algorithm required by Redis. (possible values: gzip, none. Default value: gzip)
-  # Default: "gzip"
-  principal.redis.compression.type: {{ .Values.agent.principal.redis.compressionType | default "gzip" | quote }}
