@@ -9,7 +9,7 @@ KUBECTL?=kubectl
 IMAGE_REGISTRY ?= quay.io/open-cluster-management
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/kueue-addon:$(IMAGE_TAG)
-export KUBECONFIG?=./.kubeconfig
+export KUBECONFIG?= $(HOME)/.kube/config
 # Parse Kueue version from go.mod
 KUEUE_VERSION := $(shell grep 'sigs.k8s.io/kueue' go.mod | awk '{print $$2}')
 

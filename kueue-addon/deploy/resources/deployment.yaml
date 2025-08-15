@@ -21,6 +21,9 @@ spec:
           args:
             - "/kueue-addon-controller"
             - "hub"
+          env:
+            - name: KUEUE_NAMESPACE
+              value: kueue-system
 
 ---
 
