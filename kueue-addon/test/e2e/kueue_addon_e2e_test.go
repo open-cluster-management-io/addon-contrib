@@ -114,8 +114,10 @@ var _ = Describe("MultiKueue Scenarios", func() {
 			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, "multikueue-config-e2e", []string{"cluster2"})
 
 			By("Waiting for MultiKueueClusters to exist")
-			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, "multikueue-config-e2e", []string{"cluster2"})
-			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "multikueue-config-e2e-cluster2")
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{"local-cluster", "cluster1", "cluster2", "cluster3"})
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster1")
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster2")
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster3")
 
 			By("Waiting for AdmissionCheck to be active")
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, "multikueue-e2e")
@@ -154,14 +156,16 @@ var _ = Describe("MultiKueue Scenarios", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for the workload to be admitted on cluster2")
-			helper.AssertWorkloadAdmitted(ctx, hubKueueClient, createdJob.UID, "multikueue-config-e2e-cluster2")
+			helper.AssertWorkloadAdmitted(ctx, hubKueueClient, createdJob.UID, "cluster2")
 
 			By("Waiting for MultiKueueConfig to update")
 			helper.AssertMultiKueueConfigClusters(ctx, hubKueueClient, "multikueue-config-e2e", []string{"cluster3"})
 
 			By("Waiting for MultiKueueClusters to exist")
-			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, "multikueue-config-e2e", []string{"cluster3"})
-			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "multikueue-config-e2e-cluster3")
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{"local-cluster", "cluster1", "cluster2", "cluster3"})
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster1")
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster2")
+			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster3")
 
 			By("Waiting for AdmissionCheck to be active")
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, "multikueue-e2e")
@@ -176,7 +180,7 @@ var _ = Describe("MultiKueue Scenarios", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for the workload to be admitted on cluster3")
-			helper.AssertWorkloadAdmitted(ctx, hubKueueClient, createdJob2.UID, "multikueue-config-e2e-cluster3")
+			helper.AssertWorkloadAdmitted(ctx, hubKueueClient, createdJob2.UID, "cluster3")
 		})
 	})
 })

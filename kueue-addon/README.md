@@ -22,6 +22,7 @@ This repository contains the kueue addon controller and addon chart to deploy re
 ### Architecture Overview
 
 ```mermaid
+%%{init: { "flowchart": { "defaultRenderer": "elk" } } }%%
 graph TB
     %% User
     User((User))
@@ -29,11 +30,10 @@ graph TB
     subgraph Hub["Hub Cluster"]
         subgraph OCM["Open Cluster Management (OCM)"]
             MSA["ManagedServiceAccount<br/>ClusterPermission"]
-            PL["Placement"]
-            PD["PlacementDecision"]
+            PL["Placement<br/>PlacementDecision"]
             
             subgraph KA["Kueue Addon"]
-                AT["Addon Template<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueues"]
+                AT["Addon Template<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue<br/>- Operator (optional)"]
                 
                 subgraph KC["Kueue addon controller"]
                     CC["credential controller"]
@@ -44,22 +44,22 @@ graph TB
         end
         
         subgraph Kueue["Kueue"]
-            SEC["Secrets<br/>(kubeconfig for clusters)"]
+            SEC["Secrets<br/>MultiKueueClusters"]
             ACR["AdmissionCheck"]
-            MKC["MultiKueueConfig<br/>MultiKueueClusters"]
+            MKC["MultiKueueConfig"]
         end
     end
     
     subgraph C1["Cluster1"]
-        KR1["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+        KR1["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue<br/>- Operator (optional)"]
     end
     
     subgraph C2["Cluster2"]
-        KR2["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+        KR2["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue<br/>- Operator (optional)"]
     end
     
     subgraph C3["Cluster3"]
-        KR3["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue"]
+        KR3["Kueue Resources<br/>- ResourceFlavor<br/>- ClusterQueue<br/>- LocalQueue<br/>- Operator (optional)"]
     end
     
     %% User interactions
@@ -68,22 +68,17 @@ graph TB
     
     %% Credential Controller actions
     CC -.->|Create| MSA
-    CC -.->|Generate| SEC
+    CC -.->|Create/Update| SEC
     
     %% Admission Check Controller actions
     AC -.->|Watch| PL
-    AC -.->|Watch| PD
     AC -.->|Watch| ACR
-    AC -.->|Create| MKC
+    AC -.->|Create/Update| MKC
     
     %% Deployment flows
     AT -.->|Deploy| KR1
     AT -.->|Deploy| KR2
     AT -.->|Deploy| KR3
-    
-    SEC -.->|Connect| C1
-    SEC -.->|Connect| C2
-    SEC -.->|Connect| C3
     
     %% Styling
     classDef hubCluster fill:#e1f5fe
