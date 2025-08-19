@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"embed"
 	"fmt"
 
 	routev1 "github.com/openshift/api/route/v1"
@@ -42,6 +43,16 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 
 	if len(instance.Spec.Server.Listeners) == 0 {
 		return fmt.Errorf("no listeners specified")
+	}
+
+	var serverFS embed.FS
+	switch instance.Spec.Framework {
+	case flv1alpha1.Flower:
+		serverFS = manifests.FlowerServerFiles
+	case flv1alpha1.OpenFL:
+		serverFS = manifests.OpenFLServerFiles
+	default:
+		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
 	}
 
 	var err error
@@ -95,7 +106,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		return err
 	}
 
-	render, deployer := applier.NewRenderer(manifests.ServerFiles), applier.NewDeployer(r.Client)
+	render, deployer := applier.NewRenderer(serverFS), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("server", "", func(profile string) (interface{}, error) {
 		obsSidecarImage := ""
 		if instance.ObjectMeta.Annotations != nil {
