@@ -107,7 +107,7 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 	instruments := make([]metric.Observable, 0, len(r.metrics))
 
 	for name := range r.metrics {
-		gauge, err := r.meter.Float64ObservableGauge("fl.training." + name)
+		gauge, err := r.meter.Float64ObservableGauge(name)
 		if err != nil {
 			log.Printf("Error creating gauge for %s: %v", name, err)
 			continue
