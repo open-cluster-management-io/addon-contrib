@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -42,8 +43,8 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceNameKey.String(jobName),
-			semconv.K8SNamespaceNameKey.String(namespace),
-			semconv.K8SPodNameKey.String(podName),
+			attribute.Key("namespace").String(namespace),
+			attribute.Key("pod.name").String(podName),
 		),
 	)
 	if err != nil {
