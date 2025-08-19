@@ -56,7 +56,7 @@ spec:
                     mountPath: /metrics
               
               - name: obs-sidecar
-                image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.8
+                image: {{ .ObsSidecarImage }}
                 imagePullPolicy: Always
                 args:
                   - -metricfile=/metrics/metric.json

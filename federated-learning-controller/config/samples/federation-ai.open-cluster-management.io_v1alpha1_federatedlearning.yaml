@@ -2,6 +2,8 @@ apiVersion: federation-ai.open-cluster-management.io/v1alpha1
 kind: FederatedLearning
 metadata:
   name: federated-learning-sample
+  annotations:
+    obs-sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.9.3
 spec:
   framework: flower
   server:
