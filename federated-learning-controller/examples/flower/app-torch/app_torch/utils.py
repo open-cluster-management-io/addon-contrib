@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import torch
+import json
 
 
 def load_model(model, model_path):
@@ -47,3 +48,13 @@ def get_latest_model_file(model_dir="/data/model", suffix=".pth"):
 
 # file = get_latest_model_file("/home/myan/workspace/federated-learning")
 # print(file)
+
+def write_metrics(metrics: dict, filepath: str = "/metrics/metric.json"):
+    """Write metrics dictionary to the JSON file"""
+    try:
+        os.makedirs("/metrics", exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, ensure_ascii=False)
+        print(f"Metrics written to {filepath}")
+    except Exception as e:
+        print("write json file error: ", e)

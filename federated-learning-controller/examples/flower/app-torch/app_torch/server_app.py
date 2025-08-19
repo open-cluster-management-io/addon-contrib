@@ -3,7 +3,6 @@
 import argparse
 import os
 import torch
-import json
 import numpy as np
 from datetime import datetime
 from collections import OrderedDict
@@ -15,7 +14,7 @@ from flwr.server import ServerConfig
 from flwr.server.strategy import FedAvg
 
 from app_torch.task import Net, get_weights
-from app_torch.utils import get_latest_model_file, load_model, save_model
+from app_torch.utils import get_latest_model_file, load_model, save_model, write_metrics
 
 
 # ------------------------------
@@ -44,7 +43,7 @@ def client_weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     examples = [num_examples for num_examples, _ in metrics]
     return {"accuracy": sum(accuracies) / sum(examples)}
 
-def fit_config(server_round: int):
+def fit_evaluate_config(server_round: int):
     config = {
         "server_round": server_round,
     }
@@ -102,12 +101,7 @@ def start_server(args):
                 "loss": aggregated_loss,
                 "accuracy": aggregated_metrics["accuracy"],
             }
-            try:
-                os.makedirs('/metrics', exist_ok=True)
-                with open('/metrics/metric.json', 'w', encoding='utf-8') as f:
-                    json.dump(metrics, f, ensure_ascii=False)
-            except Exception as e:
-                print("write json file error: ", e)
+            write_metrics(metrics)
             return aggregated_loss, aggregated_metrics
 
     # Start the FL server
@@ -121,7 +115,8 @@ def start_server(args):
             initial_parameters=initial_parameters,
             evaluate_metrics_aggregation_fn=client_weighted_average,
             inplace=True,
-            on_fit_config_fn=fit_config,
+            on_fit_config_fn=fit_evaluate_config,
+            on_evaluate_config_fn=fit_evaluate_config,
         ),
     )
 
