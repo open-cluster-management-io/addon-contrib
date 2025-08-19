@@ -23,6 +23,7 @@ type Reporter struct {
 	metrics              map[string]float64
 	gauges               map[string]metric.Float64ObservableGauge
 	callbackRegistration metric.Registration
+	round                *int
 }
 
 func NewReporter(ctx context.Context, endpoint string, interval int, jobName string) (*Reporter, error) {
@@ -80,6 +81,16 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 	}
 	r.metrics["timestamp"] = float64(time.Now().Unix())
 
+	if roundFloat, ok := r.metrics["round"]; ok {
+		log.Println("metric has round field")
+		rountInt := int(roundFloat)
+		r.round = &rountInt
+		delete(r.metrics, "round")
+	} else {
+		log.Println("metric has no round field")
+		r.round = nil
+	}
+
 	needsUpdate := false
 	if len(r.metrics) != len(r.gauges) {
 		needsUpdate = true
@@ -127,7 +138,13 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 			defer r.mu.Unlock()
 			for name, gauge := range r.gauges {
 				if value, ok := r.metrics[name]; ok {
-					o.ObserveFloat64(gauge, value)
+					var roundLabel metric.MeasurementOption
+					if r.round == nil {
+						roundLabel = metric.WithAttributes(attribute.String("round", "nil"))
+					} else {
+						roundLabel = metric.WithAttributes(attribute.Int("round", *r.round))
+					}
+					o.ObserveFloat64(gauge, value, roundLabel)
 				}
 			}
 			return nil
