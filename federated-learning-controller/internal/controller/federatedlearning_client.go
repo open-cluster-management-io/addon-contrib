@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"reflect"
 
@@ -197,7 +198,17 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		ObsSidecarImage:    obsSidecarImage,
 	}
 
-	render, deployer := applier.NewRenderer(manifests.ClientFiles), applier.NewDeployer(r.Client)
+	var clientFS embed.FS
+	switch instance.Spec.Framework {
+	case flv1alpha1.Flower:
+		clientFS = manifests.FlowerServerFiles
+	case flv1alpha1.OpenFL:
+		clientFS = manifests.OpenFLServerFiles
+	default:
+		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
+	}
+
+	render, deployer := applier.NewRenderer(clientFS), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("client", "", func(profile string) (interface{}, error) {
 		return clientParams, nil
 	})
