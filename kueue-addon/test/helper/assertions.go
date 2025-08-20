@@ -36,14 +36,8 @@ func AssertMultiKueueConfigClusters(ctx context.Context, client kueueclientset.I
 			return fmt.Errorf("failed to get MultiKueueConfig %s: %v", configName, err)
 		}
 
-		// Build expected cluster names
-		expectedClusterNames := make([]string, len(expectedClusters))
-		for i, cluster := range expectedClusters {
-			expectedClusterNames[i] = configName + "-" + cluster
-		}
-
 		// Convert slices to sets for easy comparison
-		expectedSet := sets.New(expectedClusterNames...)
+		expectedSet := sets.New(expectedClusters...)
 		actualSet := sets.New(config.Spec.Clusters...)
 
 		// Check if sets are equal
@@ -65,18 +59,12 @@ func AssertMultiKueueConfigNotExists(ctx context.Context, client kueueclientset.
 }
 
 // AssertMultiKueueClustersExists asserts that MultiKueueClusters exist with correct names
-func AssertMultiKueueClustersExists(ctx context.Context, client kueueclientset.Interface, configName string, expectedClusters []string) {
+func AssertMultiKueueClustersExists(ctx context.Context, client kueueclientset.Interface, expectedClusters []string) {
 	ginkgo.By(fmt.Sprintf("Asserting MultiKueueClusters exist with clusters %v", expectedClusters))
 	gomega.Eventually(func() error {
 		mkclusters, err := client.KueueV1beta1().MultiKueueClusters().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to list MultiKueueClusters: %v", err)
-		}
-
-		// Build expected cluster names
-		expectedClusterNames := make([]string, len(expectedClusters))
-		for i, cluster := range expectedClusters {
-			expectedClusterNames[i] = configName + "-" + cluster
 		}
 
 		// Get actual cluster names
@@ -86,7 +74,7 @@ func AssertMultiKueueClustersExists(ctx context.Context, client kueueclientset.I
 		}
 
 		// Convert to sets for comparison
-		expectedSet := sets.New(expectedClusterNames...)
+		expectedSet := sets.New(expectedClusters...)
 		actualSet := sets.New(actualClusterNames...)
 
 		// Check if sets are equal
@@ -335,5 +323,14 @@ func RemoveAdmissionCheck(ctx context.Context, hubKueueClient kueueclientset.Int
 	err := hubKueueClient.KueueV1beta1().AdmissionChecks().Delete(ctx, acName, metav1.DeleteOptions{})
 	if err != nil {
 		ginkgo.GinkgoWriter.Printf("Failed to delete AdmissionCheck %s: %v\n", acName, err)
+	}
+}
+
+// Helper function to remove MultiKueueClusters
+func RemoveMultiKueueClusters(ctx context.Context, hubKueueClient kueueclientset.Interface, clusterName string) {
+	ginkgo.By(fmt.Sprintf("Deleting MultiKueueClusters %s", clusterName))
+	err := hubKueueClient.KueueV1beta1().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
+	if err != nil {
+		ginkgo.GinkgoWriter.Printf("Failed to delete MultiKueueCluster %s: %v\n", clusterName, err)
 	}
 }

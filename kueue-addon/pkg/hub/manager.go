@@ -110,8 +110,10 @@ func RunControllerManagerWithInformers(
 
 	kueuesecretcopyController := kueuesecretcopy.NewKueueSecretCopyController(
 		kubeClient,
+		kueueClient,
 		secretInformers.Core().V1().Secrets(),
 		clusterInformers.Cluster().V1().ManagedClusters(),
+		kueueInformers.Kueue().V1beta1().MultiKueueClusters(),
 		controllerContext.EventRecorder,
 	)
 

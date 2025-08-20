@@ -14,6 +14,8 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
+	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuefake "sigs.k8s.io/kueue/client-go/clientset/versioned/fake"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterfake "open-cluster-management.io/api/client/cluster/clientset/versioned/fake"
@@ -68,44 +70,66 @@ func newSourceSecret(namespace string) *corev1.Secret {
 
 // Helper to check if the expected verb pattern is present in the actions
 func hasExpectedVerb(actions []k8stesting.Action, expectedVerb string) bool {
-	if expectedVerb == "delete+create" {
-		if len(actions) > 3 && actions[2].GetVerb() == "delete" && actions[3].GetVerb() == "create" {
+	switch expectedVerb {
+	case "create":
+		if len(actions) > 2 && actions[2].GetVerb() == expectedVerb {
 			return true
 		}
 		return false
-	}
-	if expectedVerb == "delete" {
+	case "delete":
 		if len(actions) == 2 && actions[1].GetVerb() == "delete" {
 			return true
 		}
 		return false
+	case "delete+create":
+		if len(actions) > 3 && actions[2].GetVerb() == "delete" && actions[3].GetVerb() == "create" {
+			return true
+		}
+		return false
+	default:
+		return false
 	}
-	if len(actions) > 2 && actions[2].GetVerb() == expectedVerb {
-		return true
-	}
-	return false
 }
 
+func hasExpectedMKVerb(actions []k8stesting.Action, expectedVerb string) bool {
+	switch expectedVerb {
+	case "create", "update", "patch":
+		if len(actions) == 2 && actions[0].GetVerb() == "get" && actions[1].GetVerb() == expectedVerb {
+			return true
+		}
+		return false
+	case "delete":
+		if len(actions) == 1 && actions[0].GetVerb() == "delete" {
+			return true
+		}
+		return false
+	default:
+		return false
+	}
+}
 func TestSync(t *testing.T) {
 	cases := []struct {
 		name           string
 		clusterName    string
 		kubeObjects    []runtime.Object
 		clusterObjects []runtime.Object
+		kueueObjects   []runtime.Object
 		syncKey        string
 		expectedErr    string
 		expectedVerb   string
+		expectedMKVerb string // expected MultiKueueCluster verb: "", "create", "update", "delete"
 	}{
 		{
-			name:           "create kubeconfig secret",
+			name:           "create kubeconfig secret and MultiKueueCluster",
 			clusterName:    "cluster1",
 			kubeObjects:    []runtime.Object{newSourceSecret("cluster1")},
 			clusterObjects: []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
 			syncKey:        "cluster1/multikueue",
 			expectedVerb:   "create",
+			expectedMKVerb: "create",
 		},
 		{
-			name:        "delete kubeconfig secret when source secret not found",
+			name:        "delete kubeconfig secret and MultiKueueCluster when source secret not found",
 			clusterName: "cluster1",
 			kubeObjects: []runtime.Object{
 				&corev1.Secret{
@@ -117,23 +141,31 @@ func TestSync(t *testing.T) {
 				},
 			},
 			clusterObjects: []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
+			kueueObjects: []runtime.Object{
+				&kueuev1beta1.MultiKueueCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+				},
+			},
 			syncKey:        "cluster1/multikueue",
 			expectedVerb:   "delete",
+			expectedMKVerb: "delete",
 		},
 		{
-			name:           "delete kubeconfig secret when source secret not found and kubeconfig secret doesn't exist",
+			name:           "delete kubeconfig secret and MultiKueueCluster when source secret not found and kubeconfig secret doesn't exist",
 			clusterName:    "cluster1",
 			kubeObjects:    []runtime.Object{},
 			clusterObjects: []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
 			syncKey:        "cluster1/multikueue",
 			expectedVerb:   "delete", // Will attempt to delete even if it doesn't exist
+			expectedMKVerb: "delete",
 		},
 		{
-			name:         "managed cluster not found",
-			clusterName:  "cluster1",
-			kubeObjects:  []runtime.Object{newSourceSecret("cluster1")},
-			syncKey:      "cluster1/multikueue",
-			expectedVerb: "",
+			name:           "managed cluster not found",
+			clusterName:    "cluster1",
+			kubeObjects:    []runtime.Object{newSourceSecret("cluster1")},
+			syncKey:        "cluster1/multikueue",
+			expectedVerb:   "",
+			expectedMKVerb: "",
 		},
 		{
 			name:        "managed cluster has no url",
@@ -144,9 +176,10 @@ func TestSync(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
 				},
 			},
-			syncKey:      "cluster1/multikueue",
-			expectedErr:  "no client config found for cluster cluster1",
-			expectedVerb: "",
+			syncKey:        "cluster1/multikueue",
+			expectedErr:    "no client config found for cluster cluster1",
+			expectedVerb:   "",
+			expectedMKVerb: "",
 		},
 		{
 			name:        "secret missing token",
@@ -161,6 +194,7 @@ func TestSync(t *testing.T) {
 			syncKey:        "cluster1/multikueue",
 			expectedErr:    "token not found in secret multikueue",
 			expectedVerb:   "",
+			expectedMKVerb: "",
 		},
 		{
 			name:        "secret missing ca.crt",
@@ -175,6 +209,7 @@ func TestSync(t *testing.T) {
 			syncKey:        "cluster1/multikueue",
 			expectedErr:    "ca.crt not found in secret multikueue",
 			expectedVerb:   "",
+			expectedMKVerb: "",
 		},
 		{
 			name:        "secret data empty",
@@ -189,6 +224,7 @@ func TestSync(t *testing.T) {
 			syncKey:        "cluster1/multikueue",
 			expectedErr:    "token not found in secret multikueue",
 			expectedVerb:   "",
+			expectedMKVerb: "",
 		},
 		{
 			name:        "managed cluster with multiple client configs",
@@ -205,8 +241,9 @@ func TestSync(t *testing.T) {
 					},
 				},
 			},
-			syncKey:      "cluster1/multikueue",
-			expectedVerb: "create",
+			syncKey:        "cluster1/multikueue",
+			expectedVerb:   "create",
+			expectedMKVerb: "create",
 		},
 		{
 			name:        "target secret already exists but content changes",
@@ -218,9 +255,21 @@ func TestSync(t *testing.T) {
 					Data:       map[string][]byte{"kubeconfig": []byte("old-config")},
 				},
 			},
+			kueueObjects: []runtime.Object{
+				&kueuev1beta1.MultiKueueCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+					Spec: kueuev1beta1.MultiKueueClusterSpec{
+						KubeConfig: kueuev1beta1.KubeConfig{
+							LocationType: kueuev1beta1.SecretLocationType,
+							Location:     "cluster1",
+						},
+					},
+				},
+			},
 			clusterObjects: []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
 			syncKey:        "cluster1/multikueue",
 			expectedVerb:   "delete+create", // resourceapply.ApplySecret delete+create for existing secret
+			expectedMKVerb: "patch",
 		},
 	}
 
@@ -228,6 +277,7 @@ func TestSync(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			kubeClient := fake.NewSimpleClientset(c.kubeObjects...)
 			clusterClient := clusterfake.NewSimpleClientset(c.clusterObjects...)
+			kueueClient := kueuefake.NewSimpleClientset(c.kueueObjects...)
 
 			secretInformer := corev1informers.NewSecretInformer(kubeClient, metav1.NamespaceAll, 5*time.Minute, nil)
 			for _, obj := range c.kubeObjects {
@@ -246,6 +296,7 @@ func TestSync(t *testing.T) {
 
 			controller := &kueueSecretCopyController{
 				kubeClient:    kubeClient,
+				kueueClient:   kueueClient,
 				clusterLister: clusterInformer.Lister(),
 				eventRecorder: events.NewInMemoryRecorder("test", clock.RealClock{}),
 			}
@@ -271,12 +322,22 @@ func TestSync(t *testing.T) {
 				if len(kubeClient.Actions()) > 2 {
 					t.Errorf("expected no secret to be created or updated, but got actions: %v", kubeClient.Actions())
 				}
-				return
+			} else {
+				if !hasExpectedVerb(kubeClient.Actions(), c.expectedVerb) {
+					t.Errorf("expected verb %s for kubeconfig secret, but got actions: %v", c.expectedVerb, kubeClient.Actions())
+				}
 			}
 
-			if !hasExpectedVerb(kubeClient.Actions(), c.expectedVerb) {
-				t.Errorf("expected verb %s for kubeconfig secret, but got actions: %v", c.expectedVerb, kubeClient.Actions())
+			if c.expectedMKVerb == "" {
+				if len(kueueClient.Actions()) > 0 {
+					t.Errorf("expected no MultiKueueCluster to be created or updated, but got actions: %v", kueueClient.Actions())
+				}
+			} else {
+				if !hasExpectedMKVerb(kueueClient.Actions(), c.expectedMKVerb) {
+					t.Errorf("expected verb %s for kubeconfig secret, but got actions: %v", c.expectedMKVerb, kueueClient.Actions())
+				}
 			}
+
 		})
 	}
 }

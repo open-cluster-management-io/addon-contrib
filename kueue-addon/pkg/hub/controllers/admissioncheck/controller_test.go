@@ -95,14 +95,13 @@ func TestSync(t *testing.T) {
 		admissionCheckName       string
 		clusterObjects           []runtime.Object
 		kueueObjects             []runtime.Object
-		expectedMKClusters       int
 		expectedMKConfigClusters int
 		expectedStatusCondition  bool
 		expectedErr              string
 		preExistingMKClusters    []runtime.Object
 	}{
 		{
-			name:               "create multikueue resources",
+			name:               "create multikueueconfig",
 			admissionCheckName: "ac1",
 			clusterObjects: []runtime.Object{
 				newPlacement("placement1", common.KueueNamespace),
@@ -111,7 +110,6 @@ func TestSync(t *testing.T) {
 			kueueObjects: []runtime.Object{
 				newAdmissionCheck("ac1", "placement1"),
 			},
-			expectedMKClusters:       2,
 			expectedMKConfigClusters: 2,
 			expectedStatusCondition:  true,
 		},
@@ -124,12 +122,11 @@ func TestSync(t *testing.T) {
 			kueueObjects: []runtime.Object{
 				newAdmissionCheck("ac1", "placement1"),
 			},
-			expectedMKClusters:       0,
 			expectedMKConfigClusters: 0,
 			expectedStatusCondition:  false,
 		},
 		{
-			name:               "remove multikueuecluster when cluster removed",
+			name:               "update multikueueconfig when cluster removed",
 			admissionCheckName: "ac1",
 			clusterObjects: []runtime.Object{
 				newPlacement("placement1", common.KueueNamespace),
@@ -137,15 +134,12 @@ func TestSync(t *testing.T) {
 			},
 			kueueObjects: []runtime.Object{
 				newAdmissionCheck("ac1", "placement1"),
-				&kueuev1beta1.MultiKueueCluster{ObjectMeta: metav1.ObjectMeta{Name: "placement1-cluster1"}},
-				&kueuev1beta1.MultiKueueCluster{ObjectMeta: metav1.ObjectMeta{Name: "placement1-cluster2"}}, // should be deleted
 				&kueuev1beta1.MultiKueueConfig{
 					ObjectMeta: metav1.ObjectMeta{Name: "placement1"},
-					Spec:       kueuev1beta1.MultiKueueConfigSpec{Clusters: []string{"placement1-cluster1", "placement1-cluster2"}},
+					Spec:       kueuev1beta1.MultiKueueConfigSpec{Clusters: []string{"cluster1", "cluster2"}}, // should be updated to only cluster1
 				},
 			},
-			expectedMKClusters:       1,
-			expectedMKConfigClusters: 1,
+			expectedMKConfigClusters: 1, // Only cluster1 should remain in config
 			expectedStatusCondition:  true,
 		},
 	}
@@ -211,11 +205,6 @@ func TestSync(t *testing.T) {
 			}
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
-			}
-
-			mkclusters, _ := kueueClient.KueueV1beta1().MultiKueueClusters().List(context.TODO(), metav1.ListOptions{})
-			if len(mkclusters.Items) != c.expectedMKClusters {
-				t.Errorf("expected %d multikueue clusters, but got %d", c.expectedMKClusters, len(mkclusters.Items))
 			}
 
 			mkconfigs, _ := kueueClient.KueueV1beta1().MultiKueueConfigs().List(context.TODO(), metav1.ListOptions{})
