@@ -55,6 +55,7 @@ spec:
                   - name: metric-data
                     mountPath: /metrics
               
+              {{- if .ObsSidecarImage }}
               - name: obs-sidecar
                 image: {{ .ObsSidecarImage }}
                 imagePullPolicy: Always
@@ -73,4 +74,5 @@ spec:
                     valueFrom:
                       fieldRef:
                         fieldPath: metadata.name
+              {{- end }}
               restartPolicy: Never
