@@ -188,3 +188,89 @@ $ curl -ksS https://hub-control-plane:30090/api/v1/query?query=kepler_container_
   }
 }
 ```
+
+## Application Level Observability
+
+In the federated learning process, it is crucial to monitor application-level metrics to gain insights into the model's training performance.
+
+### Background
+
+The sidecar is designed to export application-level metrics, such as the accuracy and loss value during the training process. This allows for real-time monitoring and analysis of the federated learning tasks.
+
+### Architecture
+
+A sidecar container runs alongside the federated learning application. The application writes its metrics to a JSON file at `/metrics/metric.json`. The sidecar watches this file, parses the metrics, and exposes them to an OpenTelemetry (OTel) exporter, which then sends them to an observability backend.
+
+### How to Export Metrics
+
+To export metrics, the training application needs to write a JSON file with a specific schema to the path `/metrics/metric.json`.
+
+**NOTE:** 
+
+- When updating the metrics each time, it will automatically add the `timestamp` field to the metrics. But if the `metric.json` file already contains a `timestamp` field, it will overwrite the value with the current timestamp.
+
+- If the JSON file has a `round` field, the sidecar will use it as a label for the other metrics instead of using the `round` field as a metric value. But if the `round` field is not present, the sidecar will use the label `round="nil"`.
+
+#### JSON Sample
+
+Here is an example of the `metric.json` file format:
+
+```json
+{
+  "epoch": 1,
+  "loss": 0.543,
+  "accuracy": 0.87
+}
+```
+
+#### Python Helper Function
+
+For applications written in Python, you can leverage the following helper function to write metrics in the correct format.
+
+```python
+import json
+import os
+
+def write_metrics(metrics: dict, filepath: str = "/metrics/metric.json"):
+    """Write metrics dictionary to the JSON file"""
+    try:
+        os.makedirs("/metrics", exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, ensure_ascii=False)
+        print(f"Metrics written to {filepath}")
+    except Exception as e:
+        print("write json file error: ", e)
+
+```
+This function takes the `metrics` and `filepath` as input parameters, which can write the metrics to the specified(default: `/metrics/metric.json`) file.
+
+### Building and Running a Custom Sidecar
+
+If you need to customize the sidecar or build your own image, follow these steps.
+
+#### Build the Image
+
+Run the following command to build the Docker image. Before building and pushing, make sure to update the `REGISTRY` variable in the `internal/sidecar/Makefile` to your own container registry (e.g., `docker.io/username`).
+
+```bash
+cd federated-learning-controller
+make docker-sidecar-build
+```
+
+#### Push the Image
+
+```bash
+make docker-sidecar-push
+```
+
+#### Run the Container
+
+Use the `docker run` command to start the sidecar. You must mount the metric file's directory into the container and provide the necessary arguments.
+
+```bash
+docker run --rm \
+  -v /path/on/host/to/metrics:/app/metrics \
+  your-registry/fl-sidecar:latest \
+  -metricfile /app/metrics/fl_metrics.txt \
+  -endpoint host.docker.internal:4317
+```
