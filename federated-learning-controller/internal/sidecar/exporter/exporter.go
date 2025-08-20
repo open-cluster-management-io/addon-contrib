@@ -16,17 +16,27 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
+// Reporter is responsible for exporting metrics to an OTLP endpoint.
 type Reporter struct {
-	provider             *sdkmetric.MeterProvider
-	meter                metric.Meter
-	mu                   sync.Mutex
-	metrics              map[string]float64
-	gauges               map[string]metric.Float64ObservableGauge
+	// provider is the OTLP metric provider.
+	provider *sdkmetric.MeterProvider
+	// meter is the OTLP meter.
+	meter metric.Meter
+	// mu is a mutex to protect the metrics map.
+	mu sync.Mutex
+	// metrics is a map of metric names to values.
+	metrics map[string]float64
+	// gauges is a map of metric names to OTLP gauges.
+	gauges map[string]metric.Float64ObservableGauge
+	// callbackRegistration is the registration for the metric callback.
 	callbackRegistration metric.Registration
-	round                *int
+	// round is the current round number.
+	round *int
 }
 
+// NewReporter creates a new Reporter instance.
 func NewReporter(ctx context.Context, endpoint string, interval int, jobName string) (*Reporter, error) {
+	// Create a new OTLP metric exporter
 	exporter, err := otlpmetricgrpc.New(
 		ctx,
 		otlpmetricgrpc.WithInsecure(),
@@ -36,9 +46,11 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 		return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
 	}
 
+	// Get pod name and namespace from environment variables
 	podName := os.Getenv("POD_NAME")
 	namespace := os.Getenv("POD_NAMESPACE")
 
+	// Create a new resource with service name, namespace, and pod name attributes
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
@@ -52,13 +64,16 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
+	// Create a new meter provider with the resource and periodic reader
 	meterProvider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(time.Duration(interval)*time.Second))),
 	)
 
+	// Create a new meter
 	meter := meterProvider.Meter("fl-train-events")
 
+	// Create a new Reporter
 	r := &Reporter{
 		provider: meterProvider,
 		meter:    meter,
@@ -70,17 +85,20 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 	return r, nil
 }
 
+// UpdateMetrics updates the metrics in the reporter.
 func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.metrics = newMetrics
 
+	// Overwrite timestamp with current time
 	if _, ok := r.metrics["timestamp"]; ok {
 		log.Println("overwrite timestamp")
 	}
 	r.metrics["timestamp"] = float64(time.Now().Unix())
 
+	// Extract round from metrics, if round not present, set it to nil
 	if roundFloat, ok := r.metrics["round"]; ok {
 		log.Println("metric has round field")
 		rountInt := int(roundFloat)
@@ -91,6 +109,7 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 		r.round = nil
 	}
 
+	// Check if the metric set has changed
 	needsUpdate := false
 	if len(r.metrics) != len(r.gauges) {
 		needsUpdate = true
@@ -103,18 +122,21 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 		}
 	}
 
+	// If the metric set has not changed, do nothing
 	if !needsUpdate {
 		return
 	}
 
 	log.Println("Metric set changed, re-registering callback")
 
+	// Unregister the old callback
 	if r.callbackRegistration != nil {
 		if err := r.callbackRegistration.Unregister(); err != nil {
 			log.Printf("Error unregistering callback: %v", err)
 		}
 	}
 
+	// Create new gauges for the new metrics
 	r.gauges = make(map[string]metric.Float64ObservableGauge, len(r.metrics))
 	instruments := make([]metric.Observable, 0, len(r.metrics))
 
@@ -132,6 +154,7 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 		return
 	}
 
+	// Register a new callback to observe the gauges
 	registration, err := r.meter.RegisterCallback(
 		func(ctx context.Context, o metric.Observer) error {
 			r.mu.Lock()
@@ -159,10 +182,12 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 	r.callbackRegistration = registration
 }
 
+// Shutdown shuts down the reporter.
 func (r *Reporter) Shutdown(ctx context.Context) error {
 	return r.provider.Shutdown(ctx)
 }
 
+// ForceFlush forces the reporter to flush all buffered metrics.
 func (r *Reporter) ForceFlush(ctx context.Context) error {
 	return r.provider.ForceFlush(ctx)
 }
