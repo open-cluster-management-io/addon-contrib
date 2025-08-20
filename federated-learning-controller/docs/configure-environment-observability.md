@@ -211,6 +211,43 @@ To export metrics, the training application needs to write a JSON file with a sp
 
 - If the JSON file has a `round` field, the sidecar will use it as a label for the other metrics instead of using the `round` field as a metric value. But if the `round` field is not present, the sidecar will use the label `round="nil"`.
 
+To enable the sidecar, specify the obs-sidecar-image annotation in the FederatedLearning resource with a valid image reference; if the annotation is omitted or set to an empty string, the sidecar will not be injected. For example enabling the sidecar for a FederatedLearning resource:
+
+```yaml
+apiVersion: federation-ai.open-cluster-management.io/v1alpha1
+kind: FederatedLearning
+metadata:
+  name: federated-learning-sample
+  annotations:
+    obs-sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.9.3
+spec:
+  framework: flower
+  server:
+    image: quay.io/open-cluster-management/flower-app-torch:latest
+    rounds: 3
+    minAvailableClients: 2
+    listeners:
+      - name: server-listener
+        port: 8080
+        type: LoadBalancer
+    storage:
+      type: PersistentVolumeClaim
+      name: model-pvc
+      path: /data/models
+      size: 2Gi
+  client:
+    image: quay.io/open-cluster-management/flower-app-torch:latest
+    placement:
+      clusterSets:
+        - global
+      predicates:
+        - requiredClusterSelector:
+            claimSelector:
+              matchExpressions:
+                - key: federated-learning-sample.client-data
+                  operator: Exists
+```
+
 #### JSON Sample
 
 Here is an example of the `metric.json` file format:
@@ -243,6 +280,76 @@ def write_metrics(metrics: dict, filepath: str = "/metrics/metric.json"):
 
 ```
 This function takes the `metrics` and `filepath` as input parameters, which can write the metrics to the specified(default: `/metrics/metric.json`) file.
+
+#### Metrics Result Sample
+
+Here is an example of the metrics result:
+
+```json
+$ curl -ksS 'https://172.18.0.2:30090/api/v1/query?query=loss' | jq
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "__name__": "loss",
+          "cluster_name": "local-cluster",
+          "job": "federated-learning-obs-sidecar",
+          "namespace": "default",
+          "pod_name": "federated-learning-sample-server-cvcrj",
+          "round": "1",
+          "service_name": "federated-learning-obs-sidecar",
+          "telemetry_sdk_language": "go",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "1.37.0"
+        },
+        "value": [
+          1755661045.113,
+          "0.4178483188152313"
+        ]
+      },
+      {
+        "metric": {
+          "__name__": "loss",
+          "cluster_name": "local-cluster",
+          "job": "federated-learning-obs-sidecar",
+          "namespace": "default",
+          "pod_name": "federated-learning-sample-server-cvcrj",
+          "round": "2",
+          "service_name": "federated-learning-obs-sidecar",
+          "telemetry_sdk_language": "go",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "1.37.0"
+        },
+        "value": [
+          1755661045.113,
+          "0.17652101069688797"
+        ]
+      },
+      {
+        "metric": {
+          "__name__": "loss",
+          "cluster_name": "local-cluster",
+          "job": "federated-learning-obs-sidecar",
+          "namespace": "default",
+          "pod_name": "federated-learning-sample-server-cvcrj",
+          "round": "3",
+          "service_name": "federated-learning-obs-sidecar",
+          "telemetry_sdk_language": "go",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "1.37.0"
+        },
+        "value": [
+          1755661045.113,
+          "0.10298225283622742"
+        ]
+      }
+    ]
+  }
+}
+```
 
 ### Building and Running a Custom Sidecar
 
