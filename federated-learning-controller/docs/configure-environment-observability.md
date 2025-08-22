@@ -219,7 +219,7 @@ kind: FederatedLearning
 metadata:
   name: federated-learning-sample
   annotations:
-    federated-learning.io/sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/federated-learning-sidecar:0.9.3
+    federated-learning.io/sidecar-image: quay.io/open-cluster-management/federated-learning-sidecar:latest
 spec:
   framework: flower
   server:
