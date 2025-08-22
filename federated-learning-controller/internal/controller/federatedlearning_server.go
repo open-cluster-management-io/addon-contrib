@@ -108,7 +108,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 			ListenerType:        string(instance.Spec.Server.Listeners[0].Type),
 			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
 			CreateService:       createService,
-			ObsSidecarImage:     instance.ObjectMeta.Annotations["obs-sidecar-image"],
+			ObsSidecarImage:     instance.ObjectMeta.Annotations["federated-learning.io/sidecar-image"],
 		}, nil
 	})
 	if err != nil {

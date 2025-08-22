@@ -211,7 +211,7 @@ To export metrics, the training application needs to write a JSON file with a sp
 
 - If the JSON file has a `round` field, the sidecar will use it as a label for the other metrics instead of using the `round` field as a metric value. But if the `round` field is not present, the sidecar will use the label `round="nil"`.
 
-To enable the sidecar, specify the obs-sidecar-image annotation in the FederatedLearning resource with a valid image reference; if the annotation is omitted or set to an empty string, the sidecar will not be injected. For example enabling the sidecar for a FederatedLearning resource:
+To enable the sidecar, specify the `federated-learning.io/sidecar-image` annotation in the FederatedLearning resource with a valid image reference; if the annotation is omitted or set to an empty string, the sidecar will not be injected. For example enabling the sidecar for a FederatedLearning resource:
 
 ```yaml
 apiVersion: federation-ai.open-cluster-management.io/v1alpha1
@@ -219,7 +219,7 @@ kind: FederatedLearning
 metadata:
   name: federated-learning-sample
   annotations:
-    obs-sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.9.3
+    federated-learning.io/sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.9.3
 spec:
   framework: flower
   server:

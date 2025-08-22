@@ -189,7 +189,7 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		ClientJobImage:     instance.Spec.Client.Image,
 		ClientDataConfig:   dataConfig,
 		ServerAddress:      serverAddress,
-		ObsSidecarImage:    instance.ObjectMeta.Annotations["obs-sidecar-image"],
+		ObsSidecarImage:    instance.ObjectMeta.Annotations["federated-learning.io/sidecar-image"],
 	}
 
 	render, deployer := applier.NewRenderer(manifests.ClientFiles), applier.NewDeployer(r.Client)
