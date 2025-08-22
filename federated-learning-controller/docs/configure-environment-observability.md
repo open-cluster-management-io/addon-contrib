@@ -219,7 +219,7 @@ kind: FederatedLearning
 metadata:
   name: federated-learning-sample
   annotations:
-    federated-learning.io/sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/fl_sidecar:0.9.3
+    federated-learning.io/sidecar-image: crpi-4znmwrgbdtn86v19.cn-hangzhou.personal.cr.aliyuncs.com/mrrr61/federated-learning-sidecar:0.9.3
 spec:
   framework: flower
   server:
@@ -377,7 +377,7 @@ Use the `docker run` command to start the sidecar. You must mount the metric fil
 ```bash
 docker run --rm \
   -v /path/on/host/to/metrics:/app/metrics \
-  your-registry/fl-sidecar:latest \
+  your-registry/federated-learning-sidecar:latest \
   -metricfile /app/metrics/fl_metrics.txt \
   -endpoint host.docker.internal:4317
 ```

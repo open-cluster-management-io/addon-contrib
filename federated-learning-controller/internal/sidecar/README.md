@@ -60,7 +60,7 @@ Use the `docker run` command to start the sidecar, must mount the metric file's 
 ```bash
 docker run --rm \
   -v /path/on/host/to/metrics:/app/metrics \
-  docker-registry/fl-sidecar:latest \
+  docker-registry/federated-learning-sidecar:latest \
   -metricfile /app/metrics/fl_metrics.txt \
   -endpoint host.docker.internal:4317
 ```
