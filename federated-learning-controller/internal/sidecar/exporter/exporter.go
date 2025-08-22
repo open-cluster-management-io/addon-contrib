@@ -56,7 +56,7 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceNameKey.String(jobName),
-			attribute.Key("namespace").String(namespace),
+			attribute.Key("pod.namespace").String(namespace),
 			attribute.Key("pod.name").String(podName),
 		),
 	)
