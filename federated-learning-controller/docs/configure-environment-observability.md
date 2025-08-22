@@ -378,6 +378,6 @@ Use the `docker run` command to start the sidecar. You must mount the metric fil
 docker run --rm \
   -v /path/on/host/to/metrics:/app/metrics \
   your-registry/federated-learning-sidecar:latest \
-  -metricfile /app/metrics/fl_metrics.txt \
+  -metricfile /metrics/metric.json \
   -endpoint host.docker.internal:4317
 ```
