@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github/open-cluster-management/federated-learning/api/v1alpha1"
 	flv1alpha1 "github/open-cluster-management/federated-learning/api/v1alpha1"
 	"github/open-cluster-management/federated-learning/internal/controller/manifests"
 	"github/open-cluster-management/federated-learning/internal/controller/manifests/applier"
@@ -108,7 +109,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 			ListenerType:        string(instance.Spec.Server.Listeners[0].Type),
 			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
 			CreateService:       createService,
-			ObsSidecarImage:     instance.ObjectMeta.Annotations["federated-learning.io/sidecar-image"],
+			ObsSidecarImage:     instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage],
 		}, nil
 	})
 	if err != nil {

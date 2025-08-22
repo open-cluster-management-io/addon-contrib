@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github/open-cluster-management/federated-learning/api/v1alpha1"
 	flv1alpha1 "github/open-cluster-management/federated-learning/api/v1alpha1"
 	"github/open-cluster-management/federated-learning/internal/controller/manifests"
 	"github/open-cluster-management/federated-learning/internal/controller/manifests/applier"
@@ -189,7 +190,7 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		ClientJobImage:     instance.Spec.Client.Image,
 		ClientDataConfig:   dataConfig,
 		ServerAddress:      serverAddress,
-		ObsSidecarImage:    instance.ObjectMeta.Annotations["federated-learning.io/sidecar-image"],
+		ObsSidecarImage:    instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage],
 	}
 
 	render, deployer := applier.NewRenderer(manifests.ClientFiles), applier.NewDeployer(r.Client)

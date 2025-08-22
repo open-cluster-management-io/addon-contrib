@@ -56,6 +56,10 @@ const (
 	Other  Framework = "other"
 )
 
+const (
+	AnnotationSidecarImage = "federated-learning.io/sidecar-image"
+)
+
 // FederatedLearningSpec defines the desired state of FederatedLearning.
 type FederatedLearningSpec struct {
 	// +kubebuilder:default=other
