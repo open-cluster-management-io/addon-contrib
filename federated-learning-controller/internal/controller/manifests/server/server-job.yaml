@@ -34,11 +34,15 @@ spec:
         imagePullPolicy: Always
         args:
           - -metricfile=/metrics/metric.json
-          - -endpoint=otel-collector.open-cluster-management-agent-addon.svc.cluster.local:4317
+          - -endpoint=$(OTEL_ENDPOINT)
         volumeMounts:
           - name: metric-data
             mountPath: /metrics
         env:
+          # The default endpoint for the Open Cluster Management observability service.
+          # Change this value to your otel collector endpoint if you are not using the OCM observability service.
+          - name: OTEL_ENDPOINT
+            value: "otel-collector.open-cluster-management-agent-addon.svc.cluster.local:4317"
           - name: POD_NAMESPACE
             valueFrom:
               fieldRef:
