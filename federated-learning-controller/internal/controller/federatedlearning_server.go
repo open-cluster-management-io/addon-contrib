@@ -97,6 +97,10 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 
 	render, deployer := applier.NewRenderer(manifests.ServerFiles), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("server", "", func(profile string) (interface{}, error) {
+		obsSidecarImage := ""
+		if instance.ObjectMeta.Annotations != nil {
+			obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
+		}
 		return manifests.FederatedLearningServerParams{
 			Namespace:           instance.Namespace,
 			Name:                getSeverName(instance.Name),
@@ -109,7 +113,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 			ListenerType:        string(instance.Spec.Server.Listeners[0].Type),
 			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
 			CreateService:       createService,
-			ObsSidecarImage:     instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage],
+			ObsSidecarImage:     obsSidecarImage,
 		}, nil
 	})
 	if err != nil {

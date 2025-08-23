@@ -182,6 +182,10 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		return fmt.Errorf("wait the server address to be ready!")
 	}
 
+	obsSidecarImage := ""
+	if instance.ObjectMeta.Annotations != nil {
+		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
+	}
 	clientParams := &manifests.FederatedLearningClientParams{
 		ManifestName:       instance.Name,
 		ManifestNamespace:  clusterName,
@@ -190,7 +194,7 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		ClientJobImage:     instance.Spec.Client.Image,
 		ClientDataConfig:   dataConfig,
 		ServerAddress:      serverAddress,
-		ObsSidecarImage:    instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage],
+		ObsSidecarImage:    obsSidecarImage,
 	}
 
 	render, deployer := applier.NewRenderer(manifests.ClientFiles), applier.NewDeployer(r.Client)
