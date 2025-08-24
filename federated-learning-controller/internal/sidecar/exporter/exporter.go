@@ -16,21 +16,37 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
-// Reporter is responsible for exporting metrics to an OTLP endpoint.
+// Reporter is responsible for managing and exporting application metrics
+// to an OTLP (OpenTelemetry Protocol) endpoint. It encapsulates the creation,
+// registration, and update of metric instruments and their values.
+//
+// The Reporter is safe for concurrent use.
 type Reporter struct {
 	// provider is the OTLP metric provider.
+	// It owns the lifecycle of metric collection and export.
 	provider *sdkmetric.MeterProvider
-	// meter is used to create metric instruments.
+
+	// meter is used to create and register metric instruments (gauges, counters, etc).
 	meter metric.Meter
-	// mu is a mutex to protect the metrics map.
+
+	// mu protects access to the internal state (metrics, labels, gauges, callback).
 	mu sync.Mutex
-	// gauges maps metric names to observable float64 gauges.
+
+	// gauges holds the mapping of metric names to their corresponding
+	// Float64ObservableGauge instruments.
+	// Only updated when the metric set changes (add/remove).
 	gauges map[string]metric.Float64ObservableGauge
-	// callbackRegistration is the registration for the metric callback.
+
+	// callbackRegistration is the handle returned by RegisterCallback.
+	// It allows unregistering the callback when the metric set changes.
 	callbackRegistration metric.Registration
-	// map of metric name -> value, used for callback
+
+	// metrics stores the latest values for each metric (name -> value).
+	// These values are read inside the callback at collection time.
 	metrics map[string]float64
-	// map of label name -> value, used for callback
+
+	// labels stores the latest global labels (key -> float64 value),
+	// applied to all observed metrics during collection.
 	labels map[string]float64
 }
 
