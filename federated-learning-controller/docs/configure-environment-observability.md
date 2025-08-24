@@ -209,8 +209,6 @@ To export metrics, the training application needs to write a JSON file with a sp
 
 - When updating the metrics each time, it will automatically add the `timestamp` field to the metrics. But if the `metric.json` file already contains a `timestamp` field, it will overwrite the value with the current timestamp.
 
-- If the JSON file has a `round` field, the sidecar will use it as a label for the other metrics instead of using the `round` field as a metric value. But if the `round` field is not present, the sidecar will use the label `round="nil"`.
-
 To enable the sidecar, specify the `federated-learning.io/sidecar-image` annotation in the FederatedLearning resource with a valid image reference; if the annotation is omitted or set to an empty string, the sidecar will not be injected. For example enabling the sidecar for a FederatedLearning resource:
 
 ```yaml
@@ -254,9 +252,13 @@ Here is an example of the `metric.json` file format:
 
 ```json
 {
-  "epoch": 1,
-  "loss": 0.543,
-  "accuracy": 0.87
+    "metrics": {
+        "loss": 0.5,
+        "accuracy": 0.8,
+    },
+    "labels": {
+        "round": 1,
+    },
 }
 ```
 
@@ -267,13 +269,34 @@ For applications written in Python, you can leverage the following helper functi
 ```python
 import json
 import os
+from typing import Dict, Any
 
-def write_metrics(metrics: dict, filepath: str = "/metrics/metric.json"):
-    """Write metrics dictionary to the JSON file"""
+def write_metrics(metrics: Dict[str, Any] = None,
+                  labels: Dict[str, Any] = None,
+                  filepath: str = "/metrics/metric.json"):
+    """
+    Writes dictionaries containing metrics and labels to a JSON file.
+
+    Args:
+        metrics (Dict[str, Any]): A dictionary containing the metric values.
+        label (Dict[str, Any]): A dictionary containing the label data.
+        path (str): The full path to the output JSON file.
+    """
+
+    # default {} if None
+    metrics = metrics or {}
+    labels = labels or {}
+
+    # Combine label and metrics into a single dictionary
+    data_to_write = {
+        "metrics": metrics,
+        "labels": labels,
+    }
+
     try:
         os.makedirs("/metrics", exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, ensure_ascii=False)
+            json.dump(data_to_write, f, ensure_ascii=False)
         print(f"Metrics written to {filepath}")
     except Exception as e:
         print("write json file error: ", e)
@@ -286,7 +309,7 @@ This function takes the `metrics` and `filepath` as input parameters, which can 
 Here is an example of the metrics result:
 
 ```json
-$ curl -ksS 'https://172.18.0.2:30090/api/v1/query?query=loss' | jq
+$ curl -ksS 'https://172.18.0.2:30090/api/v1/query?query=accuracy' | jq
 {
   "status": "success",
   "data": {
@@ -294,11 +317,11 @@ $ curl -ksS 'https://172.18.0.2:30090/api/v1/query?query=loss' | jq
     "result": [
       {
         "metric": {
-          "__name__": "loss",
-          "cluster_name": "local-cluster",
+          "__name__": "accuracy",
+          "cluster_name": "cluster1",
           "job": "federated-learning-obs-sidecar",
-          "namespace": "default",
-          "pod_name": "federated-learning-sample-server-cvcrj",
+          "pod_name": "federated-learning-sample-client-jm7hl",
+          "pod_namespace": "default",
           "round": "1",
           "service_name": "federated-learning-obs-sidecar",
           "telemetry_sdk_language": "go",
@@ -306,44 +329,44 @@ $ curl -ksS 'https://172.18.0.2:30090/api/v1/query?query=loss' | jq
           "telemetry_sdk_version": "1.37.0"
         },
         "value": [
-          1755661045.113,
-          "0.4178483188152313"
+          1756022731.665,
+          "0.9385"
         ]
       },
       {
         "metric": {
-          "__name__": "loss",
+          "__name__": "accuracy",
           "cluster_name": "local-cluster",
           "job": "federated-learning-obs-sidecar",
-          "namespace": "default",
-          "pod_name": "federated-learning-sample-server-cvcrj",
-          "round": "2",
+          "pod_name": "federated-learning-sample-server-t78z4",
+          "pod_namespace": "default",
+          "round": "1",
           "service_name": "federated-learning-obs-sidecar",
           "telemetry_sdk_language": "go",
           "telemetry_sdk_name": "opentelemetry",
           "telemetry_sdk_version": "1.37.0"
         },
         "value": [
-          1755661045.113,
-          "0.17652101069688797"
+          1756022731.665,
+          "0.9385"
         ]
       },
       {
         "metric": {
-          "__name__": "loss",
-          "cluster_name": "local-cluster",
+          "__name__": "accuracy",
+          "cluster_name": "cluster2",
           "job": "federated-learning-obs-sidecar",
-          "namespace": "default",
-          "pod_name": "federated-learning-sample-server-cvcrj",
-          "round": "3",
+          "pod_name": "federated-learning-sample-client-xwwrj",
+          "pod_namespace": "default",
+          "round": "1",
           "service_name": "federated-learning-obs-sidecar",
           "telemetry_sdk_language": "go",
           "telemetry_sdk_name": "opentelemetry",
           "telemetry_sdk_version": "1.37.0"
         },
         "value": [
-          1755661045.113,
-          "0.10298225283622742"
+          1756022731.665,
+          "0.9385"
         ]
       }
     ]

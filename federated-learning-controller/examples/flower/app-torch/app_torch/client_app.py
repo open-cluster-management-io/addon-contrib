@@ -34,11 +34,13 @@ class FlowerClient(NumPyClient):
             # test_losses.append(test_loss)
             loss = train(self.net, self.device, self.trainloader, optimizer, epoch)
             metrics = {
-                "round": config["server_round"],
-                "epoch": epoch,
                 "train_loss": loss,
             }
-            write_metrics(metrics)
+            labels = {
+                "round": config["server_round"],
+                "epoch": epoch,
+            }
+            write_metrics(metrics, labels)
             epoch_loss += loss
             scheduler.step()
             
@@ -54,11 +56,13 @@ class FlowerClient(NumPyClient):
         loss, accuracy = test(self.net, self.device, self.valloader)
         print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
         metrics = {
-            "round": config["server_round"],
             "evaluation_loss": loss,
             "accuracy": accuracy,
         }
-        write_metrics(metrics)
+        labels = {
+            "round": config["server_round"],
+        }
+        write_metrics(metrics, labels)
         return loss, len(self.valloader.dataset), {"accuracy": accuracy}
 
 def client_fn(context: Context):

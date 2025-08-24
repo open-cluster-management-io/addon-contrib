@@ -49,12 +49,34 @@ def get_latest_model_file(model_dir="/data/model", suffix=".pth"):
 # file = get_latest_model_file("/home/myan/workspace/federated-learning")
 # print(file)
 
-def write_metrics(metrics: dict, filepath: str = "/metrics/metric.json"):
-    """Write metrics dictionary to the JSON file"""
+from typing import Dict, Any
+
+def write_metrics(metrics: Dict[str, Any] = None,
+                  labels: Dict[str, Any] = None,
+                  filepath: str = "/metrics/metric.json"):
+    """
+    Writes dictionaries containing metrics and labels to a JSON file.
+
+    Args:
+        metrics (Dict[str, Any]): A dictionary containing the metric values.
+        label (Dict[str, Any]): A dictionary containing the label data.
+        path (str): The full path to the output JSON file.
+    """
+
+    # default {} if None
+    metrics = metrics or {}
+    labels = labels or {}
+
+    # Combine label and metrics into a single dictionary
+    data_to_write = {
+        "metrics": metrics,
+        "labels": labels,
+    }
+
     try:
         os.makedirs("/metrics", exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, ensure_ascii=False)
+            json.dump(data_to_write, f, ensure_ascii=False)
         print(f"Metrics written to {filepath}")
     except Exception as e:
         print("write json file error: ", e)

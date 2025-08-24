@@ -97,11 +97,11 @@ def start_server(args):
         def aggregate_evaluate(self, server_round, results, failures):
             aggregated_loss, aggregated_metrics = super().aggregate_evaluate(server_round, results, failures)
             metrics = {
-                "round": server_round,
                 "loss": aggregated_loss,
                 "accuracy": aggregated_metrics["accuracy"],
             }
-            write_metrics(metrics)
+            labels = {"round": server_round}
+            write_metrics(metrics, labels)
             return aggregated_loss, aggregated_metrics
 
     # Start the FL server

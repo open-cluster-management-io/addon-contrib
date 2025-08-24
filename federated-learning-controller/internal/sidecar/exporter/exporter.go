@@ -24,8 +24,6 @@ type Reporter struct {
 	meter metric.Meter
 	// mu is a mutex to protect the metrics map.
 	mu sync.Mutex
-	// metrics is a map of metric names to values.
-	metrics map[string]float64
 	// gauges is a map of metric names to OTLP gauges.
 	gauges map[string]metric.Float64ObservableGauge
 	// callbackRegistration is the registration for the metric callback.
@@ -77,7 +75,6 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 	r := &Reporter{
 		provider: meterProvider,
 		meter:    meter,
-		metrics:  make(map[string]float64),
 		gauges:   make(map[string]metric.Float64ObservableGauge),
 	}
 
@@ -86,35 +83,22 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 }
 
 // UpdateMetrics updates the metrics in the reporter.
-func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
+func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[string]float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.metrics = newMetrics
-
 	// Overwrite timestamp with current time
-	if _, ok := r.metrics["timestamp"]; ok {
+	if _, ok := newMetrics["timestamp"]; ok {
 		log.Println("overwrite timestamp")
 	}
-	r.metrics["timestamp"] = float64(time.Now().Unix())
-
-	// Extract round from metrics, if round not present, set it to nil
-	if roundFloat, ok := r.metrics["round"]; ok {
-		log.Println("metric has round field")
-		rountInt := int(roundFloat)
-		r.round = &rountInt
-		delete(r.metrics, "round")
-	} else {
-		log.Println("metric has no round field")
-		r.round = nil
-	}
+	newMetrics["timestamp"] = float64(time.Now().Unix())
 
 	// Check if the metric set has changed
 	needsUpdate := false
-	if len(r.metrics) != len(r.gauges) {
+	if len(newMetrics) != len(r.gauges) {
 		needsUpdate = true
 	} else {
-		for name := range r.metrics {
+		for name := range newMetrics {
 			if _, ok := r.gauges[name]; !ok {
 				needsUpdate = true
 				break
@@ -137,10 +121,10 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 	}
 
 	// Create new gauges for the new metrics
-	r.gauges = make(map[string]metric.Float64ObservableGauge, len(r.metrics))
-	instruments := make([]metric.Observable, 0, len(r.metrics))
+	r.gauges = make(map[string]metric.Float64ObservableGauge, len(newMetrics))
+	instruments := make([]metric.Observable, 0, len(newMetrics))
 
-	for name := range r.metrics {
+	for name := range newMetrics {
 		gauge, err := r.meter.Float64ObservableGauge(name)
 		if err != nil {
 			log.Printf("Error creating gauge for %s: %v", name, err)
@@ -160,14 +144,12 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			for name, gauge := range r.gauges {
-				if value, ok := r.metrics[name]; ok {
-					var roundLabel metric.MeasurementOption
-					if r.round == nil {
-						roundLabel = metric.WithAttributes(attribute.String("round", "nil"))
-					} else {
-						roundLabel = metric.WithAttributes(attribute.Int("round", *r.round))
+				if value, ok := newMetrics[name]; ok {
+					labels := make([]metric.ObserveOption, 0, len(newLabels))
+					for k, v := range newLabels {
+						labels = append(labels, metric.WithAttributes(attribute.Float64(k, v)))
 					}
-					o.ObserveFloat64(gauge, value, roundLabel)
+					o.ObserveFloat64(gauge, value, labels...)
 				}
 			}
 			return nil

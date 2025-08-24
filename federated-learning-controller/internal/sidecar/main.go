@@ -87,13 +87,13 @@ func main() {
 
 // parseAndPushMtrics parses the content of the metric file and pushes the metrics to the reporter.
 func parseAndPushMtrics(reporter *exporter.Reporter, content []byte) {
-	metrics, err := exporter.ParseContetnt(content)
+	metrics, labels, err := exporter.ParseContetnt(content)
 	if err != nil {
 		log.Printf("Parse metrics err: %v", err)
 		return
 	}
 
-	reporter.UpdateMetrics(metrics)
+	reporter.UpdateMetrics(metrics, labels)
 
 	// Create a context with a timeout for flushing the metrics
 	flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)

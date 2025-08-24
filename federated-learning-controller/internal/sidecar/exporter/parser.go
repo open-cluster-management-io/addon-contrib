@@ -10,6 +10,11 @@ import (
 // flexibleFloat is a custom type that can be unmarshalled from a JSON number or a string.
 type flexibleFloat float64
 
+type metricFilePayload struct {
+	Metrics map[string]flexibleFloat `json:"metrics"`
+	Labels  map[string]flexibleFloat `json:"labels"`
+}
+
 // UnmarshalJSON implements the json.Unmarshaler interface for the flexibleFloat type.
 // It allows the value to be either a number or a string that can be parsed into a float.
 func (f *flexibleFloat) UnmarshalJSON(data []byte) error {
@@ -33,21 +38,29 @@ func (f *flexibleFloat) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ParseContetnt parses the given content into a map of metrics.
-// The content is expected to be a JSON object with string keys and values that can be parsed as floats.
-func ParseContetnt(content []byte) (map[string]float64, error) {
-	metrics := make(map[string]flexibleFloat)
+// ParseContetnt parses the given content into a map of metrics and a map of labels.
+// The content is expected to be a JSON byte array with a specific structure.
+// It should have a "metrics" key and a "labels" key, both pointing to objects.
+// The values in these objects should be numbers or strings that can be converted to float64.
+// It returns the parsed metrics, the parsed labels, and an error if any occurs.
+func ParseContetnt(content []byte) (map[string]float64, map[string]float64, error) {
+	var payload metricFilePayload
 
-	err := json.Unmarshal(content, &metrics)
+	err := json.Unmarshal(content, &payload)
 	if err != nil {
 		log.Printf("JSON unmarshaling failed: %s", err)
-		return nil, err
+		return nil, nil, err
 	}
 
-	result := make(map[string]float64, len(metrics))
-	for key, value := range metrics {
-		result[key] = float64(value)
+	metrics := make(map[string]float64, len(payload.Metrics))
+	for key, value := range payload.Metrics {
+		metrics[key] = float64(value)
 	}
 
-	return result, nil
+	labels := make(map[string]float64, len(payload.Labels))
+	for key, value := range payload.Labels {
+		labels[key] = float64(value)
+	}
+
+	return metrics, labels, nil
 }
