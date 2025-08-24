@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 // Command-line flags
@@ -95,18 +94,9 @@ func parseAndPushMtrics(reporter *exporter.Reporter, content []byte) {
 
 	reporter.UpdateMetrics(metrics, labels)
 
-	// Create a context with a timeout for flushing the metrics
-	flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
-
 	// Force flush the metrics to the endpoint
-	err = reporter.ForceFlush(flushCtx)
+	err = reporter.ForceFlush()
 	if err != nil {
 		log.Printf("Force flush err: %v", err)
-	} else {
-		for k, v := range metrics {
-			log.Printf("Metric: %s, value: %f\n", k, v)
-		}
 	}
-
-	flushCancel()
 }

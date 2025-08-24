@@ -20,16 +20,18 @@ import (
 type Reporter struct {
 	// provider is the OTLP metric provider.
 	provider *sdkmetric.MeterProvider
-	// meter is the OTLP meter.
+	// meter is used to create metric instruments.
 	meter metric.Meter
 	// mu is a mutex to protect the metrics map.
 	mu sync.Mutex
-	// gauges is a map of metric names to OTLP gauges.
+	// gauges maps metric names to observable float64 gauges.
 	gauges map[string]metric.Float64ObservableGauge
 	// callbackRegistration is the registration for the metric callback.
 	callbackRegistration metric.Registration
-	// round is the current round number.
-	round *int
+	// map of metric name -> value, used for callback
+	metrics map[string]float64
+	// map of label name -> value, used for callback
+	labels map[string]float64
 }
 
 // NewReporter creates a new Reporter instance.
@@ -75,30 +77,38 @@ func NewReporter(ctx context.Context, endpoint string, interval int, jobName str
 	r := &Reporter{
 		provider: meterProvider,
 		meter:    meter,
-		gauges:   make(map[string]metric.Float64ObservableGauge),
 	}
 
 	log.Println("Init metric reporter success")
 	return r, nil
 }
 
-// UpdateMetrics updates the metrics in the reporter.
+// UpdateMetrics updates the set of observable metrics in the reporter.
+// If the set of metrics has changed (new metric names added/removed),
+// it will re-register the callback with the new gauges.
+// Otherwise, it simply updates the values to be observed.
+//
+// newMetrics: map of metric name -> current value
+// newLabels:  map of label key -> float64 value (labels applied to all metrics)
 func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[string]float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Overwrite timestamp with current time
-	if _, ok := newMetrics["timestamp"]; ok {
-		log.Println("overwrite timestamp")
-	}
-	newMetrics["timestamp"] = float64(time.Now().Unix())
+	// Update the metrics and labels
+	r.metrics = newMetrics
+	r.labels = newLabels
 
-	// Check if the metric set has changed
+	// Always overwrite "timestamp" metric with the current Unix time.
+	// This ensures we have a fresh timestamp regardless of input.
+	r.metrics["timestamp"] = float64(time.Now().Unix())
+
+	// Step 1: Detect if the set of metrics has changed
+	// (different number of metrics or different names)
 	needsUpdate := false
-	if len(newMetrics) != len(r.gauges) {
+	if len(r.metrics) != len(r.gauges) {
 		needsUpdate = true
 	} else {
-		for name := range newMetrics {
+		for name := range r.metrics {
 			if _, ok := r.gauges[name]; !ok {
 				needsUpdate = true
 				break
@@ -106,28 +116,30 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[st
 		}
 	}
 
-	// If the metric set has not changed, do nothing
+	// If the metric set is unchanged, just return.
+	// Values will be observed in the callback during collection.
 	if !needsUpdate {
 		return
 	}
 
 	log.Println("Metric set changed, re-registering callback")
 
-	// Unregister the old callback
+	// Step 2: Unregister the old callback if it exists
 	if r.callbackRegistration != nil {
 		if err := r.callbackRegistration.Unregister(); err != nil {
-			log.Printf("Error unregistering callback: %v", err)
+			log.Printf("Warning: failed to unregister old callback: %v", err)
 		}
+		r.callbackRegistration = nil
 	}
 
-	// Create new gauges for the new metrics
-	r.gauges = make(map[string]metric.Float64ObservableGauge, len(newMetrics))
-	instruments := make([]metric.Observable, 0, len(newMetrics))
+	// Step 3: Create new gauges for all metrics
+	r.gauges = make(map[string]metric.Float64ObservableGauge, len(r.metrics))
+	instruments := make([]metric.Observable, 0, len(r.metrics))
 
-	for name := range newMetrics {
+	for name := range r.metrics {
 		gauge, err := r.meter.Float64ObservableGauge(name)
 		if err != nil {
-			log.Printf("Error creating gauge for %s: %v", name, err)
+			log.Printf("Error creating gauge for %q: %v", name, err)
 			continue
 		}
 		r.gauges[name] = gauge
@@ -135,20 +147,24 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[st
 	}
 
 	if len(instruments) == 0 {
+		log.Println("No valid instruments created; callback not registered")
 		return
 	}
 
-	// Register a new callback to observe the gauges
+	// Step 4: Register a new callback to observe the gauges
 	registration, err := r.meter.RegisterCallback(
 		func(ctx context.Context, o metric.Observer) error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
+
 			for name, gauge := range r.gauges {
-				if value, ok := newMetrics[name]; ok {
-					labels := make([]metric.ObserveOption, 0, len(newLabels))
-					for k, v := range newLabels {
+				if value, ok := r.metrics[name]; ok {
+					// Convert newLabels into ObserveOptions
+					labels := make([]metric.ObserveOption, 0, len(r.labels))
+					for k, v := range r.labels {
 						labels = append(labels, metric.WithAttributes(attribute.Float64(k, v)))
 					}
+					log.Printf("Observing %q: %f", name, value)
 					o.ObserveFloat64(gauge, value, labels...)
 				}
 			}
@@ -170,6 +186,15 @@ func (r *Reporter) Shutdown(ctx context.Context) error {
 }
 
 // ForceFlush forces the reporter to flush all buffered metrics.
-func (r *Reporter) ForceFlush(ctx context.Context) error {
-	return r.provider.ForceFlush(ctx)
+func (r *Reporter) ForceFlush() error {
+	// Create a context with a timeout for flushing the metrics
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer flushCancel()
+
+	// Force flush the metrics to the endpoint
+	err := r.provider.ForceFlush(flushCtx)
+	if err != nil {
+		log.Printf("Force flush err: %v", err)
+	}
+	return err
 }
