@@ -14,7 +14,7 @@ from flwr.server import ServerConfig
 from flwr.server.strategy import FedAvg
 
 from app_torch.task import Net, get_weights
-from app_torch.utils import get_latest_model_file, load_model, save_model
+from app_torch.utils import get_latest_model_file, load_model, save_model, write_metrics
 
 
 # ------------------------------
@@ -42,6 +42,12 @@ def client_weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     accuracies = [num_examples * metric["accuracy"] for num_examples, metric in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     return {"accuracy": sum(accuracies) / sum(examples)}
+
+def fit_evaluate_config(server_round: int):
+    config = {
+        "server_round": server_round,
+    }
+    return config
 
 def start_server(args):
     """Starts the federated learning server with model aggregation and checkpointing."""
@@ -88,6 +94,16 @@ def start_server(args):
 
             return aggregated_parameters, aggregated_metrics
 
+        def aggregate_evaluate(self, server_round, results, failures):
+            aggregated_loss, aggregated_metrics = super().aggregate_evaluate(server_round, results, failures)
+            metrics = {
+                "loss": aggregated_loss,
+                "accuracy": aggregated_metrics["accuracy"],
+            }
+            labels = {"round": server_round}
+            write_metrics(metrics, labels)
+            return aggregated_loss, aggregated_metrics
+
     # Start the FL server
     fl.server.start_server(
         server_address=args.server_address,
@@ -99,6 +115,8 @@ def start_server(args):
             initial_parameters=initial_parameters,
             evaluate_metrics_aggregation_fn=client_weighted_average,
             inplace=True,
+            on_fit_config_fn=fit_evaluate_config,
+            on_evaluate_config_fn=fit_evaluate_config,
         ),
     )
 
