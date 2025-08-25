@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -24,6 +25,7 @@ import (
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterinformerv1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1"
 	clusterlisterv1 "open-cluster-management.io/api/client/cluster/listers/cluster/v1"
+	clusterapiv1 "open-cluster-management.io/api/cluster/v1"
 	"open-cluster-management.io/sdk-go/pkg/patcher"
 )
 
@@ -85,7 +87,7 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	}
 	clusterName := namespace
 
-	origSecret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	clusterSecret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		logger.Info("Secret not found, deleting corresponding kubeconfig secret and MultiKueueCluster", "secret", name, "namespace", namespace)
 		// Delete the corresponding kubeconfig secret in kueue namespace when source secret is not found
@@ -125,10 +127,11 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	if len(mcl.Spec.ManagedClusterClientConfigs) == 0 {
 		return fmt.Errorf("no client config found for cluster %s", clusterName)
 	}
-	url := mcl.Spec.ManagedClusterClientConfigs[0].URL
+
+	clusterUrl := c.getClusterURL(mcl, clusterName)
 
 	// Generate the kubeconfig Secret
-	kubeconfSecret, err := c.generateKueConfigSecret(origSecret, url, clusterName)
+	kubeconfSecret, err := c.generateKueConfigSecret(ctx, clusterSecret, clusterUrl, clusterName)
 	if err != nil {
 		return err
 	}
@@ -157,29 +160,74 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	return err
 }
 
-// generateKueConfigSecret creates a kubeconfig Secret for the given cluster using the original ServiceAccount secret.
-func (c *kueueSecretCopyController) generateKueConfigSecret(secret *v1.Secret, clusterAddr, clusterName string) (*v1.Secret, error) {
-	saToken, ok := secret.Data["token"]
+// generateKueConfigSecret creates a kubeconfig Secret for the given cluster using the ManagedServiceAccount secret.
+func (c *kueueSecretCopyController) generateKueConfigSecret(ctx context.Context, clusterSecret *v1.Secret, clusterAddr, clusterName string) (*v1.Secret, error) {
+	clusterToken, ok := clusterSecret.Data["token"]
 	if !ok {
-		return nil, fmt.Errorf("token not found in secret %s", secret.Name)
+		return nil, fmt.Errorf("token not found in secret %s", clusterSecret.Name)
 	}
 
-	caCert, ok := secret.Data["ca.crt"]
-	if !ok {
-		return nil, fmt.Errorf("ca.crt not found in secret %s", secret.Name)
+	caCert, err := c.getCACert(ctx, clusterSecret)
+	if err != nil {
+		return nil, err
 	}
 
-	kubeconfigStr := generateKueConfigStr(base64.StdEncoding.EncodeToString(caCert), clusterAddr, clusterName, secret.Name, saToken)
+	kubeconfigStr := generateKueConfigStr(base64.StdEncoding.EncodeToString(caCert), clusterAddr, clusterName, clusterSecret.Name, clusterToken)
 
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.GetMultiKueueSecretName(secret.Namespace),
+			Name:      common.GetMultiKueueSecretName(clusterSecret.Namespace),
 			Namespace: common.KueueNamespace,
 		},
 		Data: map[string][]byte{
 			"kubeconfig": []byte(kubeconfigStr),
 		},
 	}, nil
+}
+
+// getClusterURL returns the appropriate cluster URL, using proxy URL if configured.
+func (c *kueueSecretCopyController) getClusterURL(mcl *clusterapiv1.ManagedCluster, clusterName string) string {
+	url := mcl.Spec.ManagedClusterClientConfigs[0].URL
+
+	if proxyURL := os.Getenv(common.ClusterProxyURLEnv); proxyURL != "" {
+		// Ensure proxy URL ends with proper separator
+		if proxyURL[len(proxyURL)-1] != '/' {
+			proxyURL += "/"
+		}
+		url = proxyURL + clusterName
+	}
+
+	return url
+}
+
+// getCACert returns the appropriate CA certificate based on whether cluster proxy is configured.
+// When CLUSTER_PROXY_URL is set, it uses the hub CA certificate, otherwise it uses the cluster secret's CA certificate.
+func (c *kueueSecretCopyController) getCACert(ctx context.Context, clusterSecret *v1.Secret) ([]byte, error) {
+	if os.Getenv(common.ClusterProxyURLEnv) != "" {
+		return c.getHubCACert(ctx)
+	}
+
+	caCert, ok := clusterSecret.Data["ca.crt"]
+	if !ok {
+		return nil, fmt.Errorf("ca.crt not found in secret %s", clusterSecret.Name)
+	}
+
+	return caCert, nil
+}
+
+// getHubCACert retrieves the hub CA certificate from the kube-root-ca.crt ConfigMap
+func (c *kueueSecretCopyController) getHubCACert(ctx context.Context) ([]byte, error) {
+	hubConfigMap, err := c.kubeClient.CoreV1().ConfigMaps(common.KueueNamespace).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hub CA cert from configmap: %v", err)
+	}
+
+	caCertData, ok := hubConfigMap.Data["ca.crt"]
+	if !ok {
+		return nil, fmt.Errorf("ca.crt not found in kube-root-ca.crt configmap")
+	}
+
+	return []byte(caCertData), nil
 }
 
 // generateKueConfigStr returns a kubeconfig YAML string for the given cluster and ServiceAccount token.

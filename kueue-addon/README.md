@@ -1,19 +1,29 @@
 # Kueue Addon for Open Cluster Management
 
-This addon provides an integration between Kueue and Open Cluster Management (OCM) to simplify MultiKueue setup and enhance multicluster scheduling capabilities.
+This addon provides an integration between [Kueue](https://kueue.sigs.k8s.io/) and Open Cluster Management (OCM) to simplify MultiKueue setup and enhance multicluster scheduling capabilities.
 
 This integration is designed for Kueue users who want to leverage OCM's capabilities to improve their multicluster workload scheduling experience. 
 
-The Kueue addon offers two primary benefits:
+The Kueue addon offers below benefits:
 
 - **Simplified MultiKueue Setup**
    - Automates the generation of MultiKueue specific Kubeconfig.
    - Streamlines the configuration of MultiKueue resources.
+   - Eliminates manual secret management.
+
+- **Centralizing Resource management**
+   - Manage spoke resources (ResourceFlavor, ClusterQueue, LocalQueue) from a single hub.
+   - Template-based deployment.
 
 - **Enhanced Multicluster Scheduling**
    - Integrates with OCM's placement with MultiKueue by implementing an admission check controller.
    - Generate MultiKueueConfig & MultiKueueCluster dynamically based on OCM placement decision.
+   - Supports advanced placement strategies.
 
+- **Flexible Installation Options**
+   - Standard installation for existing Kueue setups.
+   - Operator-based installation for OpenShift/OLM environments.
+   - Cluster proxy support for enhanced connectivity.
 
 ## Description
 
@@ -109,30 +119,30 @@ This controller is running on the hub, contains a credential controller and an a
 ### Addon chart
 - **Addon deployment:** Deploy [Kueue addon controllers](#kueue-addon-controller) on the hub.
 - **Addon Template:** To deploy `ResourceFlavor`, `ClusterQueue` and `LocalQueue` resources need by MultiKueue to spoke clusters.
-- **Other addon files:**  `ClusterManagementAddOn`, `ClusterRole`, `ClusterRoleBinding`, `ManagedClusterSetBinding`, `Placement` etc. 
+- **Kueue Operator Template:** Optional operator-based Kueue installation on spoke clusters.
+- **Other addon files:**  `ClusterManagementAddOn`, `ClusterRole`, `ClusterRoleBinding`, `ManagedClusterSetBinding`, `Placement` etc.
 
 ## Prerequisites
 
 - Open Cluster Management (OCM) installed with the following addons:
   - [Cluster Permission Addon](https://github.com/open-cluster-management-io/cluster-permission)
   - [Managed Service Account Addon](https://github.com/open-cluster-management-io/managed-serviceaccount)
-- Kueue already installed on the hub and spoke cluster
-- MultiKueue enabled on the hub
+  - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) (Optional) Enables hub-to-spoke connectivity for enhanced networking.
+- Kueue installed:
+  - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) installed and MultiKueue enabled.
+  - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (OpenShift/OLM environments).
 
 ## Quick Start
 
-**_Important_**: The addon requires you already installed OCM, Cluster Permission Addon, Managed Service Account Addon and Kueue. 
-The whole setup steps about this solution, please refer to this [Kueue Integration Solution](https://github.com/open-cluster-management-io/ocm/blob/main/solutions/kueue-admission-check).
+For a complete setup including all prerequisites on Kind:
+
+```bash
+./build/setup-env.sh
+```
 
 ## Installation
 
-On the hub cluster, deploy the addon.
-
-```bash
-make deploy
-```
-
-You can install the addons via the helm charts.
+### Step 1: Add Helm Repository
 
 ```bash
 $ helm repo add ocm https://open-cluster-management.io/helm-charts/
@@ -140,13 +150,96 @@ $ helm repo update
 $ helm search repo ocm/kueue-addon
 NAME            CHART VERSION   APP VERSION     DESCRIPTION
 ocm/kueue-addon <chart-version> <app-version>           A Helm chart for Open Cluster Management Kueue ...
+```
+
+### Step 2: Choose Your Installation Method
+
+#### Option A: Standard Installation (Kueue Pre-installed)
+
+For environments where Kueue is already installed:
+
+```bash
 $ helm install \
     -n open-cluster-management-addon --create-namespace \
     kueue-addon ocm/kueue-addon
     # Uncomment the following lines to customize your installation:
-    # --set skipClusterSetBinding=true \
-    # --set image.tag=<chart-version> \
+    # --set skipClusterSetBinding=true
 ```
+
+#### Option B: Operator-based Installation (OpenShift/OLM)
+
+In operator-based environments (for example, OpenShift with OLM), the addon can install the [Kueue operator](https://github.com/openshift/kueue-operator) for you.
+
+Prepare a values.operator.yaml with below content:
+
+```yaml
+kueue:
+  namespace: "openshift-kueue-operator"
+
+# Install Kueue via Operator
+installKueueViaOperator: true
+
+# Operator Lifecycle Manager RBAC configuration
+operatorLifecycleManager:
+  clusterRoleBindingName: kueue-operator-lifecycle-manager-rolebinding
+  clusterRoleName: system:controller:operator-lifecycle-manager
+
+# Kueue Operator configuration
+kueueOperator:
+  name: kueue-operator
+  namespace: openshift-kueue-operator
+  operatorGroupName: openshift-kueue-operator
+  channel: stable-v1.0
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: kueue-operator.v1.0.1
+
+# Cert Manager Operator configuration
+certManagerOperator:
+  name: openshift-cert-manager-operator
+  namespace: cert-manager-operator
+  operatorGroupName: cert-manager-operator
+  channel: stable-v1
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: cert-manager-operator.v1.17.0
+
+# Cluster proxy configuration
+clusterProxy:
+  url: "https://<cluster-proxy-url>"
+
+networkPolicy:
+  name: kueue-allow-egress-cluster-proxy-dns
+  namespace: "openshift-kueue-operator"
+  spec:
+    podSelector:
+      matchLabels:
+        app.openshift.io/name: kueue
+    policyTypes:
+    - Egress
+    egress:
+    - ports:
+      - port: 80
+        protocol: TCP
+    - ports:
+      - port: 443
+        protocol: TCP
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: <cluster-proxy-namespace>
+```
+
+```bash
+$ helm install \
+    -n open-cluster-management-addon --create-namespace \
+    kueue-addon ocm/kueue-addon \
+    -f values.operator.yaml
+    # Uncomment the following lines to customize your installation:
+    # --set skipClusterSetBinding=true
+```
+
+## Verification
 
 To confirm the installation from hub:
 
@@ -182,7 +275,7 @@ default-flavor   4h28m
 
 ## Usage
 
-The usage please refer to this [Kueue Integration Solution](https://github.com/open-cluster-management-io/ocm/blob/main/solutions/kueue-admission-check).
+For detailed usage examples and advanced scenarios, refer to the [Kueue Integration Solution](https://github.com/open-cluster-management-io/ocm/blob/main/solutions/kueue-admission-check).
 
 ## Design Details and Workflow
 
@@ -293,4 +386,3 @@ This automation greatly reduces manual effort and ensures that MultiKueue enviro
 - The admission check controller watches for `AdmissionCheck` resources referencing OCM `Placement`.
 - The admission check controller watches the `PlacementDecision`, creates or updates `MultiKueueCluster` resources with the kubeconfig details for each cluster, and also update these clusters in the `MultiKueueConfig` resource.
 - Finally, admission check controller updates the `AdmissionCheck` condition to true, indicating successful generation of the `MultiKueueConfig` and `MultiKueueCluster`, readying the [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) environment for job scheduling.
-

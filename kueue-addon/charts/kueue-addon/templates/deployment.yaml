@@ -21,6 +21,13 @@ spec:
           args:
             - "/kueue-addon-controller"
             - "hub"
+          env:
+            - name: KUEUE_NAMESPACE
+              value: {{ .Values.kueue.namespace }}
+            {{- if .Values.clusterProxy.url }}
+            - name: CLUSTER_PROXY_URL
+              value: {{ .Values.clusterProxy.url }}
+            {{- end }}
 
 ---
 
