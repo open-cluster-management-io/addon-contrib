@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -25,16 +26,18 @@ import (
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterinformerv1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1"
 	clusterlisterv1 "open-cluster-management.io/api/client/cluster/listers/cluster/v1"
-	clusterapiv1 "open-cluster-management.io/api/cluster/v1"
+	permissioninformer "open-cluster-management.io/cluster-permission/client/informers/externalversions/api/v1alpha1"
+	permissionlisterv1alpha1 "open-cluster-management.io/cluster-permission/client/listers/api/v1alpha1"
 	"open-cluster-management.io/sdk-go/pkg/patcher"
 )
 
 // kueueSecretCopyController reconciles instances of secret on the hub.
 type kueueSecretCopyController struct {
-	kubeClient    kubernetes.Interface
-	kueueClient   kueueclient.Interface
-	clusterLister clusterlisterv1.ManagedClusterLister
-	eventRecorder events.Recorder
+	kubeClient       kubernetes.Interface
+	kueueClient      kueueclient.Interface
+	clusterLister    clusterlisterv1.ManagedClusterLister
+	permissionLister permissionlisterv1alpha1.ClusterPermissionLister
+	eventRecorder    events.Recorder
 }
 
 // NewKueueSecretCopyController returns a controller that watches for multikueue secrets in all cluster namespaces
@@ -44,42 +47,55 @@ func NewKueueSecretCopyController(
 	kueueClient kueueclient.Interface,
 	secretInformer informerv1.SecretInformer,
 	clusterInformer clusterinformerv1.ManagedClusterInformer,
+	permissionInformers permissioninformer.ClusterPermissionInformer,
 	mkclusterInformer kueueinformerv1beta1.MultiKueueClusterInformer,
 	recorder events.Recorder) factory.Controller {
 	c := &kueueSecretCopyController{
-		kubeClient:    kubeClient,
-		kueueClient:   kueueClient,
-		clusterLister: clusterInformer.Lister(),
-		eventRecorder: recorder.WithComponentSuffix("kueue-secret-copy-controller"),
+		kubeClient:       kubeClient,
+		kueueClient:      kueueClient,
+		clusterLister:    clusterInformer.Lister(),
+		permissionLister: permissionInformers.Lister(),
+		eventRecorder:    recorder.WithComponentSuffix("kueue-secret-copy-controller"),
 	}
 
-	return factory.New().
-		WithFilteredEventsInformersQueueKeysFunc(
-			func(obj runtime.Object) []string {
-				accessor, _ := meta.Accessor(obj)
-				return []string{fmt.Sprintf("%s/%s", accessor.GetNamespace(), accessor.GetName())}
-			},
-			func(obj interface{}) bool {
-				accessor, _ := meta.Accessor(obj)
-				// Filter multikueue secret
-				return accessor.GetName() == common.MultiKueueResourceName
-			},
-			secretInformer.Informer()).
+	factory := factory.New().
+		// watch MultiKueueCluster we create
 		WithInformersQueueKeysFunc(
 			func(obj runtime.Object) []string {
 				accessor, _ := meta.Accessor(obj)
 				return []string{fmt.Sprintf("%s/%s", accessor.GetName(), common.MultiKueueResourceName)}
 			},
 			mkclusterInformer.Informer()).
-		WithSync(c.sync).
-		ToController("KueueSecretCopyController", recorder)
+		// watch clusterpermision
+		WithInformersQueueKeysFunc(
+			func(obj runtime.Object) []string {
+				accessor, _ := meta.Accessor(obj)
+				return []string{fmt.Sprintf("%s/%s", accessor.GetNamespace(), common.MultiKueueResourceName)}
+			},
+			permissionInformers.Informer())
+
+	if !common.IsImpersonationMode() {
+		// Non-impersonation mode: also watch MSA secrets
+		factory = factory.WithFilteredEventsInformersQueueKeysFunc(
+			func(obj runtime.Object) []string {
+				accessor, _ := meta.Accessor(obj)
+				return []string{fmt.Sprintf("%s/%s", accessor.GetNamespace(), accessor.GetName())}
+			},
+			func(obj any) bool {
+				accessor, _ := meta.Accessor(obj)
+				return accessor.GetName() == common.MultiKueueResourceName
+			},
+			secretInformer.Informer())
+	}
+
+	return factory.WithSync(c.sync).ToController("KueueSecretCopyController", recorder)
 }
 
-// Sync copies the multikueue ServiceAccount secret from the cluster namespace to the kueue namespace as a kubeconfig Secret.
+// sync reconciles kubeconfig secrets and MultiKueueCluster resources based on cluster state
 func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	key := syncCtx.QueueKey()
 	logger := klog.FromContext(ctx)
-	logger.Info("Reconciling Secret", "key", key)
+	logger.Info("Reconciling", "key", key)
 
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -87,124 +103,162 @@ func (c *kueueSecretCopyController) sync(ctx context.Context, syncCtx factory.Sy
 	}
 	clusterName := namespace
 
-	clusterSecret, err := c.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	// Check if cluster resources should be cleaned up
+	shouldCleanup, err := c.shouldCleanupResources(ctx, clusterName, namespace, name)
+	if err != nil {
+		return err
+	}
+	if shouldCleanup {
+		logger.Info("Cluster resources should be cleaned up", "cluster", clusterName)
+		return c.cleanupResources(ctx, clusterName)
+	}
+
+	// Create/update kubeconfig secret
+	err = c.createOrUpdateKubeconfigSecret(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Create/update MultiKueueCluster
+	return c.createOrUpdateMultiKueueCluster(ctx, clusterName)
+}
+
+// shouldCleanupResources determines if cluster resources should be cleaned up
+// Returns true if cluster permissions or MSA secrets are missing
+func (c *kueueSecretCopyController) shouldCleanupResources(ctx context.Context, clusterName, secretNamespace, secretName string) (bool, error) {
+	logger := klog.FromContext(ctx)
+
+	_, err := c.permissionLister.ClusterPermissions(clusterName).Get(common.MultiKueueResourceName)
 	if errors.IsNotFound(err) {
-		logger.Info("Secret not found, deleting corresponding kubeconfig secret and MultiKueueCluster", "secret", name, "namespace", namespace)
-		// Delete the corresponding kubeconfig secret in kueue namespace when source secret is not found
-		kubeconfigSecretName := common.GetMultiKueueSecretName(namespace)
-		err = c.kubeClient.CoreV1().Secrets(common.KueueNamespace).Delete(ctx, kubeconfigSecretName, metav1.DeleteOptions{})
-		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete kubeconfig secret %s: %v", kubeconfigSecretName, err)
-		}
-		if err == nil {
-			logger.Info("Deleted kubeconfig secret", "secret", kubeconfigSecretName, "namespace", common.KueueNamespace)
-		}
-
-		// Delete the corresponding MultiKueueCluster
-		err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
-		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete MultiKueueCluster %s: %v", clusterName, err)
-		}
-		if err == nil {
-			logger.Info("Deleted MultiKueueCluster", "cluster", clusterName)
-		}
-		return nil
+		logger.Info("ClusterPermission not found, resources should be cleaned up", "cluster", clusterName)
+		return true, nil
 	}
+
+	if !common.IsImpersonationMode() {
+		_, err = c.kubeClient.CoreV1().Secrets(secretNamespace).Get(ctx, secretName, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			logger.Info("MSA Secret not found, resources should be cleaned up", "secret", secretName, "namespace", secretNamespace)
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// cleanupResources removes kubeconfig secret and MultiKueueCluster
+func (c *kueueSecretCopyController) cleanupResources(ctx context.Context, clusterName string) error {
+	logger := klog.FromContext(ctx)
+
+	kubeconfigSecretName := common.GetMultiKueueSecretName(clusterName)
+	err := c.kubeClient.CoreV1().Secrets(common.KueueNamespace).Delete(ctx, kubeconfigSecretName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete kubeconfig secret %s: %v", kubeconfigSecretName, err)
+	}
+	if err == nil {
+		logger.Info("Deleted kubeconfig secret", "secret", kubeconfigSecretName, "namespace", common.KueueNamespace)
+	}
+
+	err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete MultiKueueCluster %s: %v", clusterName, err)
+	}
+	if err == nil {
+		logger.Info("Deleted MultiKueueCluster", "cluster", clusterName)
+	}
+
+	return nil
+}
+
+func (c *kueueSecretCopyController) createOrUpdateKubeconfigSecret(ctx context.Context, clusterName string) error {
+	clusterURL, err := c.getClusterURL(clusterName)
 	if err != nil {
 		return err
 	}
 
-	// Get cluster url from ManagedCluster
-	mcl, err := c.clusterLister.Get(clusterName)
-	if errors.IsNotFound(err) {
-		logger.Info("ManagedCluster not found", "cluster", clusterName)
-		return nil
-	}
+	kubeconfigSecret, err := c.generateKubeconfigSecret(ctx, clusterName, clusterURL)
 	if err != nil {
 		return err
 	}
 
-	if len(mcl.Spec.ManagedClusterClientConfigs) == 0 {
-		return fmt.Errorf("no client config found for cluster %s", clusterName)
-	}
-
-	clusterUrl := c.getClusterURL(mcl, clusterName)
-
-	// Generate the kubeconfig Secret
-	kubeconfSecret, err := c.generateKueConfigSecret(ctx, clusterSecret, clusterUrl, clusterName)
-	if err != nil {
-		return err
-	}
-	if kubeconfSecret == nil {
-		logger.Info("Kubeconfig secret is not ready")
-		return nil
-	}
-
-	// generate kubeconfig secret
-	_, _, err = resourceapply.ApplySecret(ctx, c.kubeClient.CoreV1(), c.eventRecorder, kubeconfSecret)
-	if err != nil {
-		return err
-	}
-
-	// Create or update MultiKueueCluster for this cluster
-	mkCluster := &kueuev1beta1.MultiKueueCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
-		Spec: kueuev1beta1.MultiKueueClusterSpec{
-			KubeConfig: kueuev1beta1.KubeConfig{
-				LocationType: kueuev1beta1.SecretLocationType,
-				Location:     common.GetMultiKueueSecretName(clusterName),
-			},
-		},
-	}
-	err = c.createOrUpdateMultiKueueCluster(ctx, mkCluster)
+	_, _, err = resourceapply.ApplySecret(ctx, c.kubeClient.CoreV1(), c.eventRecorder, kubeconfigSecret)
 	return err
 }
 
-// generateKueConfigSecret creates a kubeconfig Secret for the given cluster using the ManagedServiceAccount secret.
-func (c *kueueSecretCopyController) generateKueConfigSecret(ctx context.Context, clusterSecret *v1.Secret, clusterAddr, clusterName string) (*v1.Secret, error) {
+func (c *kueueSecretCopyController) getClusterURL(clusterName string) (string, error) {
+	if proxyURL := os.Getenv(common.ClusterProxyURLEnv); proxyURL != "" {
+		if !strings.HasSuffix(proxyURL, "/") {
+			proxyURL += "/"
+		}
+		return proxyURL + clusterName, nil
+	}
+
+	cluster, err := c.clusterLister.Get(clusterName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get ManagedCluster %s: %v", clusterName, err)
+	}
+
+	if len(cluster.Spec.ManagedClusterClientConfigs) == 0 {
+		return "", fmt.Errorf("no client config found for cluster %s", clusterName)
+	}
+
+	return cluster.Spec.ManagedClusterClientConfigs[0].URL, nil
+}
+
+// generateKubeconfigSecret creates a kubeconfig Secret for the given cluster using the appropriate token.
+func (c *kueueSecretCopyController) generateKubeconfigSecret(ctx context.Context, clusterName, clusterURL string) (*v1.Secret, error) {
+	if common.IsImpersonationMode() {
+		return c.buildImpersonationKubeconfigSecret(ctx, clusterName, clusterURL)
+	}
+
+	if os.Getenv(common.ClusterProxyURLEnv) != "" {
+		return c.buildProxyKubeconfigSecret(ctx, clusterName, clusterURL)
+	}
+
+	return c.buildStandardKubeconfigSecret(ctx, clusterName, clusterURL)
+}
+
+func (c *kueueSecretCopyController) buildImpersonationKubeconfigSecret(ctx context.Context, clusterName, clusterURL string) (*v1.Secret, error) {
+	clusterToken, err := c.getHubServiceAccountToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hub service account token for impersonation: %v", err)
+	}
+
+	caCert, err := c.getHubCACert(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.buildKubeconfigSecret(clusterName, clusterURL, "kueue-addon-controller", clusterToken, caCert), nil
+}
+
+func (c *kueueSecretCopyController) buildProxyKubeconfigSecret(ctx context.Context, clusterName, clusterURL string) (*v1.Secret, error) {
+	clusterSecret, err := c.getClusterSecret(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
 	clusterToken, ok := clusterSecret.Data["token"]
 	if !ok {
 		return nil, fmt.Errorf("token not found in secret %s", clusterSecret.Name)
 	}
 
-	caCert, err := c.getCACert(ctx, clusterSecret)
+	caCert, err := c.getHubCACert(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	kubeconfigStr := generateKueConfigStr(base64.StdEncoding.EncodeToString(caCert), clusterAddr, clusterName, clusterSecret.Name, clusterToken)
-
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.GetMultiKueueSecretName(clusterSecret.Namespace),
-			Namespace: common.KueueNamespace,
-		},
-		Data: map[string][]byte{
-			"kubeconfig": []byte(kubeconfigStr),
-		},
-	}, nil
+	return c.buildKubeconfigSecret(clusterName, clusterURL, clusterSecret.Name, clusterToken, caCert), nil
 }
 
-// getClusterURL returns the appropriate cluster URL, using proxy URL if configured.
-func (c *kueueSecretCopyController) getClusterURL(mcl *clusterapiv1.ManagedCluster, clusterName string) string {
-	url := mcl.Spec.ManagedClusterClientConfigs[0].URL
-
-	if proxyURL := os.Getenv(common.ClusterProxyURLEnv); proxyURL != "" {
-		// Ensure proxy URL ends with proper separator
-		if proxyURL[len(proxyURL)-1] != '/' {
-			proxyURL += "/"
-		}
-		url = proxyURL + clusterName
+func (c *kueueSecretCopyController) buildStandardKubeconfigSecret(ctx context.Context, clusterName, clusterURL string) (*v1.Secret, error) {
+	clusterSecret, err := c.getClusterSecret(ctx, clusterName)
+	if err != nil {
+		return nil, err
 	}
 
-	return url
-}
-
-// getCACert returns the appropriate CA certificate based on whether cluster proxy is configured.
-// When CLUSTER_PROXY_URL is set, it uses the hub CA certificate, otherwise it uses the cluster secret's CA certificate.
-func (c *kueueSecretCopyController) getCACert(ctx context.Context, clusterSecret *v1.Secret) ([]byte, error) {
-	if os.Getenv(common.ClusterProxyURLEnv) != "" {
-		return c.getHubCACert(ctx)
+	clusterToken, ok := clusterSecret.Data["token"]
+	if !ok {
+		return nil, fmt.Errorf("token not found in secret %s", clusterSecret.Name)
 	}
 
 	caCert, ok := clusterSecret.Data["ca.crt"]
@@ -212,10 +266,31 @@ func (c *kueueSecretCopyController) getCACert(ctx context.Context, clusterSecret
 		return nil, fmt.Errorf("ca.crt not found in secret %s", clusterSecret.Name)
 	}
 
-	return caCert, nil
+	return c.buildKubeconfigSecret(clusterName, clusterURL, clusterSecret.Name, clusterToken, caCert), nil
 }
 
-// getHubCACert retrieves the hub CA certificate from the kube-root-ca.crt ConfigMap
+func (c *kueueSecretCopyController) getClusterSecret(ctx context.Context, clusterName string) (*v1.Secret, error) {
+	clusterSecret, err := c.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, common.MultiKueueResourceName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster secret for %s: %v", clusterName, err)
+	}
+	return clusterSecret, nil
+}
+
+func (c *kueueSecretCopyController) buildKubeconfigSecret(clusterName, clusterURL, userName string, token, caCert []byte) *v1.Secret {
+	kubeconfigStr := generateKueConfigStr(base64.StdEncoding.EncodeToString(caCert), clusterURL, clusterName, userName, token)
+
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.GetMultiKueueSecretName(clusterName),
+			Namespace: common.KueueNamespace,
+		},
+		Data: map[string][]byte{
+			"kubeconfig": []byte(kubeconfigStr),
+		},
+	}
+}
+
 func (c *kueueSecretCopyController) getHubCACert(ctx context.Context) ([]byte, error) {
 	hubConfigMap, err := c.kubeClient.CoreV1().ConfigMaps(common.KueueNamespace).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
 	if err != nil {
@@ -230,7 +305,15 @@ func (c *kueueSecretCopyController) getHubCACert(ctx context.Context) ([]byte, e
 	return []byte(caCertData), nil
 }
 
-// generateKueConfigStr returns a kubeconfig YAML string for the given cluster and ServiceAccount token.
+func (c *kueueSecretCopyController) getHubServiceAccountToken() ([]byte, error) {
+	tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	token, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read service account token from %s: %v", tokenPath, err)
+	}
+	return token, nil
+}
+
 func generateKueConfigStr(caCert, clusterAddr, clusterName, userName string, saToken []byte) string {
 	return fmt.Sprintf(`apiVersion: v1
 clusters:
@@ -253,11 +336,20 @@ users:
 		caCert, clusterAddr, clusterName, clusterName, userName, clusterName, clusterName, userName, saToken)
 }
 
-// createOrUpdateMultiKueueCluster creates or updates a MultiKueueCluster resource for a specific cluster.
-func (c *kueueSecretCopyController) createOrUpdateMultiKueueCluster(ctx context.Context, mkc *kueuev1beta1.MultiKueueCluster) error {
-	oldmkcluster, err := c.kueueClient.KueueV1beta1().MultiKueueClusters().Get(ctx, mkc.Name, metav1.GetOptions{})
+func (c *kueueSecretCopyController) createOrUpdateMultiKueueCluster(ctx context.Context, clusterName string) error {
+	mkCluster := &kueuev1beta1.MultiKueueCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
+		Spec: kueuev1beta1.MultiKueueClusterSpec{
+			KubeConfig: kueuev1beta1.KubeConfig{
+				LocationType: kueuev1beta1.SecretLocationType,
+				Location:     common.GetMultiKueueSecretName(clusterName),
+			},
+		},
+	}
+
+	oldmkcluster, err := c.kueueClient.KueueV1beta1().MultiKueueClusters().Get(ctx, mkCluster.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		_, err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Create(ctx, mkc, metav1.CreateOptions{})
+		_, err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Create(ctx, mkCluster, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
@@ -265,6 +357,6 @@ func (c *kueueSecretCopyController) createOrUpdateMultiKueueCluster(ctx context.
 	}
 
 	mkclusterPatcher := patcher.NewPatcher[*kueuev1beta1.MultiKueueCluster, kueuev1beta1.MultiKueueClusterSpec, kueuev1beta1.MultiKueueClusterStatus](c.kueueClient.KueueV1beta1().MultiKueueClusters())
-	_, err = mkclusterPatcher.PatchSpec(ctx, mkc, mkc.Spec, oldmkcluster.Spec)
+	_, err = mkclusterPatcher.PatchSpec(ctx, mkCluster, mkCluster.Spec, oldmkcluster.Spec)
 	return err
 }

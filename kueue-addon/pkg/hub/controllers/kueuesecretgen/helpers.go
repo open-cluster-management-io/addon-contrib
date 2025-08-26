@@ -3,8 +3,10 @@ package kueuesecretgen
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,8 +58,9 @@ func applyClusterPermission(
 	// Set the ClusterPermission and subject
 	required.Name = common.MultiKueueResourceName
 	required.Namespace = clusterName
-	required.Spec.ClusterRoleBinding.Subject.Name = common.MultiKueueResourceName
-	required.Spec.ClusterRoleBinding.Subject.Namespace = "open-cluster-management-agent-addon"
+	if err := setClusterRoleBindingSubject(&required.Spec.ClusterRoleBinding.Subject); err != nil {
+		return err
+	}
 
 	// Try to get existing ClusterPermission
 	existing, err := permissionClient.ApiV1alpha1().ClusterPermissions(clusterName).Get(ctx, required.Name, metav1.GetOptions{})
@@ -120,4 +123,41 @@ func applyManagedServiceAccount(
 		msaClient.AuthenticationV1beta1().ManagedServiceAccounts(clusterName))
 	_, err = patcher.PatchSpec(ctx, required, required.Spec, existing.Spec)
 	return err
+}
+
+// getPodServiceAccountInfo returns the service account name and namespace from environment variables
+func getPodServiceAccountInfo() (name, namespace string, err error) {
+	saName := os.Getenv("SERVICE_ACCOUNT_NAME")
+	if saName == "" {
+		return "", "", fmt.Errorf("SERVICE_ACCOUNT_NAME environment variable is not set")
+	}
+
+	saNamespace := os.Getenv("POD_NAMESPACE")
+	if saNamespace == "" {
+		return "", "", fmt.Errorf("POD_NAMESPACE environment variable is not set")
+	}
+
+	return saName, saNamespace, nil
+}
+
+// setClusterRoleBindingSubject sets the subject based on impersonation mode
+func setClusterRoleBindingSubject(subject *rbacv1.Subject) error {
+	if os.Getenv(common.ClusterProxyImpersonationEnv) == "true" {
+		// Impersonation mode: bind cluster permission to hub kueue-addon-controller  service account.
+		saName, saNamespace, err := getPodServiceAccountInfo()
+		if err != nil {
+			return fmt.Errorf("failed to get pod service account info for impersonation: %v", err)
+		}
+		subject.APIGroup = "rbac.authorization.k8s.io"
+		subject.Kind = "User"
+		subject.Name = fmt.Sprintf("cluster:hub:system:serviceaccount:%s:%s", saNamespace, saName)
+		subject.Namespace = ""
+	} else {
+		// Standard mode: bind cluster permission to managed cluster service account.
+		subject.APIGroup = ""
+		subject.Kind = "ServiceAccount"
+		subject.Name = common.MultiKueueResourceName
+		subject.Namespace = "open-cluster-management-agent-addon"
+	}
+	return nil
 }

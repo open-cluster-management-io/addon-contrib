@@ -66,8 +66,6 @@ func NewkueueSecretGenController(
 		ToController("kueueSecretGenController", recorder)
 }
 
-// sync ensures ClusterPermission and ManagedServiceAccount are present for the ManagedCluster.
-// If the cluster is being deleted, it cleans up these resources.
 func (c *kueueSecretGenController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	managedClusterName := syncCtx.QueueKey()
 	logger := klog.FromContext(ctx)
@@ -84,22 +82,31 @@ func (c *kueueSecretGenController) sync(ctx context.Context, syncCtx factory.Syn
 
 	// If the managed cluster is deleting, delete the clusterpermission, managedserviceaccount as well.
 	if !managedCluster.DeletionTimestamp.IsZero() {
-		logger.Info("Managed cluster is being deleted, cleaning up resources", "cluster", managedClusterName)
-
-		// Delete ClusterPermission
-		if err := c.permissionClient.ApiV1alpha1().ClusterPermissions(managedClusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete ClusterPermission %s in cluster %s: %v", common.MultiKueueResourceName, managedClusterName, err)
-		}
-
-		// Delete ManagedServiceAccount
-		if err := c.msaClient.AuthenticationV1beta1().ManagedServiceAccounts(managedClusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete ManagedServiceAccount %s in cluster %s: %v", common.MultiKueueResourceName, managedClusterName, err)
-		}
-
-		return nil
+		return c.cleanupClusterResources(ctx, managedClusterName, logger)
 	}
 
-	// Apply ClusterPermission from yaml
+	return c.applyClusterResources(ctx, managedClusterName, logger)
+}
+
+func (c *kueueSecretGenController) cleanupClusterResources(ctx context.Context, clusterName string, logger klog.Logger) error {
+	logger.Info("Managed cluster is being deleted, cleaning up resources", "cluster", clusterName)
+
+	err := c.permissionClient.ApiV1alpha1().ClusterPermissions(clusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete ClusterPermission %s in cluster %s: %v", common.MultiKueueResourceName, clusterName, err)
+	}
+
+	if !common.IsImpersonationMode() {
+		err = c.msaClient.AuthenticationV1beta1().ManagedServiceAccounts(clusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ManagedServiceAccount %s in cluster %s: %v", common.MultiKueueResourceName, clusterName, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *kueueSecretGenController) applyClusterResources(ctx context.Context, clusterName string, logger klog.Logger) error {
 	if err := applyClusterPermission(
 		ctx,
 		c.permissionClient,
@@ -107,21 +114,20 @@ func (c *kueueSecretGenController) sync(ctx context.Context, syncCtx factory.Syn
 			return manifests.ClusterPermissionManifestFiles.ReadFile(name)
 		},
 		clusterPermissionFile,
-		managedClusterName,
+		clusterName,
 	); err != nil {
 		return fmt.Errorf("failed to apply cluster permission: %v", err)
 	}
-	logger.Info("ClusterPermission applied", "namespace", managedClusterName)
+	logger.Info("ClusterPermission applied", "namespace", clusterName)
 
-	// Apply ManagedServiceAccount
-	if err := applyManagedServiceAccount(
-		ctx,
-		c.msaClient,
-		managedClusterName,
-	); err != nil {
-		return fmt.Errorf("failed to apply managed service account: %v", err)
+	if !common.IsImpersonationMode() {
+		if err := applyManagedServiceAccount(ctx, c.msaClient, clusterName); err != nil {
+			return fmt.Errorf("failed to apply managed service account: %v", err)
+		}
+		logger.Info("ManagedServiceAccount applied", "name", common.MultiKueueResourceName, "namespace", clusterName)
+	} else {
+		logger.Info("Skipping ManagedServiceAccount creation - impersonation mode enabled", "cluster", clusterName)
 	}
-	logger.Info("ManagedServiceAccount applied", "name", common.MultiKueueResourceName, "namespace", managedClusterName)
 
 	return nil
 }
