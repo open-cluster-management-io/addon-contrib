@@ -196,6 +196,7 @@ spec:
       - get
   clusterRoleBinding:
     subject:
-      kind: ServiceAccount
+      apiGroup: placeholder
+      kind: placeholder
       name: placeholder
       namespace: placeholder

@@ -17,6 +17,8 @@ import (
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	permissionv1alpha1 "open-cluster-management.io/cluster-permission/api/v1alpha1"
+	permissionclient "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
@@ -333,4 +335,32 @@ func RemoveMultiKueueClusters(ctx context.Context, hubKueueClient kueueclientset
 	if err != nil {
 		ginkgo.GinkgoWriter.Printf("Failed to delete MultiKueueCluster %s: %v\n", clusterName, err)
 	}
+}
+
+// Helper function to update ClusterPermission with proper conditions
+func UpdateClusterPermissionCondition(ctx context.Context, permissionClient permissionclient.Interface, clusterName string, ready bool) {
+	ginkgo.By(fmt.Sprintf("Creating ClusterPermission %s in namespace %s (ready: %v)", common.MultiKueueResourceName, clusterName, ready))
+
+	cp, err := permissionClient.ApiV1alpha1().ClusterPermissions(clusterName).Get(ctx, "multikueue", metav1.GetOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	cp.Status = permissionv1alpha1.ClusterPermissionStatus{
+		Conditions: []metav1.Condition{
+			{
+				Type:               string(permissionv1alpha1.ConditionTypeAppliedRBACManifestWork),
+				LastTransitionTime: metav1.Now(),
+				Reason:             "Applied",
+				Message:            "RBAC manifest work has been applied successfully",
+			},
+		},
+	}
+
+	if ready {
+		cp.Status.Conditions[0].Status = metav1.ConditionTrue
+	} else {
+		cp.Status.Conditions[0].Status = metav1.ConditionFalse
+	}
+
+	_, err = permissionClient.ApiV1alpha1().ClusterPermissions(clusterName).UpdateStatus(ctx, cp, metav1.UpdateOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 }

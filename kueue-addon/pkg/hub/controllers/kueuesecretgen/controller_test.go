@@ -2,6 +2,7 @@ package kueuesecretgen
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -63,6 +64,7 @@ func TestSync(t *testing.T) {
 		expectedPermissionVerb string
 		expectedMSAVerb        string
 		expectedErr            string
+		envVars                map[string]string
 	}{
 		{
 			name:                   "create resources for new cluster",
@@ -108,10 +110,44 @@ func TestSync(t *testing.T) {
 			expectedPermissionVerb: "patch",
 			expectedMSAVerb:        "patch",
 		},
+		{
+			name:                   "create only ClusterPermission for new cluster when impersonation mode enabled",
+			clusterName:            "cluster1",
+			existingObjects:        []runtime.Object{newManagedCluster("cluster1", false)},
+			expectedPermissionVerb: "create",
+			expectedMSAVerb:        "", // should not create MSA in impersonation mode
+			envVars: map[string]string{
+				common.ClusterProxyImpersonationEnv: "true",
+				"SERVICE_ACCOUNT_NAME":              "test-sa",
+				"POD_NAMESPACE":                     "test-ns",
+			},
+		},
+		{
+			name:                   "delete only ClusterPermission for new cluster when impersonation mode enabled",
+			clusterName:            "cluster1",
+			existingObjects:        []runtime.Object{newManagedCluster("cluster1", true)},
+			expectedPermissionVerb: "delete",
+			expectedMSAVerb:        "", // should not delete MSA in impersonation mode
+			envVars: map[string]string{
+				common.ClusterProxyImpersonationEnv: "true",
+			},
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// Set test env vars
+			for key, value := range c.envVars {
+				os.Setenv(key, value)
+			}
+
+			// Restore env vars at the end
+			defer func() {
+				for key := range c.envVars {
+					os.Unsetenv(key)
+				}
+			}()
+
 			clusterClient := clusterfake.NewSimpleClientset(c.existingObjects...)
 			permissionClient := permissionfake.NewSimpleClientset(c.permissionObjects...)
 			msaClient := msafake.NewSimpleClientset(c.msaObjects...)
@@ -166,30 +202,28 @@ func TestSync(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			if c.expectedPermissionVerb != "" {
-				var found bool
-				for _, action := range permissionClient.Actions() {
-					if action.GetVerb() == c.expectedPermissionVerb && action.GetNamespace() == c.clusterName {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected %s action on permission client in namespace %s, but got actions: %+v", c.expectedPermissionVerb, c.clusterName, permissionClient.Actions())
+			// Check permission actions
+			var permissionVerbFound bool
+			for _, action := range permissionClient.Actions() {
+				if action.GetVerb() == c.expectedPermissionVerb && action.GetNamespace() == c.clusterName {
+					permissionVerbFound = true
+					break
 				}
 			}
+			if (c.expectedPermissionVerb != "" && !permissionVerbFound) || (c.expectedPermissionVerb == "" && len(permissionClient.Actions()) > 0) {
+				t.Errorf("expected %s permission action in namespace %s, got: %+v", c.expectedPermissionVerb, c.clusterName, permissionClient.Actions())
+			}
 
-			if c.expectedMSAVerb != "" {
-				var found bool
-				for _, action := range msaClient.Actions() {
-					if action.GetVerb() == c.expectedMSAVerb && action.GetNamespace() == c.clusterName {
-						found = true
-						break
-					}
+			// Check MSA actions
+			var msaVerbFound bool
+			for _, action := range msaClient.Actions() {
+				if action.GetVerb() == c.expectedMSAVerb && action.GetNamespace() == c.clusterName {
+					msaVerbFound = true
+					break
 				}
-				if !found {
-					t.Errorf("expected %s action on msa client in namespace %s, but got actions: %+v", c.expectedMSAVerb, c.clusterName, msaClient.Actions())
-				}
+			}
+			if (c.expectedMSAVerb != "" && !msaVerbFound) || (c.expectedMSAVerb == "" && len(msaClient.Actions()) > 0) {
+				t.Errorf("expected %s msa action in namespace %s, got: %+v", c.expectedMSAVerb, c.clusterName, msaClient.Actions())
 			}
 		})
 	}

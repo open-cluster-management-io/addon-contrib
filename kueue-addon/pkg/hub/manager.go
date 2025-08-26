@@ -113,6 +113,7 @@ func RunControllerManagerWithInformers(
 		kueueClient,
 		secretInformers.Core().V1().Secrets(),
 		clusterInformers.Cluster().V1().ManagedClusters(),
+		permissionInformers.Api().V1alpha1().ClusterPermissions(),
 		kueueInformers.Kueue().V1beta1().MultiKueueClusters(),
 		controllerContext.EventRecorder,
 	)

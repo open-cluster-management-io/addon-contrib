@@ -74,7 +74,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 	})
 
 	ginkgo.Context("AdmissionCheck generate MultiKueueConfig", func() {
-		ginkgo.It("should create MultiKueueConfig and MultiKueueClusters for clusters in PlacementDecision", func() {
+		ginkgo.It("should create MultiKueueConfig for clusters in PlacementDecision", func() {
 			// Create placement with decision
 			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
 
@@ -85,7 +85,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
 		})
 
-		ginkgo.It("should update MultiKueueClusters when PlacementDecision changes", func() {
+		ginkgo.It("should update MultiKueueConfig when PlacementDecision changes", func() {
 			// Create placement with initial decision
 			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1})
 
@@ -111,7 +111,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, acName)
 		})
 
-		ginkgo.It("should delete MultiKueueCluster when a cluster is removed from PlacementDecision", func() {
+		ginkgo.It("should update MultiKueueConfig when a cluster is removed from PlacementDecision", func() {
 			// Create placement with initial decision
 			helper.CreatePlacementWithDecision(ctx, hubClusterClient, kueueNamespace, placementName, []string{cluster1, cluster2})
 
@@ -235,6 +235,8 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 
 			// Simulate create multikueue secret
 			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate cluster permission ready
+			helper.UpdateClusterPermissionCondition(ctx, hubPermissionClient, cluster1, true)
 
 			// Assert kubeconfig secret is created in kueue namespace
 			gomega.Eventually(func() bool {
@@ -251,6 +253,8 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 
 			// Simulate create multikueue secret
 			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate cluster permission ready
+			helper.UpdateClusterPermissionCondition(ctx, hubPermissionClient, cluster1, true)
 
 			// Wait for kubeconfig secret to be created
 			gomega.Eventually(func() bool {
@@ -284,8 +288,10 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 		ginkgo.It("should delete kubeconfig secret when source is deleted", func() {
 			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
 
-			// Create multikueue secret
+			// Simulate create multikueue secret
 			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate cluster permission ready
+			helper.UpdateClusterPermissionCondition(ctx, hubPermissionClient, cluster1, true)
 
 			// Wait for kubeconfig secret to be created
 			gomega.Eventually(func() bool {
