@@ -3,7 +3,7 @@ kind: AddOnTemplate
 metadata:
   name: kueue-addon
 spec:
-  addonName: kueue-addon
+  addonName: multicluster-kueue-manager
   agentSpec:
     workload:
       manifests:

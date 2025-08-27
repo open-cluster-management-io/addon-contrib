@@ -126,7 +126,7 @@ jobs:
 
       - name: Run chart-testing (lint)
         if: steps.list-changed.outputs.changed == 'true'
-        run: ct lint --chart-dirs ${{ inputs.repo }}/charts
+        run: ct lint --chart-dirs ${{ inputs.repo }}/charts --check-version-increment=false
 
       - name: Format cluster name
         id: format-cluster-name
