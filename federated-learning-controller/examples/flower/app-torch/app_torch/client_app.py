@@ -56,14 +56,14 @@ class FlowerClient(NumPyClient):
         loss, accuracy = test(self.net, self.device, self.valloader)
         print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
         metrics = {
-            "evaluation_loss": loss,
+            "loss": loss,
             "accuracy": accuracy,
         }
         labels = {
             "round": config["server_round"],
         }
         write_metrics(metrics, labels)
-        return loss, len(self.valloader.dataset), {"accuracy": accuracy}
+        return loss, len(self.valloader.dataset), {"accuracy": accuracy, "loss": loss}
 
 def client_fn(context: Context):
     # Load model and data

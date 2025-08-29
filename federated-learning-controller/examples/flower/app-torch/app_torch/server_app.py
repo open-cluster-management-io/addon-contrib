@@ -40,8 +40,9 @@ def parse_arguments():
 def client_weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     """Compute weighted average of client accuracy."""
     accuracies = [num_examples * metric["accuracy"] for num_examples, metric in metrics]
+    losses = [num_examples * metric["loss"] for num_examples, metric in metrics]
     examples = [num_examples for num_examples, _ in metrics]
-    return {"accuracy": sum(accuracies) / sum(examples)}
+    return {"accuracy": sum(accuracies) / sum(examples), "loss": sum(losses) / sum(examples)}
 
 def fit_evaluate_config(server_round: int):
     config = {

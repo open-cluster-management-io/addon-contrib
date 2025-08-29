@@ -39,6 +39,7 @@ spec:
               labels:
                 job-name: {{ .ClientJobName }} # Ensure labels match the selector
             spec:
+              shareProcessNamespace: true
               volumes:
                 - name: metric-data
                   emptyDir: {}

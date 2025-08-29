@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
-	"fl_sidecar/exporter"
-	"fl_sidecar/watcher"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"fl_sidecar/exporter"
+	"fl_sidecar/watcher"
 )
 
 // Command-line flags
@@ -65,12 +68,32 @@ func main() {
 
 	log.Printf("Start watching file %s", metricFile)
 
+	// Check if main container process is still running periodically
+	go func() {
+		for {
+			// Check if main container is still running (when shareProcessNamespace is enabled)
+			if checkMainContainerExited() {
+				log.Println("Main container exited, exiting sidecar...")
+				cancel()
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// Check every 5 seconds
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}()
+
 	// Main loop to process file updates and handle shutdown
 	for {
 		select {
 		case content, ok := <-updateChan:
 			if !ok {
-				log.Fatalf("Watcher channel closed")
+				log.Println("Watcher channel closed")
 				return
 			}
 
@@ -82,6 +105,30 @@ func main() {
 			return
 		}
 	}
+}
+
+// checkMainContainerExited checks if the main container (flower-server or flower-client) process has exited
+// This works when shareProcessNamespace is enabled in the pod spec
+func checkMainContainerExited() bool {
+	// Check if the main flower server or client process is still running
+	// Try different patterns for server and client containers
+	patterns := []string{
+		".*server.*--num-rounds",     // Server process pattern
+		".*client.*--data-config",    // Client process pattern
+		".*client.*--server-address", // Alternative client pattern
+	}
+
+	for _, pattern := range patterns {
+		cmd := exec.Command("pgrep", "-f", pattern)
+		err := cmd.Run()
+		if err == nil {
+			// Found a matching process, main container is still running
+			return false
+		}
+	}
+
+	// No matching processes found, main container has likely exited
+	return true
 }
 
 // parseAndPushMtrics parses the content of the metric file and pushes the metrics to the reporter.
