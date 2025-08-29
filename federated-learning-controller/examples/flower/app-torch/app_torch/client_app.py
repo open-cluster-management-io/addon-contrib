@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import StepLR
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 from app_torch.task import Net, get_weights, load_data, set_weights, test, train
+from app_torch.utils import write_metrics
 
 
 # Define Flower Client and client_fn
@@ -32,6 +33,14 @@ class FlowerClient(NumPyClient):
             # test_loss = test(model, device, test_loader)
             # test_losses.append(test_loss)
             loss = train(self.net, self.device, self.trainloader, optimizer, epoch)
+            metrics = {
+                "train_loss": loss,
+            }
+            labels = {
+                "round": config["server_round"],
+                "epoch": epoch,
+            }
+            write_metrics(metrics, labels)
             epoch_loss += loss
             scheduler.step()
             
@@ -45,8 +54,16 @@ class FlowerClient(NumPyClient):
         set_weights(self.net, parameters)
         
         loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"Loss: {loss}, Accuracy: {accuracy}")
-        return loss, len(self.valloader.dataset), {"accuracy": accuracy}
+        print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
+        metrics = {
+            "loss": loss,
+            "accuracy": accuracy,
+        }
+        labels = {
+            "round": config["server_round"],
+        }
+        write_metrics(metrics, labels)
+        return loss, len(self.valloader.dataset), {"accuracy": accuracy, "loss": loss}
 
 def client_fn(context: Context):
     # Load model and data

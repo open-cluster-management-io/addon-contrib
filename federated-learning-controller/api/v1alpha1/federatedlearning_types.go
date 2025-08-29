@@ -56,6 +56,10 @@ const (
 	Other  Framework = "other"
 )
 
+const (
+	AnnotationSidecarImage = "federated-learning.io/sidecar-image"
+)
+
 // FederatedLearningSpec defines the desired state of FederatedLearning.
 type FederatedLearningSpec struct {
 	// +kubebuilder:default=other
@@ -102,7 +106,7 @@ type ListenerSpec struct {
 	// +kubebuilder:default:=8080
 	Port int          `json:"port,omitempty"`
 	Type ListenerType `json:"type,omitempty"`
-	
+
 	// IP is the optional bind IP for NodePort services.
 	// It is only applicable when Type is "NodePort".
 	// +optional
