@@ -12,6 +12,7 @@ type FederatedLearningServerParams struct {
 	ListenerType        string
 	ListenerPort        int
 	CreateService       bool
+	ObsSidecarImage     string
 }
 
 type FederatedLearningClientParams struct {
@@ -22,4 +23,5 @@ type FederatedLearningClientParams struct {
 	ClientJobImage     string
 	ClientDataConfig   string
 	ServerAddress      string
+	ObsSidecarImage    string
 }

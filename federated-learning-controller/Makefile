@@ -1,6 +1,7 @@
 REGISTRY ?= quay.io/open-cluster-management
 # Image URL to use all building/pushing image targets
 IMG ?= $(REGISTRY)/federated-learning-controller:latest
+SIDECAR_IMG ?= $(REGISTRY)/federated-learning-sidecar:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.31.0
 
@@ -121,6 +122,21 @@ docker-platform-build: ## Build docker image for multiple platforms (linux/amd64
 docker-platform-push: ## Build and push docker image for multiple platforms (linux/amd64,linux/arm64).
 	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 --push -t ${IMG} .
 
+.PHONY: docker-sidecar-build
+docker-sidecar-build: ## Build sidecar docker image.
+	$(CONTAINER_TOOL) build -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
+
+.PHONY: docker-sidecar-push
+docker-sidecar-push: ## Push sidecar docker image.
+	$(CONTAINER_TOOL) push ${SIDECAR_IMG}
+
+.PHONY: docker-sidecar-platform-build
+docker-sidecar-platform-build: ## Build sidecar docker image for multiple platforms (linux/amd64,linux/arm64).
+	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
+
+.PHONY: docker-sidecar-platform-push
+docker-sidecar-platform-push: ## Build and push sidecar docker image for multiple platforms (linux/amd64,linux/arm64).
+	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 --push -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
