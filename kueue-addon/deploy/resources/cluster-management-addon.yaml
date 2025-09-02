@@ -1,10 +1,11 @@
 apiVersion: addon.open-cluster-management.io/v1alpha1
 kind: ClusterManagementAddOn
 metadata:
-  name: kueue-addon
+  name: multicluster-kueue-manager
 spec:
   addOnMeta:
-    displayName: kueue-addon
+    displayName: Multicluster Kueue Manager
+    description: Provides an integration with Kueue to simplify MultiKueue setup, centraliz Kueue resource management and enhance multicluster scheduling capabilities.
   supportedConfigs:
   - group: addon.open-cluster-management.io
     resource: addontemplates

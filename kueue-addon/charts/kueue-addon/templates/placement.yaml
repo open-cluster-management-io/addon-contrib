@@ -13,7 +13,7 @@ spec:
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: {{ .Values.placement.name }}
+  name: {{ .Values.placement.name | default .Release.Name }}
   namespace: {{ .Release.Namespace }}
 spec:
   clusterSets:
