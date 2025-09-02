@@ -42,6 +42,8 @@ Operator Resources - Single Template
   kind: Kueue
   metadata:
     name: cluster
+    annotations:
+      addon.open-cluster-management.io/deletion-orphan: ""
     labels:
       app.kubernetes.io/name: kueue-operator
   spec:
