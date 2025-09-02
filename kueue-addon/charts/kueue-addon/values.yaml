@@ -51,6 +51,12 @@ clusterProxy:
   # Example: "https://cluster-proxy.example.com/clusters/"
   url: ""
 
+  # Enable impersonation feature for cluster proxy
+  # When enabled, the ClusterRoleBinding subject will be set to the kueue-addon-controller service account
+  # This allows the Kueue hub controller to impersonate requests through the cluster proxy
+  impersonation:
+    enabled: false
+
 # NetworkPolicy configuration (uncomment when installKueueViaOperator enabled)
 # Uncomment when using operator-based installation with network restrictions
 # networkPolicy:

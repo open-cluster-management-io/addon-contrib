@@ -24,9 +24,21 @@ spec:
           env:
             - name: KUEUE_NAMESPACE
               value: {{ .Values.kueue.namespace }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_ACCOUNT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
             {{- if .Values.clusterProxy.url }}
             - name: CLUSTER_PROXY_URL
               value: {{ .Values.clusterProxy.url }}
+            {{- end }}
+            {{- if .Values.clusterProxy.impersonation.enabled }}
+            - name: CLUSTER_PROXY_IMPERSONATION_ENABLED
+              value: "true"
             {{- end }}
 
 ---

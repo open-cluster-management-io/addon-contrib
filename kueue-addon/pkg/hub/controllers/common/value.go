@@ -10,6 +10,8 @@ const (
 	ClusterProxyURLEnv = "CLUSTER_PROXY_URL"
 	// KueueNamespaceEnv is the environment variable for kueue installed namespace
 	KueueNamespaceEnv = "KUEUE_NAMESPACE"
+	// ClusterProxyImpersonationEnv is the environment variable for enabling cluster proxy impersonation
+	ClusterProxyImpersonationEnv = "CLUSTER_PROXY_IMPERSONATION_ENABLED"
 )
 
 var (
@@ -34,4 +36,8 @@ func getKueueNamespace() string {
 // Get MultiKueue Kubeconfig Secret name
 func GetMultiKueueSecretName(clusterName string) string {
 	return fmt.Sprintf("%s-%s", MultiKueueResourceName, clusterName)
+}
+
+func IsImpersonationMode() bool {
+	return os.Getenv(ClusterProxyImpersonationEnv) == "true"
 }
