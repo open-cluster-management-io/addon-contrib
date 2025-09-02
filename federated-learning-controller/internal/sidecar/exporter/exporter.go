@@ -110,6 +110,38 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[st
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Check if metrics values have actually changed
+	metricsChanged := false
+	if len(newMetrics) != len(r.metrics) {
+		metricsChanged = true
+	} else {
+		for name, newValue := range newMetrics {
+			if oldValue, exists := r.metrics[name]; !exists || oldValue != newValue {
+				metricsChanged = true
+				break
+			}
+		}
+	}
+
+	// Check if labels have changed
+	labelsChanged := false
+	if len(newLabels) != len(r.labels) {
+		labelsChanged = true
+	} else {
+		for name, newValue := range newLabels {
+			if oldValue, exists := r.labels[name]; !exists || oldValue != newValue {
+				labelsChanged = true
+				break
+			}
+		}
+	}
+
+	// Only update if values have actually changed
+	if !metricsChanged && !labelsChanged {
+		log.Println("No metric or label changes detected, skipping update")
+		return
+	}
+
 	// Update the metrics and labels
 	r.metrics = newMetrics
 	r.labels = newLabels
