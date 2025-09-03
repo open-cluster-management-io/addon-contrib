@@ -25,9 +25,8 @@ class FlowerClient(NumPyClient):
     def fit(self, parameters, config):
         set_weights(self.net, parameters)
         
-        loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"Before training Loss: {loss}, Accuracy: {accuracy}")
-      
+        # the aggregated model from the previous round
+        
         optimizer = optim.Adadelta(self.net.parameters(), lr=1.0)
         scheduler = StepLR(optimizer, step_size=1, gamma=0.7)
 
@@ -48,9 +47,6 @@ class FlowerClient(NumPyClient):
         }
         write_metrics(metrics, labels) 
         
-        loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"After training Loss: {loss}, Accuracy: {accuracy}")
-        
         return (
             get_weights(self.net),
             len(self.trainloader.dataset),
@@ -58,9 +54,17 @@ class FlowerClient(NumPyClient):
         )
 
     def evaluate(self, parameters, config):
+        # the aggregated model from the current round
         set_weights(self.net, parameters)
         loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
+        metrics = {
+            "accuracy": accuracy, 
+            "loss": loss,
+        }
+        labels = {
+            "round": config["server_round"],
+        }
+        write_metrics(metrics, labels) 
         return loss, len(self.valloader.dataset), {"accuracy": accuracy, "loss": loss}
 
 def client_fn(context: Context):
