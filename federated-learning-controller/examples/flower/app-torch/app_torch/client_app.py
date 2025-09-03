@@ -38,9 +38,11 @@ class FlowerClient(NumPyClient):
             train_loss += loss
             scheduler.step()
         
-        # train loss     
+        # client loss and accuracy   
+        loss, accuracy = test(self.net, self.device, self.valloader)
         metrics = {
-            "train_loss": train_loss / self.local_epochs, 
+            "train_loss": loss, 
+            "train_accuracy": accuracy, 
         }
         labels = {
             "round": config["server_round"],
