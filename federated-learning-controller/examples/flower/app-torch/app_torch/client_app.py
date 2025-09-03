@@ -24,45 +24,43 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config):
         set_weights(self.net, parameters)
+        
+        loss, accuracy = test(self.net, self.device, self.valloader)
+        print(f"Before training Loss: {loss}, Accuracy: {accuracy}")
       
         optimizer = optim.Adadelta(self.net.parameters(), lr=1.0)
         scheduler = StepLR(optimizer, step_size=1, gamma=0.7)
 
-        epoch_loss = 0.0
+        train_loss = 0.0
         for epoch in range(1, self.local_epochs + 1):
             # test_loss = test(model, device, test_loader)
             # test_losses.append(test_loss)
             loss = train(self.net, self.device, self.trainloader, optimizer, epoch)
-            metrics = {
-                "train_loss": loss,
-            }
-            labels = {
-                "round": config["server_round"],
-                "epoch": epoch,
-            }
-            write_metrics(metrics, labels)
-            epoch_loss += loss
+            train_loss += loss
             scheduler.step()
-            
-        return (
-            get_weights(self.net),
-            len(self.trainloader.dataset),
-            {"train_loss": epoch_loss / self.local_epochs},
-        )
-
-    def evaluate(self, parameters, config):
-        set_weights(self.net, parameters)
         
-        loss, accuracy = test(self.net, self.device, self.valloader)
-        print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
+        # train loss     
         metrics = {
-            "loss": loss,
-            "accuracy": accuracy,
+            "train_loss": train_loss / self.local_epochs, 
         }
         labels = {
             "round": config["server_round"],
         }
-        write_metrics(metrics, labels)
+        write_metrics(metrics, labels) 
+        
+        loss, accuracy = test(self.net, self.device, self.valloader)
+        print(f"After training Loss: {loss}, Accuracy: {accuracy}")
+        
+        return (
+            get_weights(self.net),
+            len(self.trainloader.dataset),
+            {"train_loss": train_loss / self.local_epochs},
+        )
+
+    def evaluate(self, parameters, config):
+        set_weights(self.net, parameters)
+        loss, accuracy = test(self.net, self.device, self.valloader)
+        print(f"Evaluation Loss: {loss}, Accuracy: {accuracy}")
         return loss, len(self.valloader.dataset), {"accuracy": accuracy, "loss": loss}
 
 def client_fn(context: Context):
