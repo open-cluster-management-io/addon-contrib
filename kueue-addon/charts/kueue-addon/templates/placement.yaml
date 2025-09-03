@@ -3,7 +3,7 @@ apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
   name: global
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.kueue.namespace }}
 spec:
   clusterSet: global
 {{- end }}
@@ -14,7 +14,7 @@ apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
   name: {{ .Values.placement.name | default .Release.Name }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.kueue.namespace }}
 spec:
   clusterSets:
     - global

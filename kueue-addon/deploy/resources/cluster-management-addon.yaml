@@ -12,8 +12,8 @@ spec:
   installStrategy:
     type: Placements
     placements:
-    - name: spoke
-      namespace: open-cluster-management-addon
+    - name: default
+      namespace: kueue-system
       configs:
       - name: kueue-addon
         group: addon.open-cluster-management.io

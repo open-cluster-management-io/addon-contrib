@@ -104,7 +104,6 @@ install_kueue() {
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true
       kubectl apply --server-side -k "$ray_operator_crd_manifest" --context "$ctx" || true
   done
-  clusteradm clusterset bind global --namespace kueue-system  --context ${hubctx}
 }
 
 # Function to install OCM addons
@@ -141,14 +140,12 @@ install_ocm_addons() {
   helm upgrade --install \
       -n open-cluster-management-addon --create-namespace \
       kueue-addon ../charts/kueue-addon \
-      --set image.tag=e2e \
-      --set skipClusterSetBinding=true
+      --set image.tag=e2e
   else
     echo "Install kueue-addon"
     helm upgrade --install \
       -n open-cluster-management-addon --create-namespace \
-      kueue-addon ocm/kueue-addon \
-      --set skipClusterSetBinding=true
+      kueue-addon ocm/kueue-addon
   fi
 
   echo "Install resource-usage-collect-addon"

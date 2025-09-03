@@ -12,7 +12,7 @@ skipClusterSetBinding: false
 
 # Placement configuration
 placement:
-  name: ""
+  name: default
 
 # Resource flavor
 resourceFlavor:
