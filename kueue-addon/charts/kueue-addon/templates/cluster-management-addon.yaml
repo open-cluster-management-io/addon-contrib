@@ -13,7 +13,7 @@ spec:
     type: Placements
     placements:
     - name: {{ .Values.placement.name | default .Release.Name }}
-      namespace: {{ .Release.Namespace }}
+      namespace: {{ .Values.kueue.namespace }}
       configs:
       - name: kueue-addon-{{ .Chart.Version }}
         group: addon.open-cluster-management.io

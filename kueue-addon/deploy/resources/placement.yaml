@@ -2,7 +2,7 @@ apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding
 metadata:
   name: global
-  namespace: open-cluster-management-addon
+  namespace: kueue-system
 spec:
   clusterSet: global
 
@@ -11,8 +11,8 @@ spec:
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: spoke
-  namespace: open-cluster-management-addon
+  name: default
+  namespace: kueue-system
 spec:
   clusterSets:
     - global
