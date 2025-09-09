@@ -1,0 +1,18 @@
+{{- if and .CreateService (or (eq .ListenerType "NodePort") (eq .ListenerType "LoadBalancer") ) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  type: {{ .ListenerType }}
+  selector:
+    job-name: {{ .Name }}
+  ports:
+  - protocol: TCP
+    port: {{ .ListenerPort }}
+    targetPort: {{ .ListenerPort }}
+    {{- if eq .ListenerType "NodePort" }}
+    nodePort: {{ .ListenerPort }}
+    {{- end }}
+{{- end }}

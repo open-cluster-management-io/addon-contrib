@@ -120,6 +120,11 @@ func (r *FederatedLearningReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Waiting -> Running
 	if instance.Status.Phase == flv1alpha1.PhaseWaiting || instance.Status.Phase == flv1alpha1.PhaseRunning {
+		err = r.deployPlacement(ctx, instance)
+		if err != nil {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+		}
+
 		// 1. server: storage, job (rounds, minAvailableClients)
 		if err := r.federatedLearningServer(ctx, instance); err != nil {
 			log.Errorf("failed to create/update the server: %v", err)
@@ -178,7 +183,7 @@ func getDirFile(modelPath string) (dir, file string, err error) {
 	}
 
 	// It's a directory, return empty string for file
-	return dir, "", nil
+	return modelPath, "", nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

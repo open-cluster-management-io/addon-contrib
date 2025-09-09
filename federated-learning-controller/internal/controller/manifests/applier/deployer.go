@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"strings"
 
+	"maps"
+
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +38,7 @@ func NewDeployer(client client.Client) Deployer {
 	deployer.deployFuncs = map[string]deployFunc{
 		"Deployment":         deployer.deployDeployment,
 		"StatefulSet":        deployer.deployDeployment,
-		"Job":                deployer.deployDeployment,
+		"Job":                deployer.deployJob,
 		"Service":            deployer.deployService,
 		"ServiceAccount":     deployer.deployServiceAccount,
 		"ConfigMap":          deployer.deployConfigMap,
@@ -98,6 +102,55 @@ func (d *deployer) deployDeployment(desiredObj, existingObj *unstructured.Unstru
 		return d.client.Update(context.TODO(), desiredObj)
 	}
 	return nil
+}
+
+// deployJob handles the immutability constraints of batchv1.Job.
+// If there are meaningful differences between the desired and existing Job specs (ignoring
+// system-injected labels on the pod template), we delete the existing Job and let the next
+// reconcile create a fresh one, instead of attempting an Update that would violate immutability.
+func (d *deployer) deployJob(desiredObj, existingObj *unstructured.Unstructured) error {
+	// Unmarshal into typed Jobs
+	existingJSON, _ := existingObj.MarshalJSON()
+	existingJob := &batchv1.Job{}
+	if err := json.Unmarshal(existingJSON, existingJob); err != nil {
+		return err
+	}
+
+	desiredJSON, _ := desiredObj.MarshalJSON()
+	desiredJob := &batchv1.Job{}
+	if err := json.Unmarshal(desiredJSON, desiredJob); err != nil {
+		return err
+	}
+
+	// Normalize: ignore system-injected labels on pod template that cause false diffs
+	stripSystemLabels := func(m map[string]string) map[string]string {
+		if m == nil {
+			return nil
+		}
+		c := make(map[string]string, len(m))
+		maps.Copy(c, m)
+		delete(c, "controller-uid")
+		delete(c, "batch.kubernetes.io/controller-uid")
+		delete(c, "batch.kubernetes.io/job-name")
+		return c
+	}
+
+	// Make shallow copies of label maps before mutation to avoid unintended side effects
+	existingJob.Spec.Template.Labels = stripSystemLabels(existingJob.Spec.Template.Labels)
+	desiredJob.Spec.Template.Labels = stripSystemLabels(desiredJob.Spec.Template.Labels)
+
+	// Compare desired vs existing. If equal, do nothing. If different, delete existing Job.
+	specsEqual := apiequality.Semantic.DeepDerivative(desiredJob.Spec, existingJob.Spec)
+	labelsEqual := apiequality.Semantic.DeepDerivative(desiredJob.Labels, existingJob.Labels)
+	annotationsEqual := apiequality.Semantic.DeepDerivative(desiredJob.Annotations, existingJob.Annotations)
+
+	if specsEqual && labelsEqual && annotationsEqual {
+		return nil
+	}
+
+	// Delete and let next reconcile recreate to satisfy immutability constraints
+	propagation := metav1.DeletePropagationForeground
+	return d.client.Delete(context.TODO(), existingJob, &client.DeleteOptions{PropagationPolicy: &propagation})
 }
 
 func (d *deployer) deployService(desiredObj, existingObj *unstructured.Unstructured) error {
