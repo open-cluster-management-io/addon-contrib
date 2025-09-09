@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"sort"
+	"strings"
 
 	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +19,8 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/restmapper"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -45,18 +49,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		return fmt.Errorf("no listeners specified")
 	}
 
-	var serverFS embed.FS
-	switch instance.Spec.Framework {
-	case flv1alpha1.Flower:
-		serverFS = manifests.FlowerServerFiles
-	case flv1alpha1.OpenFL:
-		serverFS = manifests.OpenFLServerFiles
-	default:
-		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
-	}
-
 	var err error
-
 	defer func() {
 		if err != nil {
 			instance.Status.Message = fmt.Sprintf("failed to initialize the server resources: %s", err.Error())
@@ -106,13 +99,18 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		return err
 	}
 
-	render, deployer := applier.NewRenderer(serverFS), applier.NewDeployer(r.Client)
-	unstructuredObjects, err := render.Render("server", "", func(profile string) (interface{}, error) {
-		obsSidecarImage := ""
-		if instance.ObjectMeta.Annotations != nil {
-			obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
-		}
-		return manifests.FederatedLearningServerParams{
+	obsSidecarImage := ""
+	if instance.ObjectMeta.Annotations != nil {
+		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
+	}
+
+	var serverParams any
+	var serverFS embed.FS
+
+	switch instance.Spec.Framework {
+	case flv1alpha1.Flower:
+		serverFS = manifests.FlowerServerFiles
+		serverParams = &manifests.FlowerServerParams{
 			Namespace:           instance.Namespace,
 			Name:                getSeverName(instance.Name),
 			Image:               instance.Spec.Server.Image,
@@ -125,11 +123,43 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
 			CreateService:       createService,
 			ObsSidecarImage:     obsSidecarImage,
-		}, nil
-	})
-	if err != nil {
-		return err
+		}
+	case flv1alpha1.OpenFL:
+		serverFS = manifests.OpenFLServerFiles
+		clusters, err := r.getDecidedClusters(ctx, instance)
+		if err != nil {
+			return err
+		}
+		sort.Strings(clusters)
+		log.Infof("clusters: %+v", clusters)
+		// determine endpoint info (IP and port) prior to rendering, especially for NodePort
+		listenerIP, listenerPort, err := r.determineEndpointInfo(ctx, instance)
+		if err != nil {
+			return err
+		}
+		serverParams = &manifests.OpenFLServerParams{
+			Namespace:         instance.Namespace,
+			Name:              getSeverName(instance.Name),
+			Image:             instance.Spec.Server.Image,
+			NumberOfRounds:    instance.Spec.Server.Rounds,
+			StorageVolumeName: instance.Spec.Server.Storage.Name,
+			ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
+			ListenerIP:        listenerIP,
+			ListenerPort:      listenerPort,
+			CreateService:     createService,
+			ModelDir:          modelDir,
+			ObsSidecarImage:   obsSidecarImage,
+			Collaborators:     strings.Join(clusters, ","),
+		}
+		log.Infof("server params: %+v", serverParams)
+	default:
+		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
 	}
+
+	render, deployer := applier.NewRenderer(serverFS), applier.NewDeployer(r.Client)
+	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
+		return serverParams, nil
+	})
 
 	// create discovery client
 	dc, err := discovery.NewDiscoveryClientForConfig(r.GetConfig())
@@ -144,6 +174,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 	}
 
 	for _, obj := range unstructuredObjects {
+		log.Infof("deploying %s/%s", obj.GetNamespace(), obj.GetName())
 		if err := deployer.Deploy(obj); err != nil {
 			return err
 		}
@@ -154,6 +185,39 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 	}
 
 	return nil
+}
+
+func (r *FederatedLearningReconciler) getDecidedClusters(ctx context.Context, instance *flv1alpha1.FederatedLearning) ([]string, error) {
+	clusterNames := make([]string, 0)
+	placement := &clusterv1beta1.Placement{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: instance.Name, Namespace: instance.Namespace,
+		},
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(placement), placement); err != nil {
+		return nil, err
+	}
+
+	for _, decisionGroup := range placement.Status.DecisionGroups {
+		for _, decisionName := range decisionGroup.Decisions {
+			decision := clusterv1beta1.PlacementDecision{}
+			if err := r.Get(ctx, types.NamespacedName{
+				Namespace: instance.Namespace, Name: decisionName,
+			}, &decision); err != nil {
+				return nil, err
+			}
+
+			for _, clusterDecision := range decision.Status.Decisions {
+				cluster := &clusterv1.ManagedCluster{}
+				if err := r.Get(ctx, types.NamespacedName{Name: clusterDecision.ClusterName}, cluster); err != nil {
+					return nil, err
+				}
+				clusterNames = append(clusterNames, cluster.Name)
+			}
+		}
+	}
+	log.Infof("decided clusters: %v", clusterNames)
+	return clusterNames, nil
 }
 
 func getSeverName(instanceName string) string {
@@ -181,6 +245,53 @@ func (r *FederatedLearningReconciler) pruneServerResources(ctx context.Context, 
 	return nil
 }
 
+// determineEndpointInfo determines endpoint information before service creation
+func (r *FederatedLearningReconciler) determineEndpointInfo(ctx context.Context, instance *flv1alpha1.FederatedLearning) (string, int, error) {
+	listenerType := instance.Spec.Server.Listeners[0].Type
+	port := instance.Spec.Server.Listeners[0].Port
+
+	switch listenerType {
+	case flv1alpha1.LoadBalancer:
+		// For LoadBalancer, we can't predict the external IP/hostname before creation
+		// Return empty address, it will be updated after service creation
+		return "", port, nil
+
+	case flv1alpha1.NodePort:
+		// For NodePort, we can determine the node IP beforehand
+		nodeIp := instance.Spec.Server.Listeners[0].IP
+		if nodeIp == "" {
+			// Get the first node's internal IP
+			nodeList := &corev1.NodeList{}
+			if err := r.List(ctx, nodeList); err != nil {
+				return "", 0, err
+			}
+
+			for _, node := range nodeList.Items {
+				for _, addr := range node.Status.Addresses {
+					if addr.Address != "" && addr.Type == corev1.NodeInternalIP {
+						nodeIp = addr.Address
+						break
+					}
+				}
+				if nodeIp != "" {
+					break
+				}
+			}
+		}
+
+		if nodeIp == "" {
+			return "", 0, fmt.Errorf("no node internal IP found")
+		}
+
+		// For NodePort, we can use the same port as specified in the listener
+		// The actual nodePort will be assigned by Kubernetes, but we can use the target port
+		return nodeIp, port, nil
+
+	default:
+		return "", 0, fmt.Errorf("unsupported listener type: %s", listenerType)
+	}
+}
+
 // get the address by NodePort, LoadBalancer or Route
 func (r *FederatedLearningReconciler) updateServerAddress(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
 	log.Info("update the server address for the clients")
@@ -189,6 +300,7 @@ func (r *FederatedLearningReconciler) updateServerAddress(ctx context.Context, i
 		Namespace: instance.Namespace,
 		Name:      getSeverName(instance.Name),
 	}, svc); err != nil {
+		log.Infof("failed to get service: %v", err)
 		return err
 	}
 	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
