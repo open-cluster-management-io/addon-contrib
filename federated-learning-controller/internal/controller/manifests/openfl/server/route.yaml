@@ -1,0 +1,28 @@
+{{- if eq .ListenerType "Route" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    job-name: {{ .Name }}
+  ports:
+    - protocol: TCP
+      port: {{ .ListenerPort }}
+      targetPort: {{ .ListenerPort }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  to:
+    kind: Service
+    name: {{ .Name }}
+  port:
+    targetPort: {{ .ListenerPort }}
+{{- end }}

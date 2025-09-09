@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+  # annotations:
+  #   skip-creation-if-exist: "true"
+spec:
+  selector: # Match the labels in the pod template
+    matchLabels:
+      job-name: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        job-name: {{ .Name }} # Ensure labels match the selector
+    spec:
+      shareProcessNamespace: true
+      containers:
+      - name: openfl-server
+        image: {{ .Image }}
+        imagePullPolicy: Always
+        args:
+        - server # Maps to the entrypoint.sh logic
+        - --server-ip={{ .ListenerIP }}
+        - --server-port={{ .ListenerPort }}
+        - --num-rounds={{ .NumberOfRounds }}
+        - --cols={{ .Collaborators }}
+        - --model-dir={{ .ModelDir }}
+        volumeMounts:
+        - name: model-volume
+          mountPath: {{ .ModelDir }}
+        - name: metric-data
+          mountPath: /metrics
+
+      {{- if .ObsSidecarImage }}
+      - name: obs-sidecar
+        image: {{ .ObsSidecarImage }}
+        imagePullPolicy: Always
+        args:
+          - -metricfile=/metrics/metric.json
+          - -endpoint=$(OTEL_ENDPOINT)
+        volumeMounts:
+          - name: metric-data
+            mountPath: /metrics
+        env:
+          # The default endpoint for the Open Cluster Management observability service.
+          # Change this value to your otel collector endpoint if you are not using the OCM observability service.
+          - name: OTEL_ENDPOINT
+            value: "otel-collector.open-cluster-management-agent-addon.svc.cluster.local:4317"
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+      {{- end }}
+      restartPolicy: Never
+      volumes:
+      - name: model-volume
+        persistentVolumeClaim:
+          claimName: {{ .StorageVolumeName }}
+      - name: metric-data
+        emptyDir: {}
