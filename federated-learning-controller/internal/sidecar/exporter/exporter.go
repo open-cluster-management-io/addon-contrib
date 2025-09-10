@@ -110,13 +110,58 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[st
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// Check if metrics values have actually changed (excluding timestamp)
+	metricsChanged := false
+	
+	// Compare metrics count (excluding timestamp which we'll add/update later)
+	currentMetricsCount := len(r.metrics)
+	if _, hasTimestamp := r.metrics["timestamp"]; hasTimestamp {
+		currentMetricsCount--
+	}
+	
+	if len(newMetrics) != currentMetricsCount {
+		metricsChanged = true
+	} else {
+		for name, newValue := range newMetrics {
+			// Skip timestamp comparison since we always update it
+			if name == "timestamp" {
+				continue
+			}
+			if oldValue, exists := r.metrics[name]; !exists || oldValue != newValue {
+				metricsChanged = true
+				break
+			}
+		}
+	}
+
+	// Check if labels have changed
+	labelsChanged := false
+	if len(newLabels) != len(r.labels) {
+		labelsChanged = true
+	} else {
+		for name, newValue := range newLabels {
+			if oldValue, exists := r.labels[name]; !exists || oldValue != newValue {
+				labelsChanged = true
+				break
+			}
+		}
+	}
+
+	// Only update if values have actually changed
+	if !metricsChanged && !labelsChanged {
+		log.Println("No metric or label changes detected, skipping update")
+		return
+	}
+
 	// Update the metrics and labels
 	r.metrics = newMetrics
 	r.labels = newLabels
 
 	// Always overwrite "timestamp" metric with the current Unix time.
-	// This ensures we have a fresh timestamp regardless of input.
+	// This ensures we have a fresh timestamp only when other metrics change.
 	r.metrics["timestamp"] = float64(time.Now().Unix())
+
+	log.Printf("Metrics updated: %d metrics, %d labels", len(r.metrics), len(r.labels))
 
 	// Step 1: Detect if the set of metrics has changed
 	// (different number of metrics or different names)
