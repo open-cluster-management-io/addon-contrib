@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -91,6 +92,21 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		if service.Spec.Type != corev1.ServiceType(instance.Spec.Server.Listeners[0].Type) {
 			log.Infof("service type is %s, but expected %s", service.Spec.Type, instance.Spec.Server.Listeners[0].Type)
 			createService = true
+		}
+	}
+
+	// For LoadBalancer, we need to ensure the service is created and has an external IP before creating the job
+	if instance.Spec.Server.Listeners[0].Type == flv1alpha1.LoadBalancer {
+		if createService {
+			// Create service first
+			if err = r.createServiceForLoadBalancer(ctx, instance); err != nil {
+				return err
+			}
+		}
+
+		// Wait for LoadBalancer external IP to be assigned
+		if err = r.waitForLoadBalancerIP(ctx, instance); err != nil {
+			return err
 		}
 	}
 
@@ -187,6 +203,89 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 	return nil
 }
 
+// createServiceForLoadBalancer creates the LoadBalancer service first
+func (r *FederatedLearningReconciler) createServiceForLoadBalancer(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	log.Info("creating LoadBalancer service first")
+
+	modelDir, _, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
+	if err != nil {
+		return err
+	}
+
+	obsSidecarImage := ""
+	if instance.ObjectMeta.Annotations != nil {
+		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
+	}
+
+	serverParams := &manifests.OpenFLServerParams{
+		Namespace:         instance.Namespace,
+		Name:              getSeverName(instance.Name),
+		Image:             instance.Spec.Server.Image,
+		NumberOfRounds:    instance.Spec.Server.Rounds,
+		StorageVolumeName: instance.Spec.Server.Storage.Name,
+		ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
+		ListenerIP:        "", // Will be updated after LoadBalancer IP is assigned
+		ListenerPort:      instance.Spec.Server.Listeners[0].Port,
+		CreateService:     true,
+		ModelDir:          modelDir,
+		ObsSidecarImage:   obsSidecarImage,
+		Collaborators:     "", // Will be updated later
+	}
+
+	// Only render and deploy the service, not the job
+	render := applier.NewRenderer(manifests.OpenFLServerFiles)
+	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
+		return serverParams, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Filter to only deploy the service
+	for _, obj := range unstructuredObjects {
+		if obj.GetKind() == "Service" {
+			log.Infof("deploying service %s/%s", obj.GetNamespace(), obj.GetName())
+			deployer := applier.NewDeployer(r.Client)
+			if err := deployer.Deploy(obj); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// waitForLoadBalancerIP waits for the LoadBalancer service to get an external IP
+func (r *FederatedLearningReconciler) waitForLoadBalancerIP(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	log.Info("waiting for LoadBalancer external IP to be assigned")
+
+	serviceName := getSeverName(instance.Name)
+	maxRetries := 30
+
+	for i := range maxRetries {
+		service := &corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: instance.Namespace,
+			Name:      serviceName,
+		}, service); err != nil {
+			return fmt.Errorf("failed to get service: %w", err)
+		}
+
+		if len(service.Status.LoadBalancer.Ingress) > 0 {
+			ingress := service.Status.LoadBalancer.Ingress[0]
+			if ingress.IP != "" || ingress.Hostname != "" {
+				log.Infof("LoadBalancer external IP assigned: %v", service.Status.LoadBalancer.Ingress)
+				return nil
+			}
+		}
+
+		log.Infof("LoadBalancer external IP not ready yet, retrying in 10 seconds... (attempt %d/%d)", i+1, maxRetries)
+		time.Sleep(10 * time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for LoadBalancer external IP after %d attempts", maxRetries)
+}
+
 func (r *FederatedLearningReconciler) getDecidedClusters(ctx context.Context, instance *flv1alpha1.FederatedLearning) ([]string, error) {
 	clusterNames := make([]string, 0)
 	placement := &clusterv1beta1.Placement{
@@ -252,8 +351,27 @@ func (r *FederatedLearningReconciler) determineEndpointInfo(ctx context.Context,
 
 	switch listenerType {
 	case flv1alpha1.LoadBalancer:
-		// For LoadBalancer, we can't predict the external IP/hostname before creation
-		// Return empty address, it will be updated after service creation
+		// For LoadBalancer, try to get the external IP from existing service
+		serviceName := getSeverName(instance.Name)
+		service := &corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: instance.Namespace,
+			Name:      serviceName,
+		}, service); err == nil {
+			// Service exists, check if it has external IP
+			if len(service.Status.LoadBalancer.Ingress) > 0 {
+				ingress := service.Status.LoadBalancer.Ingress[0]
+				if ingress.IP != "" {
+					log.Infof("Found LoadBalancer external IP: %s", ingress.IP)
+					return ingress.IP, port, nil
+				} else if ingress.Hostname != "" {
+					log.Infof("Found LoadBalancer external hostname: %s", ingress.Hostname)
+					return ingress.Hostname, port, nil
+				}
+			}
+		}
+		// If service doesn't exist or doesn't have external IP yet, return empty
+		// This will be handled by the calling function
 		return "", port, nil
 
 	case flv1alpha1.NodePort:
