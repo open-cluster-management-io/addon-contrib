@@ -130,7 +130,7 @@ This controller is running on the hub, contains a credential controller and an a
   - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) (Optional) Enables hub-to-spoke connectivity for enhanced networking.
 - Kueue installed:
   - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) installed and MultiKueue enabled.
-  - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (OpenShift/OLM environments).
+  - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (recommended for OpenShift/OLM environments).
 
 ## Quick Start
 
@@ -173,6 +173,7 @@ In operator-based environments (for example, OpenShift with OLM), the addon can 
 Prepare a values.operator.yaml with below content:
 
 ```yaml
+# This is the namespace where the Kueue controller is installed; the MultiKueue secret will be copied to this namespace
 kueue:
   namespace: "openshift-kueue-operator"
 
@@ -204,9 +205,20 @@ certManagerOperator:
   sourceNamespace: openshift-marketplace
   startingCSV: cert-manager-operator.v1.17.0
 
+# Kueue CR customization
+kueueCR:
+  spec:
+    config:
+      integrations:
+        frameworks:
+        - BatchJob
+    managementState: Managed
+
 # Cluster proxy configuration
 clusterProxy:
   url: "https://<cluster-proxy-url>"
+  impersonation:
+    enabled: true
 
 networkPolicy:
   name: kueue-allow-egress-cluster-proxy-dns
@@ -245,14 +257,14 @@ To confirm the installation from hub:
 
 ```bash
 $ kubectl get cma kueue-addon
-NAME          DISPLAY NAME   CRD NAME
-kueue-addon   kueue-addon    
+NAME          DISPLAY NAME                    CRD NAME
+kueue-addon   multicluster-kueue-manager
 
-$ kubectl get mca -A | grep kueue-addon
-NAMESPACE          NAME                     AVAILABLE   DEGRADED   PROGRESSING
-<your cluster>     kueue-addon              True                   False
+$ kubectl get mca -A | grep kueue
+NAMESPACE          NAME                          AVAILABLE   DEGRADED   PROGRESSING
+<your cluster>     multicluster-kueue-manager    True                   False
 
-$ kubectl get deploy -n open-cluster-management  kueue-addon-controller
+$ kubectl get deploy -n open-cluster-management-addon kueue-addon-controller
 NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
 kueue-addon-controller   1/1     1            1           4h27m
 ```
