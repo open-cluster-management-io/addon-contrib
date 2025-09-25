@@ -1,8 +1,41 @@
+"""
+OpenFL container entrypoint.
+
+This script initializes an OpenFL workspace at container start by parsing a
+subcommand ("server" or "client"), updating runtime configuration files, and
+then executing the appropriate OpenFL process via `fx`.
+
+Behavior
+- Updates `plan/plan.yaml` with networking and training parameters
+  (e.g., aggregator address/port, rounds to train), and sets
+  `network.settings.use_tls = False` by default.
+- In server mode, writes collaborator names to `plan/cols.yaml` and adjusts
+  model state paths if `--model-dir` is provided.
+- In client mode, appends a `name,data_path` mapping line to `plan/data.yaml`.
+- Replaces the current process with `fx` (`aggregator start` or
+  `collaborator start -n <name>`) using `os.execvp`.
+
+CLI
+  Server subcommand:
+    --server-ip       Aggregator IP address to advertise to collaborators
+    --server-port     Aggregator TCP port
+    --num-rounds      Number of training rounds
+    --cols            Comma-separated collaborator names written to cols.yaml
+    --model-dir       Directory for model state files (best/last)
+
+  Client subcommand:
+    --name            Collaborator name (must match aggregator configuration)
+    --data-path       Collaborator dataset spec: filesystem path or shard ID
+    --server-ip       Aggregator IP address
+    --server-port     Aggregator TCP port
+    --num-rounds      Number of training rounds
+    --model-dir       Directory for model state files
+"""
+
 import argparse
 import yaml
 from pathlib import Path
 import os
-import subprocess
 
 PLAN_FILE = Path("plan/plan.yaml")
 DATA_FILE = Path("plan/data.yaml")
@@ -105,7 +138,7 @@ def main():
     # docker run --rm image client --name client1 --data-path /data/client1 --server-ip 172.17.0.2 --server-port 8080 --num-rounds 3 --model-dir models
     sp_client = subparsers.add_parser("client", help="Update client (collaborator) settings")
     sp_client.add_argument("--name", required=True, help="Collaborator name")
-    sp_client.add_argument("--data-path", required=True, help="Path to collaborator data")
+    sp_client.add_argument("--data-path", required=True, help="Collaborator dataset spec: filesystem path or shard ID")
     sp_client.add_argument("--server-ip", help="Aggregator IP address")
     sp_client.add_argument("--server-port", type=int, help="Aggregator port")
     sp_client.add_argument("--num-rounds", type=int, help="Number of rounds to train")
