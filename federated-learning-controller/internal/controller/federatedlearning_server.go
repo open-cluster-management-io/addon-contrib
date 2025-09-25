@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -257,33 +256,27 @@ func (r *FederatedLearningReconciler) createServiceForLoadBalancer(ctx context.C
 
 // waitForLoadBalancerIP waits for the LoadBalancer service to get an external IP
 func (r *FederatedLearningReconciler) waitForLoadBalancerIP(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
-	log.Info("waiting for LoadBalancer external IP to be assigned")
+	log.Info("checking LoadBalancer external IP readiness")
 
 	serviceName := getSeverName(instance.Name)
-	maxRetries := 30
 
-	for i := range maxRetries {
-		service := &corev1.Service{}
-		if err := r.Get(ctx, types.NamespacedName{
-			Namespace: instance.Namespace,
-			Name:      serviceName,
-		}, service); err != nil {
-			return fmt.Errorf("failed to get service: %w", err)
-		}
-
-		if len(service.Status.LoadBalancer.Ingress) > 0 {
-			ingress := service.Status.LoadBalancer.Ingress[0]
-			if ingress.IP != "" || ingress.Hostname != "" {
-				log.Infof("LoadBalancer external IP assigned: %v", service.Status.LoadBalancer.Ingress)
-				return nil
-			}
-		}
-
-		log.Infof("LoadBalancer external IP not ready yet, retrying in 10 seconds... (attempt %d/%d)", i+1, maxRetries)
-		time.Sleep(10 * time.Second)
+	service := &corev1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: instance.Namespace,
+		Name:      serviceName,
+	}, service); err != nil {
+		return fmt.Errorf("failed to get service: %w", err)
 	}
 
-	return fmt.Errorf("timeout waiting for LoadBalancer external IP after %d attempts", maxRetries)
+	if len(service.Status.LoadBalancer.Ingress) > 0 {
+		ingress := service.Status.LoadBalancer.Ingress[0]
+		if ingress.IP != "" || ingress.Hostname != "" {
+			log.Infof("LoadBalancer external address assigned: %v", service.Status.LoadBalancer.Ingress)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("LoadBalancer external address not ready")
 }
 
 func (r *FederatedLearningReconciler) getDecidedClusters(ctx context.Context, instance *flv1alpha1.FederatedLearning) ([]string, error) {
