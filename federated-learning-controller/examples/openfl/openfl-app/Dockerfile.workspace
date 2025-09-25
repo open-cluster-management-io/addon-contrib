@@ -31,9 +31,5 @@ RUN --mount=type=secret,id=signer-key,dst=/key.pem \
     echo "$(cat fx.mr_enclave)" && \
     chown -R user /workspace
 
-ENV HTTP_PROXY="http://172.16.1.11:20172"
-ENV HTTPS_PROXY="http://172.16.1.11:20172"
-ENV NO_PROXY="localhost,127.0.0.1,.example.com"
-
 USER user
 ENTRYPOINT ["python", "/workspace/entrypoint.py"]
