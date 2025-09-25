@@ -22,7 +22,7 @@ COPY cert/ /workspace/cert/
 COPY requirements.txt /workspace/
 RUN mkdir /workspace/logs && mkdir /workspace/data && mkdir /workspace/local_state
 
-RUN pip install --no-cache-dir -r ./requirements.txt -i https://mirrors.ustc.edu.cn/pypi/simple
+RUN pip install --no-cache-dir -r ./requirements.txt
 
 # Build enclaves
 RUN --mount=type=secret,id=signer-key,dst=/key.pem \
