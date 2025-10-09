@@ -42,12 +42,6 @@ func (r *FederatedLearningReconciler) federatedLearningClient(ctx context.Contex
 		return nil
 	}
 
-	// generate placement
-	// err = r.deployPlacement(ctx, instance)
-	// if err != nil {
-	// 	return err
-	// }
-
 	placement := &clusterv1beta1.Placement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: instance.Name, Namespace: instance.Namespace,
