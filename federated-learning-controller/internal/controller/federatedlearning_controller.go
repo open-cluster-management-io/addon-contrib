@@ -83,6 +83,9 @@ func (r *FederatedLearningReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// deleting the instance, clean up the resources with finalizer
 	if instance.DeletionTimestamp != nil {
+		if err := r.pruneServerResources(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
 		if err := r.pruneClientResources(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
