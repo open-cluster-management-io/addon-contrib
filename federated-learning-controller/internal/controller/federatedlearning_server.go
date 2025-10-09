@@ -149,6 +149,27 @@ func getSeverName(instanceName string) string {
 	return fmt.Sprintf("%s-server", instanceName)
 }
 
+// pruneServerResources cleans up server-side Kubernetes resources when the instance is deleted.
+func (r *FederatedLearningReconciler) pruneServerResources(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	svc := &corev1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: instance.Namespace,
+		Name:      getSeverName(instance.Name),
+	}, svc); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get service during deletion: %w", err)
+	}
+
+	if err := r.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete service during deletion: %w", err)
+	}
+
+	log.Infof("deleted service %s/%s while cleaning up FederatedLearning instance", svc.Namespace, svc.Name)
+	return nil
+}
+
 // get the address by NodePort, LoadBalancer or Route
 func (r *FederatedLearningReconciler) updateServerAddress(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
 	log.Info("update the server address for the clients")
