@@ -1,9 +1,9 @@
 aggregator:
   settings:
-    best_state_path: 6677/best.pbuf
+    best_state_path: model/best.pbuf
     db_store_rounds: 2
     init_state_path: save/init.pbuf
-    last_state_path: 6677/last.pbuf
+    last_state_path: model/last.pbuf
     persist_checkpoint: true
     persistent_db_path: local_state/tensor.db
     rounds_to_train: 10
