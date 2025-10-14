@@ -116,7 +116,7 @@ type S3StorageSpec struct {
 const (
 	PVCStorage StorageType = "PersistentVolumeClaim"
 	HostPath   StorageType = "HostPath"
-	S3Bucket   StorageType = "S3PersistentVolumeClaim"
+	S3Bucket   StorageType = "S3Bucket"
 )
 
 // ListenerSpec defines the specification for a listener.
