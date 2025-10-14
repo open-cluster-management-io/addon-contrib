@@ -582,8 +582,6 @@ spec:
                             type: string
                           region:
                             type: string
-                          volumeHandle:
-                            type: string
                         required:
                         - bucketName
                         type: object

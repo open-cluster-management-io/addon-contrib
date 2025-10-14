@@ -612,19 +612,34 @@ func SetOwner(objects []*unstructured.Unstructured,
 }
 
 func (r *FederatedLearningReconciler) storage(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	storageType := instance.Spec.Server.Storage.Type
+
+	switch storageType {
+	case flv1alpha1.PersistentVolumeClaim:
+		return r.ensureStandardPVC(ctx, instance)
+	case flv1alpha1.S3PersistentVolumeClaim:
+		return r.ensureS3PVC(ctx, instance)
+	default:
+		return fmt.Errorf("unsupported storage type: %s", storageType)
+	}
+}
+
+func (r *FederatedLearningReconciler) ensureStandardPVC(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
 	namespace := instance.Namespace
 	name := instance.Spec.Server.Storage.Name
-	size := instance.Spec.Server.Storage.Size
-	storageType := instance.Spec.Server.Storage.Type
-	if storageType != flv1alpha1.PersistentVolumeClaim {
-		return fmt.Errorf("unsupported storage type: %s", storageType)
+
+	if instance.Spec.Server.Storage.Size == "" {
+		return fmt.Errorf("size must be specified for storage type %s", instance.Spec.Server.Storage.Type)
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pvc)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// PVC does not exist, create it
+			quantity, parseErr := resource.ParseQuantity(instance.Spec.Server.Storage.Size)
+			if parseErr != nil {
+				return fmt.Errorf("failed to parse storage size %q: %w", instance.Spec.Server.Storage.Size, parseErr)
+			}
 			newPVC := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
@@ -636,7 +651,7 @@ func (r *FederatedLearningReconciler) storage(ctx context.Context, instance *flv
 					},
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse(size),
+							corev1.ResourceStorage: quantity,
 						},
 					},
 				},
@@ -650,7 +665,200 @@ func (r *FederatedLearningReconciler) storage(ctx context.Context, instance *flv
 		return err
 	}
 
-	// PVC exists
 	log.Infof("storage PVC already exists: %s", name)
 	return nil
+}
+
+func (r *FederatedLearningReconciler) ensureS3PVC(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	storageSpec := instance.Spec.Server.Storage
+	namespace := instance.Namespace
+	claimName := storageSpec.Name
+
+	if storageSpec.Size == "" {
+		return fmt.Errorf("size must be specified for storage type %s", storageSpec.Type)
+	}
+	if storageSpec.S3 == nil {
+		return fmt.Errorf("s3 configuration must be provided when storage type is %s", storageSpec.Type)
+	}
+	if storageSpec.S3.BucketName == "" {
+		return fmt.Errorf("bucketName is required for s3 storage")
+	}
+
+	requestQuantity, err := resource.ParseQuantity(storageSpec.Size)
+	if err != nil {
+		return fmt.Errorf("failed to parse storage size %q: %w", storageSpec.Size, err)
+	}
+	pvName := fmt.Sprintf("%s-pv", claimName)
+
+	mountOptions := make([]string, 0)
+	if storageSpec.S3.Region != "" {
+		mountOptions = append(mountOptions, fmt.Sprintf("region %s", storageSpec.S3.Region))
+	}
+	if storageSpec.S3.Prefix != "" {
+		mountOptions = append(mountOptions, fmt.Sprintf("prefix %s", storageSpec.S3.Prefix))
+	}
+	desiredPV := &corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvName,
+			Namespace: namespace,
+		},
+		Spec: corev1.PersistentVolumeSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteMany,
+			},
+			Capacity: corev1.ResourceList{
+				corev1.ResourceStorage: requestQuantity,
+			},
+			ClaimRef: &corev1.ObjectReference{
+				Namespace: namespace,
+				Name:      claimName,
+			},
+			PersistentVolumeSource: corev1.PersistentVolumeSource{
+				CSI: &corev1.CSIPersistentVolumeSource{
+					Driver:       v1alpha1.S3Driver,
+					VolumeHandle: v1alpha1.S3VolumeHandle,
+					VolumeAttributes: map[string]string{
+						"bucketName": storageSpec.S3.BucketName,
+					},
+				},
+			},
+			MountOptions:     mountOptions,
+			StorageClassName: "",
+		},
+	}
+	existingPV := &corev1.PersistentVolume{}
+	if err := r.Get(ctx, client.ObjectKey{Name: pvName}, existingPV); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		if err := r.Create(ctx, desiredPV); err != nil {
+			return fmt.Errorf("failed to create s3 persistent volume %q: %w", pvName, err)
+		}
+		log.Infow("created S3 persistent volume", "name", pvName)
+	} else {
+		updated := false
+		if existingPV.Spec.PersistentVolumeSource.CSI == nil {
+			existingPV.Spec.PersistentVolumeSource.CSI = &corev1.CSIPersistentVolumeSource{}
+			updated = true
+		}
+		csiSpec := existingPV.Spec.PersistentVolumeSource.CSI
+		if csiSpec.Driver != v1alpha1.S3Driver {
+			csiSpec.Driver = v1alpha1.S3Driver
+			updated = true
+		}
+		if csiSpec.VolumeHandle != v1alpha1.S3VolumeHandle {
+			csiSpec.VolumeHandle = v1alpha1.S3VolumeHandle
+			updated = true
+		}
+		if csiSpec.VolumeAttributes == nil {
+			csiSpec.VolumeAttributes = map[string]string{}
+		}
+		if csiSpec.VolumeAttributes["bucketName"] != storageSpec.S3.BucketName {
+			csiSpec.VolumeAttributes["bucketName"] = storageSpec.S3.BucketName
+			updated = true
+		}
+		if len(existingPV.Spec.AccessModes) != 1 || existingPV.Spec.AccessModes[0] != corev1.ReadWriteMany {
+			existingPV.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+			updated = true
+		}
+		if qty, ok := existingPV.Spec.Capacity[corev1.ResourceStorage]; !ok || qty.Cmp(requestQuantity) != 0 {
+			existingPV.Spec.Capacity[corev1.ResourceStorage] = requestQuantity
+			updated = true
+		}
+		if existingPV.Spec.ClaimRef == nil ||
+			existingPV.Spec.ClaimRef.Namespace != namespace ||
+			existingPV.Spec.ClaimRef.Name != claimName {
+			existingPV.Spec.ClaimRef = &corev1.ObjectReference{
+				Namespace: namespace,
+				Name:      claimName,
+			}
+			updated = true
+		}
+		if existingPV.Spec.StorageClassName != "" {
+			existingPV.Spec.StorageClassName = ""
+			updated = true
+		}
+		if !equalStringSlice(existingPV.Spec.MountOptions, mountOptions) {
+			existingPV.Spec.MountOptions = mountOptions
+			updated = true
+		}
+		if updated {
+			if err := r.Update(ctx, existingPV); err != nil {
+				return fmt.Errorf("failed to update s3 persistent volume %q: %w", pvName, err)
+			}
+			log.Infow("updated S3 persistent volume", "name", pvName)
+		}
+	}
+
+	desiredPVC := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      claimName,
+			Namespace: namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteMany,
+			},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: requestQuantity,
+				},
+			},
+			VolumeName: pvName,
+		},
+	}
+	storageClass := ""
+	desiredPVC.Spec.StorageClassName = &storageClass
+
+	existingPVC := &corev1.PersistentVolumeClaim{}
+	if err := r.Get(ctx, client.ObjectKey{Namespace: namespace, Name: claimName}, existingPVC); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+		if err := r.Create(ctx, desiredPVC); err != nil {
+			return fmt.Errorf("failed to create s3 persistent volume claim %q: %w", claimName, err)
+		}
+		log.Infow("created S3 persistent volume claim", "name", claimName, "namespace", namespace)
+		return nil
+	}
+	updated := false
+	if len(existingPVC.Spec.AccessModes) != 1 || existingPVC.Spec.AccessModes[0] != corev1.ReadWriteMany {
+		existingPVC.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+		updated = true
+	}
+	if existingPVC.Spec.StorageClassName == nil || *existingPVC.Spec.StorageClassName != "" {
+		existingPVC.Spec.StorageClassName = &storageClass
+		updated = true
+	}
+	if existingPVC.Spec.VolumeName != pvName {
+		existingPVC.Spec.VolumeName = pvName
+		updated = true
+	}
+	if existingPVC.Spec.Resources.Requests == nil {
+		existingPVC.Spec.Resources.Requests = corev1.ResourceList{}
+	}
+	if qty, ok := existingPVC.Spec.Resources.Requests[corev1.ResourceStorage]; !ok || qty.Cmp(requestQuantity) != 0 {
+		existingPVC.Spec.Resources.Requests[corev1.ResourceStorage] = requestQuantity
+		updated = true
+	}
+	if updated {
+		if err := r.Update(ctx, existingPVC); err != nil {
+			return fmt.Errorf("failed to update s3 persistent volume claim %q: %w", claimName, err)
+		}
+		log.Infow("updated S3 persistent volume claim", "name", claimName, "namespace", namespace)
+		return nil
+	}
+	log.Infof("S3 PVC already configured: %s/%s", namespace, claimName)
+	return nil
+}
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
