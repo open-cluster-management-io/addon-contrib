@@ -615,9 +615,9 @@ func (r *FederatedLearningReconciler) storage(ctx context.Context, instance *flv
 	storageType := instance.Spec.Server.Storage.Type
 
 	switch storageType {
-	case flv1alpha1.PersistentVolumeClaim:
+	case flv1alpha1.PVCStorage:
 		return r.ensureStandardPVC(ctx, instance)
-	case flv1alpha1.S3PersistentVolumeClaim:
+	case flv1alpha1.S3Bucket:
 		return r.ensureS3PVC(ctx, instance)
 	default:
 		return fmt.Errorf("unsupported storage type: %s", storageType)
