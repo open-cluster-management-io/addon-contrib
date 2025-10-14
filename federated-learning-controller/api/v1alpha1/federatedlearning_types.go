@@ -86,18 +86,37 @@ type ServerSpec struct {
 
 // ModelStorageSpec defines the storage specification for the model.
 type ModelStorageSpec struct {
-	Name      string      `json:"name,omitempty"`
-	Type      StorageType `json:"type,omitempty"`
-	Size      string      `json:"size,omitempty"` // +optional
-	ModelPath string      `json:"path,omitempty"` //
+	Name      string         `json:"name,omitempty"`
+	Type      StorageType    `json:"type,omitempty"`
+	Size      string         `json:"size,omitempty"` // +optional
+	ModelPath string         `json:"path,omitempty"` //
+	S3        *S3StorageSpec `json:"s3,omitempty"`
 }
 
 // StorageType represents the type of storage.
 type StorageType string
 
 const (
-	PersistentVolumeClaim StorageType = "PersistentVolumeClaim"
-	HostPathStorage       StorageType = "HostPath"
+	S3Driver       = "s3.csi.aws.com"
+	S3VolumeHandle = "s3-csi-driver-volume"
+)
+
+// S3StorageSpec defines the configuration required for S3-backed persistent volumes.
+type S3StorageSpec struct {
+	// +kubebuilder:validation:Required
+	BucketName string `json:"bucketName"`
+	// Region configures the AWS region for the S3 connection.
+	// +optional
+	Region string `json:"region,omitempty"`
+	// Prefix specifies the object prefix (folder) inside the bucket to use.
+	// +optional
+	Prefix string `json:"prefix,omitempty"`
+}
+
+const (
+	PVCStorage StorageType = "PersistentVolumeClaim"
+	HostPath   StorageType = "HostPath"
+	S3Bucket   StorageType = "S3Bucket"
 )
 
 // ListenerSpec defines the specification for a listener.

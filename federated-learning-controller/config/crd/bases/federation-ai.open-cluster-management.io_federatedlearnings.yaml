@@ -573,6 +573,23 @@ spec:
                         type: string
                       path:
                         type: string
+                      s3:
+                        description: S3StorageSpec defines the configuration required
+                          for S3-backed persistent volumes.
+                        properties:
+                          bucketName:
+                            type: string
+                          prefix:
+                            description: Prefix specifies the object prefix (folder)
+                              inside the bucket to use.
+                            type: string
+                          region:
+                            description: Region configures the AWS region for the
+                              S3 connection.
+                            type: string
+                        required:
+                        - bucketName
+                        type: object
                       size:
                         type: string
                       type:
