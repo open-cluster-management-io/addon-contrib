@@ -573,6 +573,20 @@ spec:
                         type: string
                       path:
                         type: string
+                      s3:
+                        description: S3StorageSpec defines the configuration required for S3-backed persistent volumes.
+                        properties:
+                          bucketName:
+                            type: string
+                          prefix:
+                            type: string
+                          region:
+                            type: string
+                          volumeHandle:
+                            type: string
+                        required:
+                        - bucketName
+                        type: object
                       size:
                         type: string
                       type:
