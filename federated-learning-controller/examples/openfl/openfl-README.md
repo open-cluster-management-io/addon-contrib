@@ -174,11 +174,15 @@ spec:
         port: 31531
         type: NodePort
     storage:
-      type: PersistentVolumeClaim
+      type: PersistentVolumeClaim # change to S3Bucket for S3-backed storage
       name: model-pvc
       # If you are using the OpenFL framework, make sure to mount the model directory under /workspace
       path: /workspace/models
       size: 2Gi
+      # s3:
+      #   bucketName: <your-bucket-name>
+      #   region: us-east-1
+      #   prefix: optional/prefix/
   client:
     image: <your-registry>/openfl-app:latest
     placement:
@@ -193,4 +197,3 @@ spec:
 ```
 
 Replace `<your-registry>` with your actual image registry/paths. Ensure the server and clients use the same OpenFL image. The data shard comes from the `ClusterClaim` value and is passed to clients as `--data-path` automatically by the controller. Apply this manifest on the hub with your preferred workflow (e.g., `kubectl apply -f -`).
-

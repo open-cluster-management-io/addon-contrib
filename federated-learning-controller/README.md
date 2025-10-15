@@ -177,10 +177,14 @@ spec:
         port: 8080
         type: NodePort
     storage:
-      type: PersistentVolumeClaim
+      type: PersistentVolumeClaim # switch to S3Bucket for S3-backed static volumes
       name: model-pvc
       path: /data/models
       size: 2Gi
+      # s3:
+      #   bucketName: <your-bucket-name>
+      #   region: us-east-1
+      #   prefix: optional/prefix/
   client:
     image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
     placement:
