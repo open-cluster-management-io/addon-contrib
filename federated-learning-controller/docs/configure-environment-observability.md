@@ -229,10 +229,14 @@ spec:
         port: 8080
         type: LoadBalancer
     storage:
-      type: PersistentVolumeClaim
+      type: PersistentVolumeClaim # or S3Bucket when using a static S3 PV
       name: model-pvc
       path: /data/models
       size: 2Gi
+      # s3:
+      #   bucketName: <your-bucket-name>
+      #   region: us-east-1
+      #   prefix: optional/prefix/
   client:
     image: quay.io/open-cluster-management/flower-app-torch:latest
     placement:
