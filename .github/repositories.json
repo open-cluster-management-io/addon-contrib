@@ -4,5 +4,8 @@
   },
   "resource-usage-collect-addon": {
     "e2e-artifacts": ["resource-usage-collect-addon.tar.gz"]
+  },
+  "open-telemetry-addon": {
+    "e2e-artifacts": ["open-telemetry-addon.tar.gz"]
   }
 }
