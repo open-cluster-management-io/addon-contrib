@@ -1,4 +1,4 @@
-# Why Federated Learning Fits Open Cluster Management
+# Why Open Cluster Management for Federated Learning
 
 Open Cluster Management (OCM) already implements the hub-and-spoke, pull-based control plane that federated learning (FL) relies on. By mapping FL concepts directly to OCM APIs, the federated learning controller can orchestrate distributed training with minimal new primitives while reusing OCM's mature multi-cluster governance, placement, and security capabilities.
 
