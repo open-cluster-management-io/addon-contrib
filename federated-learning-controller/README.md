@@ -4,7 +4,7 @@ As machine learning (ML) evolves, protecting data privacy becomes increasingly i
 
 Federated Learning (FL) addresses this by allowing multiple clusters or organizations to collaboratively train models without sharing sensitive data. Computation happens where the data lives, ensuring privacy, regulatory compliance, and efficiency.
 
-Within Open Cluster Management (OCM), integrating FL aligns model training with the platform's multi-cluster governance and policy controls while honoring data residency requirements. For more context, see [Why Federated Learning in OCM](./docs/why-fl-in-ocm.md).
+This Kubernetes controller automates the deployment and management of federated learning within an Open Cluster Management (OCM) environment, which provides an effective foundation for federated learning [Learn more](./docs/why-fl-in-ocm.md). The FederatedLearning CRD offers a unified, open interface for frameworks such as Flower, OpenFL, and Others, leveraging Kubernetes-native resources to coordinate servers, clients, and training across multicluster environments.
 
 This Kubernetes controller automates the deployment and management of federated learning in an Open Cluster Management environment. The `FederatedLearning` Custom Resource Definition (CRD) provides a unified open interface for integrating frameworks such as Flower, OpenFL, and NVIDIA FLARE. It leverages Kubernetes-native resources to provision servers, launch clients, and orchestrate the training lifecycle across a multicluster environment.
 
