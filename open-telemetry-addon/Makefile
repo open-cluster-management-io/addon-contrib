@@ -127,3 +127,33 @@ clean:
 	@kubectl delete namespace $(PROMETHEUS_NAMESPACE) || true
 	@rm -rf $(CERTS_DIR)
 	@echo "Cleanup completed"
+
+test-e2e:
+	@echo "Skipping e2e tests (not implemented)"
+	@true
+.PHONY: test-e2e
+
+verify:
+	@echo "Skipping verify (not implemented)"
+	@true
+.PHONY: verify
+
+build:
+	@echo "Skipping build (not implemented)"
+	@true
+.PHONY: build
+
+test-unit:
+	@echo "Skipping unit tests (not implemented)"
+	@true
+.PHONY: test-unit
+
+test-integration:
+	@echo "Skipping integration tests (not implemented)"
+	@true
+.PHONY: test-integration
+
+.PHONY: test-chart
+test-chart: ## Run chart tests
+	@echo "Skipping chart tests (not implemented)"
+	@true

@@ -5,8 +5,8 @@ type: application
 version: 0.1.0
 appVersion: "0.128.0"
 maintainers:
-  - name: OCM Maintainers
-    email: maintainers@open-cluster-management.io
+  - name: clyang82
+    email: chuyang@redhat.com
 keywords:
   - opentelemetry
   - observability
