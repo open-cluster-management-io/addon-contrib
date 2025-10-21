@@ -1,5 +1,13 @@
 # Why Open Cluster Management for Federated Learning
 
+## Summary
+
+They Both follow a hub-spoke arch, with pull-based model:
+
+- In OCM, managed clusters pull their desired state and push status back to the hub.
+- In FL, collaborators pull the global model, train locally, then push model updates back to the aggregator.
+- The OCM Hub acts like the aggregator or server, and each Managed Cluster plays the role of collaborator or client in FL.
+
 Open Cluster Management (OCM) already implements the hub-and-spoke, pull-based control plane that federated learning (FL) relies on. By mapping FL concepts directly to OCM APIs, the federated learning controller can orchestrate distributed training with minimal new primitives while reusing OCM's mature multi-cluster governance, placement, and security capabilities.
 
 ## Shared Hub–Spoke Architecture
