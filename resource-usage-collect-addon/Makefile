@@ -20,7 +20,7 @@ PWD=$(shell pwd)
 # Image URL to use all building/pushing image targets;
 GO_BUILD_PACKAGES :=./pkg/...
 IMAGE ?= resource-usage-collect-addon
-IMAGE_REGISTRY ?= quay.io/haoqing
+IMAGE_REGISTRY ?= quay.io/open-cluster-management
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)
 
@@ -45,9 +45,6 @@ vet: ## Run go vet against code.
 build: fmt vet ## Build manager binary.
 	GOFLAGS="" go build -o addon ./pkg/main.go
 
-.PHONY: images
-images: ## Build addon binary.
-	docker build -t ${IMAGE_NAME} .
 
 ##@ Deploy
 .PHONY: deploy
@@ -71,3 +68,58 @@ kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE):
 	mkdir -p $(LOCALBIN)
 	curl $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
+
+##@ Verification
+.PHONY: vendor
+vendor: ## Update vendor dependencies
+	@echo "Updating vendor dependencies..."
+	go mod tidy
+	go mod vendor
+
+.PHONY: verify
+verify: fmt vet ## Run code verification
+	@echo "✓ Verification passed"
+
+##@ Testing
+.PHONY: test-unit
+test-unit: ## Run unit tests
+	@echo "Running unit tests..."
+	go test -race -coverprofile=coverage.out $(GO_TEST_PACKAGES)
+
+.PHONY: test-integration
+test-integration: ## Run integration tests
+	@echo "Skipping integration tests (not implemented)"
+	@true
+
+.PHONY: test-e2e
+test-e2e: ## Run e2e tests
+	@echo "Creating placeholder e2e artifact..."
+	@tar -czf $(IMAGE).tar.gz deploy/ charts/ || true
+	@echo "Skipping e2e tests (not implemented)"
+	@true
+
+.PHONY: test-chart
+test-chart: ## Run chart tests
+	@echo "Skipping chart tests (not implemented)"
+	@true
+
+##@ Image Management
+.PHONY: image
+image: ## Build docker image
+	docker build -t ${IMAGE_NAME} .
+
+.PHONY: image-push
+image-push: ## Push docker image
+	@echo "Pushing Docker image..."
+	docker push $(IMAGE_NAME)
+
+.PHONY: image-manifest
+image-manifest: ## Create and push multi-arch manifest
+	docker manifest create $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)-amd64 \
+		$(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)-arm64
+	docker manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)-amd64 --arch amd64
+	docker manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/$(IMAGE):$(IMAGE_TAG)-arm64 --arch arm64
+	docker manifest push $(IMAGE_NAME)

@@ -71,7 +71,4 @@ spec:
         hubPermissions:
           - type: CurrentCluster
             currentCluster:
-              clusterRoleName: {{ .Values.rbac.clusterRoleName }} 
-
-
-
+              clusterRoleName: {{ .Values.rbac.clusterRoleName }}

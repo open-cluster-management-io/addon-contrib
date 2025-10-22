@@ -5,7 +5,7 @@ metadata:
   name: global
   namespace: {{ .Release.Namespace }}
 spec:
-  clusterSet: global 
+  clusterSet: global
 {{- end }}
 
 ---

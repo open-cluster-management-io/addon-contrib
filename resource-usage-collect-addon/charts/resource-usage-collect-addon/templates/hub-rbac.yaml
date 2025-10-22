@@ -29,7 +29,4 @@ subjects:
   - kind: ServiceAccount
     name: addon-manager-controller-sa
     namespace: open-cluster-management-hub
-{{- end }} 
-
-
-
+{{- end }}
