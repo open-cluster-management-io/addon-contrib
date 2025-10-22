@@ -34,42 +34,53 @@ To onboard a new addon-contrib project:
 1. If not already discussed with maintainers, open an issue to propose your idea.
 1. Once acknowledged, create a folder named after your project and add your code/docs.
 1. Add an `OWNERS` file listing the new project's maintainers.
-1. Create a PR with a brief project overview and confirm the `OWNERS` file is present.
+1. **Register your project** in `.github/repositories.json` (see [Repository Registration](#repository-registration) below).
+1. **Ensure CI/CD compliance** by implementing required structure and targets (see [GitHub Actions Requirements](#github-actions-requirements) below).
+1. Create a PR with a brief project overview and confirm all requirements are met.
 1. An OCM maintainer will review and merge the PR.
 
-### GitHub Actions
+### GitHub Actions Requirements
 
 All projects must follow certain conventions to ensure compatibility with the addon-contrib repository's Github Actions workflows.
 
 Refer to the [Test](./.github/workflows/test.yml) and [E2E](./.github/workflows/e2e.yml) workflows for exact details.
 
-#### `make` targets
+#### Required `make` Targets
 
-All projects must define the following `make` targets:
+All projects **must** define the following `make` targets in their `Makefile`:
 
-- `verify`: Import statement formatting verification using `gci` and static code analysis and linting using `golangci-lint`
-- `build`: Compile the Go application into a statically linked binary with debug information stripped for optimal container deployment
-- `test-unit`: Invoke unit tests and return an exit code accordingly.
-- `test-chart`: Invoke scripts to verify your chart can be installed successfully.
-- `test-e2e`: Invoke end-to-end tests and return an exit code accordingly.
-- `image`: Build all container image.
-- `image-push`: Push all container images.
-- `image-manifest`: Create annotate and push multi-architecture manifests for all images.
+| Target | Description | Can be Stub? |
+|--------|-------------|--------------|
+| `verify` | Code verification (linting, formatting) | No - should run actual checks |
+| `vendor` | Update Go module dependencies | No - if Go project |
+| `build` | Build the application binary | No - if Go project |
+| `test-unit` | Run unit tests | No - should run actual tests |
+| `test-integration` | Run integration tests | **Yes** - can return true if not implemented |
+| `test-e2e` | Run end-to-end tests | **Yes** - can return true if not implemented |
+| `test-chart` | Test Helm chart installation | **Yes** - can return true if no chart |
+| `image` | Build container image | **Yes** - only if Dockerfile exists |
+| `image-push` | Push container image to registry | **Yes** - only if Dockerfile exists |
+| `image-manifest` | Create multi-arch image manifest | **Yes** - only if Dockerfile exists |
 
-#### Dockerfiles
+#### Dockerfiles (Optional)
 
-All Dockerfiles for the project must reside under `<project_name>/` and the default Dockerfile must be named `Dockerfile`.
+Container images are **optional**. If your addon requires a container image:
+
+- Dockerfile must reside under `<project_name>/Dockerfile`
+- The workflow will automatically detect Dockerfile presence
+- If no Dockerfile exists, image build steps will be skipped
 
 #### Helm Charts
 
-Any projects that require a Helm chart must be structured as follows:
+**If** your project requires a Helm chart, it must be structured as follows:
 
 ```bash
 <project_name>
 └── charts
-    └── <project_name> # chart name must match project directory name
+    └── <project_name>  # Chart name must match project directory name
         ├── Chart.yaml
         ├── templates
+        │   └── *.yaml
         └── values.yaml
 ```
 

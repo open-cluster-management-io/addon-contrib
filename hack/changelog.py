@@ -65,22 +65,35 @@ if __name__ == '__main__':
     repo = g.get_repo("open-cluster-management-io/addon-contrib")
     pulls = repo.get_pulls(state='closed', sort='created', base='main', direction='desc')
 
-    # get the last release tag
+    # get the last release tag for this specific sub repo
     tags = repo.get_tags()
     if tags.totalCount == 0:
         print("no tags in the repo")
         sys.exit()
-    elif tags.totalCount == 1:
-        last_release_tag = tags[0].name
+
+    # Filter tags that match the current repo_name prefix
+    # Use exact prefix match to avoid matching similar repo names
+    repo_tags = []
+    for tag in tags:
+        if tag.name.startswith(repo_name + '/'):
+            repo_tags.append(tag)
+
+    if len(repo_tags) <= 1:
+        # First release for this repo - no previous tags to compare
+        # (0 = not tagged yet, 1 = only current tag exists)
+        last_release_tag = None
     else:
-        last_release_tag = tags[1].name
+        # Find the previous release tag (second in the filtered list)
+        # repo_tags[0] is current release, repo_tags[1] is previous
+        last_release_tag = repo_tags[1].name
 
     # get related PR from the last release tag
     last_release_pr = 0
     release_word = "in"
 
-    if tags.totalCount > 1:
+    if last_release_tag:
         release_word = "since"
+        # Find the tag object to get its commit and associated PRs
         for tag in tags:
             if tag.name == last_release_tag:
                 tag_pulls = tag.commit.get_pulls()
@@ -116,8 +129,11 @@ if __name__ == '__main__':
 
     # Print
     print("# %s %s" % (repo_name, release_tag))
-    print("\n**changes %s [%s](https://github.com/open-cluster-management-io/releases/%s)**\n"
-          % (release_word, last_release_tag, last_release_tag))
+    if last_release_tag:
+        print("\n**changes %s [%s](https://github.com/open-cluster-management-io/releases/%s)**\n"
+              % (release_word, last_release_tag, last_release_tag))
+    else:
+        print("\n**Initial release**\n")
     section_if_present(breakings, ":warning: Breaking Changes")
     section_if_present(features, ":sparkles: New Features")
     section_if_present(bugs, ":bug: Bug Fixes")
