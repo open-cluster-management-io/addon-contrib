@@ -25,7 +25,4 @@ agent:
 rbac:
   create: true
   clusterRoleName: open-cluster-management:resource-usage-collect:agent
-  clusterRoleBindingName: open-cluster-management-addon-manager-resource-usage-collect 
-
-
-
+  clusterRoleBindingName: open-cluster-management-addon-manager-resource-usage-collect

@@ -22,7 +22,7 @@ cd addon-contrib/resource-usage-collect-addon/helm
 helm install resource-usage-collect-addon . \
   --namespace open-cluster-management-addon \
   --create-namespace \
-  --set global.image.repository=<image-name> # quay.io/haoqing/resource-usage-collect-addon
+  --set global.image.repository=<image-name> # quay.io/open-cluster-management/resource-usage-collect-addon
 ```
 
 ### From Chart Archive
@@ -35,7 +35,7 @@ helm package .
 helm install resource-usage-collect-addon resource-usage-collect-addon-0.1.0.tgz \
   --namespace open-cluster-management-addon \
   --create-namespace \
-  --set global.image.repository=<image-name> # quay.io/haoqing/resource-usage-collect-addon
+  --set global.image.repository=<image-name> # quay.io/open-cluster-management/resource-usage-collect-addon
 ```
 
 ## Configuration

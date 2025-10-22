@@ -5,11 +5,10 @@ type: application
 version: 0.1.0
 appVersion: "1.0.0"
 maintainers:
-  - name: OCM Maintainers
-    email: maintainers@open-cluster-management.io
+  - name: haoqing0110
+    email: qhao@redhat.com
 keywords:
   - ocm
   - open-cluster-management
   - resource-usage
   - addon
-

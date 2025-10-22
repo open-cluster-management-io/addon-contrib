@@ -15,6 +15,3 @@ spec:
     placements:
       - name: {{ .Values.addon.name }}-global
         namespace: {{ .Release.Namespace }}
-
-
-

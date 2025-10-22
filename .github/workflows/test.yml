@@ -145,8 +145,19 @@ jobs:
           cluster_name: ${{ steps.format-cluster-name.outputs.cluster_name }}
           node_image: kindest/node:v1.31.9
 
+      - name: Check if Dockerfile exists
+        id: check-dockerfile
+        run: |
+          if [ -f "${{ inputs.repo }}/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Dockerfile found for ${{ inputs.repo }}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Dockerfile found for ${{ inputs.repo }}, skipping image build"
+          fi
+
       - name: Build Docker Image
-        if: steps.list-changed.outputs.changed == 'true'
+        if: steps.list-changed.outputs.changed == 'true' && steps.check-dockerfile.outputs.exists == 'true'
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
         with:
           context: ./${{ inputs.repo }}
@@ -161,7 +172,7 @@ jobs:
           load: true
 
       - name: Load image & create namespace
-        if: steps.list-changed.outputs.changed == 'true'
+        if: steps.list-changed.outputs.changed == 'true' && steps.check-dockerfile.outputs.exists == 'true'
         run: |
           kind load docker-image ${{ env.IMAGE }}:${{ env.IMAGE_TAG }} --name ${{ steps.format-cluster-name.outputs.cluster_name }}
 
