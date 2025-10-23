@@ -19,8 +19,3 @@ spec:
         name: otel-addon
       group: addon.open-cluster-management.io
       resource: addontemplates
-    - group: addon.open-cluster-management.io
-      resource: addondeploymentconfigs
-      defaultConfig:
-        name: otel-config
-        namespace: open-cluster-management-hub

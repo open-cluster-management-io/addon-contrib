@@ -1,0 +1,15 @@
+apiVersion: v2
+name: open-telemetry-addon
+description: A Helm chart for Open Cluster Management Open Telemetry addon
+type: application
+version: 0.1.0
+appVersion: "0.128.0"
+maintainers:
+  - name: clyang82
+    email: chuyang@redhat.com
+keywords:
+  - opentelemetry
+  - observability
+  - monitoring
+  - ocm
+  - addon

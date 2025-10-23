@@ -1,0 +1,22 @@
+opentelemetryCollector:
+  name: opentelemetry-collector
+  namespace: open-cluster-management-agent-addon
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: "0.128.0"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  resources: {}
+
+  securityContext: {}
+
+  # TLS Configuration
+  tls:
+    enabled: true
+
+# Certificate content to be set via --set-file
+promWebRootCACert: ""
+
+promeRemoteWriteEndpoint: ""
