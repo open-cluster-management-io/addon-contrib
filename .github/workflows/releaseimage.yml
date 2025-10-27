@@ -66,7 +66,14 @@ jobs:
       - name: pull base image
         run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
 
+      - name: Check if Dockerfile exists
+        id: check-dockerfile
+        uses: ./go/src/open-cluster-management.io/addon-contrib/.github/actions/check-dockerfile
+        with:
+          repository: ${{ matrix.repository }}
+
       - name: build image
+        if: steps.check-dockerfile.outputs.exists == 'true'
         run: |
           set -e
           cd ${{ matrix.repository }}
@@ -75,6 +82,7 @@ jobs:
             make image
 
       - name: push image
+        if: steps.check-dockerfile.outputs.exists == 'true'
         run: |
           set -e
           cd ${{ matrix.repository }}

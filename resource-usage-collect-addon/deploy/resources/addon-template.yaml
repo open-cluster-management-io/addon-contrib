@@ -51,7 +51,7 @@ spec:
                 containers:
                   - name: resource-usage-collect-agent
                     image: example-addon-image
-                    imagePullPolicy: Always
+                    imagePullPolicy: IfNotPresent
                     args:
                       - "/addon"
                       - "agent"

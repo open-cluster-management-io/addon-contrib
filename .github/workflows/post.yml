@@ -120,7 +120,13 @@ jobs:
         run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.16
       - name: pull base image
         run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
+      - name: Check if Dockerfile exists
+        id: check-dockerfile
+        uses: ./.github/actions/check-dockerfile
+        with:
+          repository: ${{ matrix.repo }}
       - name: build image
+        if: steps.check-dockerfile.outputs.exists == 'true'
         run: |
           set -e
           cd ${{ matrix.repo }}
@@ -128,6 +134,7 @@ jobs:
           IMAGE_BUILD_EXTRA_FLAGS="--build-arg OS=linux --build-arg ARCH=${{ matrix.arch }}" \
             make image
       - name: push image
+        if: steps.check-dockerfile.outputs.exists == 'true'
         run: |
           set -e
           cd ${{ matrix.repo }}
