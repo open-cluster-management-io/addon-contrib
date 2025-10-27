@@ -50,7 +50,7 @@ spec:
                 serviceAccount: {{ .Values.addon.name }}-agent-sa
                 containers:
                   - name: {{ .Values.addon.name }}-agent
-                    image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
+                    image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag | default (print "v" .Chart.Version) }}"
                     imagePullPolicy: {{ .Values.global.image.pullPolicy }}
                     args:
                       - "/addon"

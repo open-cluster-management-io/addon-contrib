@@ -1,8 +1,8 @@
 # Default values for resource-usage-collect-addon
 global:
   image:
-    repository: example-addon-image
-    tag: latest
+    repository: quay.io/open-cluster-management/resource-usage-collect-addon
+    tag: ""  # defaults to chart appVersion
     pullPolicy: Always
 
 addon:

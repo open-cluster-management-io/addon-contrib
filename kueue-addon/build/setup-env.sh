@@ -149,12 +149,11 @@ install_ocm_addons() {
   fi
 
   echo "Install resource-usage-collect-addon"
-  git clone https://github.com/open-cluster-management-io/addon-contrib.git || true
-  cd addon-contrib/resource-usage-collect-addon
-  helm install resource-usage-collect-addon chart/ \
+  helm upgrade --install \
     -n open-cluster-management-addon --create-namespace \
+    resource-usage-collect-addon ocm/resource-usage-collect-addon \
     --set skipClusterSetBinding=true \
-    --set global.image.repository=quay.io/haoqing/resource-usage-collect-addon
+    --set global.image.repository=quay.io/open-cluster-management/resource-usage-collect-addon
   cd -
 
   rm -rf addon-contrib

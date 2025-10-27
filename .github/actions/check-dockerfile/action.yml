@@ -1,0 +1,27 @@
+name: Check if Dockerfile exists
+description: Checks if a Dockerfile exists in the specified repository path
+
+inputs:
+  repository:
+    description: 'The repository path to check for Dockerfile'
+    required: true
+
+outputs:
+  exists:
+    description: 'Whether the Dockerfile exists (true/false)'
+    value: ${{ steps.check.outputs.exists }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check if Dockerfile exists
+      id: check
+      shell: bash
+      run: |
+        if [ -f "${{ inputs.repository }}/Dockerfile" ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "Dockerfile found for ${{ inputs.repository }}"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+          echo "No Dockerfile found for ${{ inputs.repository }}, skipping image build"
+        fi

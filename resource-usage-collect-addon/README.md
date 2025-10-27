@@ -48,14 +48,14 @@ export KUBECONFIG=</path/to/hub_cluster/kubeconfig> # export KUBECONFIG=~/.kube/
 
 ```bash
 # build image
-export IMAGE_NAME=zheshen/resource-usage-collect-addon-template:latest
-make images
+make image
 ```
 
-**If you are using kind, load image to your hub cluster.**
+**If you are using kind, load image to your spoke cluster.**
 
 ```bash
-kind load docker-image $IMAGE_NAME --name cluster_name # kind load docker-image  $IMAGE_NAME --name hub
+IMAGE_NAME=quay.io/open-cluster-management/resource-usage-collect-addon:latest
+kind load docker-image $IMAGE_NAME --name cluster_name # kind load docker-image  $IMAGE_NAME --name cluster1
 ```
 
 **On the hub cluster, deploy the addon.**

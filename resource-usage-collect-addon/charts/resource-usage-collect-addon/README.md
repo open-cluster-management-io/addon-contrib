@@ -16,13 +16,13 @@ This Helm chart installs the Resource Usage Collect Addon for Open Cluster Manag
 ```bash
 # Clone the repository
 git clone https://github.com/open-cluster-management-io/addon-contrib.git
-cd addon-contrib/resource-usage-collect-addon/helm
+cd addon-contrib/resource-usage-collect-addon/charts/resource-usage-collect-addon
 
 # Install the chart
 helm install resource-usage-collect-addon . \
   --namespace open-cluster-management-addon \
-  --create-namespace \
-  --set global.image.repository=<image-name> # quay.io/open-cluster-management/resource-usage-collect-addon
+  --set global.image.tag=latest \
+  --create-namespace
 ```
 
 ### From Chart Archive
@@ -34,8 +34,7 @@ helm package .
 # Install from the package
 helm install resource-usage-collect-addon resource-usage-collect-addon-0.1.0.tgz \
   --namespace open-cluster-management-addon \
-  --create-namespace \
-  --set global.image.repository=<image-name> # quay.io/open-cluster-management/resource-usage-collect-addon
+  --create-namespace
 ```
 
 ## Configuration

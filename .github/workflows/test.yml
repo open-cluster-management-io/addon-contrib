@@ -147,14 +147,9 @@ jobs:
 
       - name: Check if Dockerfile exists
         id: check-dockerfile
-        run: |
-          if [ -f "${{ inputs.repo }}/Dockerfile" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Dockerfile found for ${{ inputs.repo }}"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No Dockerfile found for ${{ inputs.repo }}, skipping image build"
-          fi
+        uses: ./.github/actions/check-dockerfile
+        with:
+          repository: ${{ inputs.repo }}
 
       - name: Build Docker Image
         if: steps.list-changed.outputs.changed == 'true' && steps.check-dockerfile.outputs.exists == 'true'
