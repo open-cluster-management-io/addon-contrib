@@ -1,9 +1,0 @@
-apiVersion: v2
-name: argocd-addon
-description: >
-  A Helm chart for deploying an Argo CD add-on within the Open Cluster Management (OCM) environment.
-  The add-on deploys an opinionated Argo CD instance to the OCM managed clusters.
-  This chart is primarily used to demonstrate the integration of Argo CD and the Argo CD Agent with OCM.
-type: application
-version: 0.1.0
-appVersion: 2.13.1
