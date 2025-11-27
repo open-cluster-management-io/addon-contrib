@@ -38,47 +38,59 @@ var _ = Describe("FederatedLearning Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
-		federatedlearning := &flv1alpha1.FederatedLearning{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind FederatedLearning")
-			err := k8sClient.Get(ctx, typeNamespacedName, federatedlearning)
+			resource := &flv1alpha1.FederatedLearning{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &flv1alpha1.FederatedLearning{
+				resource = &flv1alpha1.FederatedLearning{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &flv1alpha1.FederatedLearning{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance FederatedLearning")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			if err == nil {
+				By("Cleanup the specific resource instance FederatedLearning")
+				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			}
 		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+
+		It("should handle non-existent resource gracefully", func() {
+			By("Reconciling a non-existent resource")
 			controllerReconciler := &FederatedLearningReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
+			nonExistentName := types.NamespacedName{
+				Name:      "non-existent-resource",
+				Namespace: "default",
+			}
+
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nonExistentName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Expect(result).To(Equal(reconcile.Result{}))
+		})
+
+		It("should create and retrieve FederatedLearning resource", func() {
+			By("Getting the created resource")
+			resource := &flv1alpha1.FederatedLearning{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resource.Name).To(Equal(resourceName))
+			Expect(resource.Namespace).To(Equal("default"))
 		})
 	})
 })

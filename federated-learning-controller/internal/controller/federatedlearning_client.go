@@ -296,7 +296,7 @@ func (r *FederatedLearningReconciler) deployPlacement(ctx context.Context,
 		Spec: instance.Spec.Client.Placement,
 	}
 	// for namespaced resource, set ownerreference of controller
-	if err := controllerutil.SetControllerReference(instance, expectedPlacement, r.GetScheme()); err != nil {
+	if err := controllerutil.SetControllerReference(instance, expectedPlacement, r.Scheme); err != nil {
 		return err
 	}
 
