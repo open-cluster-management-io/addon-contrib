@@ -46,8 +46,8 @@ Install the OpenTelemetry addon with automatic Prometheus stack and certificate 
 
 ```bash
 # Clone the repository
-git clone https://github.com/stolostron/ocm-addon-contrib.git
-cd ocm-addon-contrib/open-telemetry-addon
+git clone https://github.com/open-cluster-management-io/addon-contrib.git
+cd addon-contrib/open-telemetry-addon
 
 # Install everything (certificates, prometheus, addon)
 make install-all
@@ -73,7 +73,7 @@ If you already have Prometheus installed and don't need TLS:
 make install-addon-no-tls
 
 # Or using Helm directly
-helm install open-telemetry-addon ./charts/opentelemetry-addon \
+helm install open-telemetry-addon ./charts/open-telemetry-addon \
   --namespace open-cluster-management-addon \
   --create-namespace \
   --set opentelemetryCollector.tls.enabled=false
@@ -83,7 +83,7 @@ helm install open-telemetry-addon ./charts/opentelemetry-addon \
 
 ### Helm Chart Configuration
 
-The addon can be configured through Helm values. See [charts/opentelemetry-addon/values.yaml](charts/opentelemetry-addon/values.yaml) for all available options.
+The addon can be configured through Helm values. See [charts/open-telemetry-addon/values.yaml](charts/open-telemetry-addon/values.yaml) for all available options.
 
 #### TLS Configuration
 

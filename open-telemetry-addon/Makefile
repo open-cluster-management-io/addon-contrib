@@ -6,7 +6,7 @@ help:
 	@echo "  install-all           - Install everything (certs, prometheus, addon)"
 	@echo "  generate-certs        - Generate TLS certificates"
 	@echo "  install-prometheus    - Install kube-prometheus-stack"
-	@echo "  install-addon         - Install opentelemetry-addon chart"
+	@echo "  install-addon         - Install open-telemetry-addon chart"
 	@echo "  install-addon-no-tls  - Install addon without TLS (for existing Prometheus)"
 	@echo "  clean                 - Clean up installations"
 
@@ -14,7 +14,7 @@ help:
 NAMESPACE ?= open-cluster-management-addon
 HUB_NAMESPACE ?= open-cluster-management-hub
 PROMETHEUS_NAMESPACE ?= monitoring
-CHART_DIR = charts/opentelemetry-addon
+CHART_DIR = charts/open-telemetry-addon
 CERTS_DIR = certs
 CONTEXT ?= kind-hub
 
@@ -82,13 +82,18 @@ install-prometheus: generate-certs
 		--set prometheus.prometheusSpec.web.tlsConfig.client_ca.secret.key=client-ca.crt \
 		--set prometheus.prometheusSpec.web.tlsConfig.client_ca.secret.name=prometheus-tls \
 		--set prometheus.prometheusSpec.web.tlsConfig.clientAuthType=RequestClientCert \
+		--set datasources."datasources\.yaml".apiVersion=1 \
+  		--set datasources."datasources\.yaml".datasources[0].name=Prometheus \
+  		--set datasources."datasources\.yaml".datasources[0].type=prometheus \
+  		--set datasources."datasources\.yaml".datasources[0].url=https://prometheus-stack-kube-prom-prometheus.monitoring:9090 \
+  		--set datasources."datasources\.yaml".datasources[0].jsonData.tlsSkipVerify=true \
 		--set prometheus.service.type=NodePort \
 		--set prometheusOperator.enabled=true
 	@echo "kube-prometheus-stack installed successfully"
 
-# Install opentelemetry-addon chart
+# Install open-telemetry-addon chart
 install-addon:
-	@echo "Installing opentelemetry-addon..."
+	@echo "Installing open-telemetry-addon..."
 	@# Create hub namespace if it doesn't exist
 	kubectl --context $(CONTEXT) create namespace $(HUB_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	@# Create addon namespace if it doesn't exist
@@ -98,30 +103,30 @@ install-addon:
 		--cert=$(CERTS_DIR)/client-ca.crt \
 		--key=$(CERTS_DIR)/client-ca.key \
 		--dry-run=client -o yaml | kubectl apply -f -
-	@# Install the opentelemetry-addon chart
-	helm upgrade --install opentelemetry-addon $(CHART_DIR) \
+	@# Install the open-telemetry-addon chart
+	helm upgrade --install open-telemetry-addon $(CHART_DIR) \
 		--namespace $(NAMESPACE) \
 		--set opentelemetryCollector.tls.enabled=true \
 		--set promeRemoteWriteEndpoint="https://hub-control-plane:30090/api/v1/write" \
 		--set-file promWebRootCACert=$(CERTS_DIR)/root-ca.crt
-	@echo "opentelemetry-addon installed successfully"
+	@echo "open-telemetry-addon installed successfully"
 
-# Install opentelemetry-addon chart without TLS (for existing Prometheus)
+# Install open-telemetry-addon chart without TLS (for existing Prometheus)
 install-addon-no-tls:
-	@echo "Installing opentelemetry-addon without TLS..."
+	@echo "Installing open-telemetry-addon without TLS..."
 	@# Create addon namespace if it doesn't exist
 	kubectl --context $(CONTEXT) create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	@# Install the opentelemetry-addon chart without TLS
-	helm upgrade --install opentelemetry-addon $(CHART_DIR) \
+	@# Install the open-telemetry-addon chart without TLS
+	helm upgrade --install open-telemetry-addon $(CHART_DIR) \
 		--namespace $(NAMESPACE) \
 		--set promeRemoteWriteEndpoint="http://hub-control-plane:30090/api/v1/write" \
 		--set opentelemetryCollector.tls.enabled=false
-	@echo "opentelemetry-addon installed successfully (no TLS)"
+	@echo "open-telemetry-addon installed successfully (no TLS)"
 
 # Clean up installations
 clean:
 	@echo "Cleaning up installations..."
-	@helm uninstall opentelemetry-addon -n $(NAMESPACE) || true
+	@helm uninstall open-telemetry-addon -n $(NAMESPACE) || true
 	@helm uninstall prometheus-stack -n $(PROMETHEUS_NAMESPACE) || true
 	@kubectl delete namespace $(NAMESPACE) || true
 	@kubectl delete namespace $(PROMETHEUS_NAMESPACE) || true
