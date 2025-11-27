@@ -5,6 +5,10 @@ inputs:
   repository:
     description: 'The repository path to check for Dockerfile'
     required: true
+  repoRoot:
+    description: 'The root directory of the repository (default: current directory)'
+    required: false
+    default: '.'
 
 outputs:
   exists:
@@ -18,10 +22,21 @@ runs:
       id: check
       shell: bash
       run: |
-        if [ -f "${{ inputs.repository }}/Dockerfile" ]; then
+        REPO_ROOT="${{ inputs.repoRoot }}"
+        # Remove trailing slash if present
+        REPO_ROOT="${REPO_ROOT%/}"
+
+        # Construct the full path
+        if [ "$REPO_ROOT" = "." ]; then
+          DOCKERFILE_PATH="${{ inputs.repository }}/Dockerfile"
+        else
+          DOCKERFILE_PATH="${REPO_ROOT}/${{ inputs.repository }}/Dockerfile"
+        fi
+
+        if [ -f "$DOCKERFILE_PATH" ]; then
           echo "exists=true" >> "$GITHUB_OUTPUT"
-          echo "Dockerfile found for ${{ inputs.repository }}"
+          echo "Dockerfile found for ${{ inputs.repository }} at $DOCKERFILE_PATH"
         else
           echo "exists=false" >> "$GITHUB_OUTPUT"
-          echo "No Dockerfile found for ${{ inputs.repository }}, skipping image build"
+          echo "No Dockerfile found for ${{ inputs.repository }} at $DOCKERFILE_PATH, skipping image build"
         fi
