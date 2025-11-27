@@ -1,7 +1,16 @@
-REGISTRY ?= quay.io/open-cluster-management
-# Image URL to use all building/pushing image targets
-IMG ?= $(REGISTRY)/federated-learning-controller:latest
-SIDECAR_IMG ?= $(REGISTRY)/federated-learning-sidecar:latest
+# Image configuration
+IMAGE_REGISTRY ?= quay.io/open-cluster-management
+IMAGE_TAG ?= latest
+IMAGE_NAME ?= $(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)
+SIDECAR_IMAGE_NAME ?= $(IMAGE_REGISTRY)/federated-learning-sidecar:$(IMAGE_TAG)
+
+# Flower application naming
+FLOWER_APP_NAME ?= flower-mnist
+
+# Legacy image variables for backwards compatibility
+REGISTRY ?= $(IMAGE_REGISTRY)
+IMG ?= $(IMAGE_NAME)
+SIDECAR_IMG ?= $(SIDECAR_IMAGE_NAME)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.31.0
 
@@ -63,9 +72,21 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: verify
+verify: fmt vet ## Run code verification
+	@echo "✓ Verification passed"
+
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+.PHONY: test-unit
+test-unit: manifests generate fmt vet envtest ## Run unit tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+.PHONY: test-integration
+test-integration: ## Run integration tests (placeholder - no integration tests yet)
+	@echo "No integration tests configured yet"
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -74,15 +95,19 @@ test: manifests generate fmt vet envtest ## Run tests.
 # - CERT_MANAGER_INSTALL_SKIP=true
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	@command -v kind >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@kind get clusters | grep -q 'kind' || { \
-		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
-		exit 1; \
-	}
-	go test ./test/e2e/ -v -ginkgo.v
+	@if [ ! -d "./test/e2e" ]; then \
+		echo "No e2e tests configured yet (test/e2e directory not found)"; \
+	else \
+		command -v kind >/dev/null 2>&1 || { \
+			echo "Kind is not installed. Please install Kind manually."; \
+			exit 1; \
+		}; \
+		kind get clusters | grep -q 'kind' || { \
+			echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
+			exit 1; \
+		}; \
+		go test ./test/e2e/ -v -ginkgo.v; \
+	fi
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -112,6 +137,84 @@ docker-build: ## Build docker image with the manager.
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
+
+# Image targets for CI/CD pipeline (matching other addons)
+# These targets use nested make calls to build all component images
+
+.PHONY: image
+image: image-controller image-sidecar image-application ## Build all docker images
+
+.PHONY: image-controller
+image-controller: ## Build controller docker image
+	$(CONTAINER_TOOL) build $(IMAGE_BUILD_EXTRA_FLAGS) -t $(IMAGE_NAME) .
+
+.PHONY: image-sidecar
+image-sidecar: ## Build sidecar docker image
+	$(MAKE) -C internal/sidecar image \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		IMAGE_BUILD_EXTRA_FLAGS="$(IMAGE_BUILD_EXTRA_FLAGS)" \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: image-application
+image-application: ## Build application docker image
+	$(MAKE) -C examples/flower image \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		APP_NAME=$(FLOWER_APP_NAME) \
+		IMAGE_BUILD_EXTRA_FLAGS="$(IMAGE_BUILD_EXTRA_FLAGS)" \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: image-push
+image-push: image-push-controller image-push-sidecar image-push-application ## Push all docker images
+
+.PHONY: image-push-controller
+image-push-controller: ## Push controller docker image
+	$(CONTAINER_TOOL) push $(IMAGE_NAME)
+
+.PHONY: image-push-sidecar
+image-push-sidecar: ## Push sidecar docker image
+	$(MAKE) -C internal/sidecar image-push \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: image-push-application
+image-push-application: ## Push application docker image
+	$(MAKE) -C examples/flower image-push \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		APP_NAME=$(FLOWER_APP_NAME) \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: image-manifest
+image-manifest: image-manifest-controller image-manifest-sidecar image-manifest-application ## Create and push all multi-arch manifests
+
+.PHONY: image-manifest-controller
+image-manifest-controller: ## Create and push controller multi-arch manifest
+	$(CONTAINER_TOOL) manifest create $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)-amd64 \
+		$(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)-arm64
+	$(CONTAINER_TOOL) manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)-amd64 --arch amd64
+	$(CONTAINER_TOOL) manifest annotate $(IMAGE_NAME) \
+		$(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)-arm64 --arch arm64
+	$(CONTAINER_TOOL) manifest push $(IMAGE_NAME)
+
+.PHONY: image-manifest-sidecar
+image-manifest-sidecar: ## Create and push sidecar multi-arch manifest
+	$(MAKE) -C internal/sidecar image-manifest \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
+
+.PHONY: image-manifest-application
+image-manifest-application: ## Create and push application multi-arch manifest
+	$(MAKE) -C examples/flower image-manifest \
+		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
+		IMAGE_TAG=$(IMAGE_TAG) \
+		APP_NAME=$(FLOWER_APP_NAME) \
+		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 # docker run --rm --privileged tonistiigi/binfmt --install all
 .PHONY: docker-platform-build

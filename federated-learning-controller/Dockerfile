@@ -1,7 +1,7 @@
 # Build the manager binary
 FROM golang:1.23 AS builder
-ARG TARGETOS
-ARG TARGETARCH
+ARG OS=linux
+ARG ARCH=amd64
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -17,17 +17,14 @@ COPY api/ api/
 COPY internal/ internal/
 
 # Build
-# the GOARCH has not a default value to allow the binary be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -a -o manager cmd/main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# Use UBI minimal as base image for consistency with other addons
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+ENV USER_UID=10001
+
 WORKDIR /
 COPY --from=builder /workspace/manager .
-USER 65532:65532
+USER ${USER_UID}
 
 ENTRYPOINT ["/manager"]
