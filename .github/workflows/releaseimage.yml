@@ -71,6 +71,7 @@ jobs:
         uses: ./go/src/open-cluster-management.io/addon-contrib/.github/actions/check-dockerfile
         with:
           repository: ${{ matrix.repository }}
+          repoRoot: go/src/open-cluster-management.io/addon-contrib
 
       - name: build image
         if: steps.check-dockerfile.outputs.exists == 'true'
