@@ -19,9 +19,11 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 
 	"github/open-cluster-management/federated-learning/internal/controller"
+	"github/open-cluster-management/federated-learning/internal/sidecar"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -66,23 +68,51 @@ func init() {
 
 func main() {
 	var (
+		mode                       string
 		metricsAddr, probeAddr     string
 		enableLeaderElection       bool
 		secureMetrics, enableHTTP2 bool
 		tlsOpts                    []func(*tls.Config)
 	)
 
+	// Mode selection flag
+	flag.StringVar(&mode, "mode", "controller", "Operation mode: controller or sidecar")
+
+	// Controller-specific flags
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "Metrics address (:8443 for HTTPS, :8080 for HTTP, 0 to disable).")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "Health probe address.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true, "Use HTTPS for metrics.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false, "Enable HTTP/2 for metrics and webhook servers.")
 
+	// Sidecar-specific flags
+	sidecarCfg := sidecar.ParseFlags()
+
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	// Route to appropriate mode
+	switch mode {
+	case "sidecar":
+		runSidecar(sidecarCfg)
+	case "controller":
+		runController(metricsAddr, probeAddr, enableLeaderElection, secureMetrics, enableHTTP2, &tlsOpts, &opts)
+	default:
+		fmt.Fprintf(os.Stderr, "Invalid mode: %s. Must be 'controller' or 'sidecar'\n", mode)
+		os.Exit(1)
+	}
+}
+
+func runSidecar(cfg *sidecar.Config) {
+	if err := sidecar.Run(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running sidecar: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runController(metricsAddr, probeAddr string, enableLeaderElection, secureMetrics, enableHTTP2 bool, tlsOpts *[]func(*tls.Config), opts *zap.Options) {
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(opts)))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -96,11 +126,11 @@ func main() {
 	}
 
 	if !enableHTTP2 {
-		tlsOpts = append(tlsOpts, disableHTTP2)
+		*tlsOpts = append(*tlsOpts, disableHTTP2)
 	}
 
 	webhookServer := webhook.NewServer(webhook.Options{
-		TLSOpts: tlsOpts,
+		TLSOpts: *tlsOpts,
 	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -110,7 +140,7 @@ func main() {
 	metricsServerOptions := metricsserver.Options{
 		BindAddress:   metricsAddr,
 		SecureServing: secureMetrics,
-		TLSOpts:       tlsOpts,
+		TLSOpts:       *tlsOpts,
 	}
 
 	if secureMetrics {

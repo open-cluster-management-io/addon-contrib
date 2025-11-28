@@ -2,7 +2,6 @@
 IMAGE_REGISTRY ?= quay.io/open-cluster-management
 IMAGE_TAG ?= latest
 IMAGE_NAME ?= $(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)
-SIDECAR_IMAGE_NAME ?= $(IMAGE_REGISTRY)/federated-learning-sidecar:$(IMAGE_TAG)
 
 # Flower application naming
 FLOWER_APP_NAME ?= flower-mnist
@@ -10,7 +9,6 @@ FLOWER_APP_NAME ?= flower-mnist
 # Legacy image variables for backwards compatibility
 REGISTRY ?= $(IMAGE_REGISTRY)
 IMG ?= $(IMAGE_NAME)
-SIDECAR_IMG ?= $(SIDECAR_IMAGE_NAME)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.31.0
 
@@ -139,22 +137,12 @@ docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
 # Image targets for CI/CD pipeline (matching other addons)
-# These targets use nested make calls to build all component images
-
 .PHONY: image
-image: image-controller image-sidecar image-application ## Build all docker images
+image: image-controller image-application ## Build all docker images
 
 .PHONY: image-controller
-image-controller: ## Build controller docker image
+image-controller: ## Build controller docker image (includes sidecar mode)
 	$(CONTAINER_TOOL) build $(IMAGE_BUILD_EXTRA_FLAGS) -t $(IMAGE_NAME) .
-
-.PHONY: image-sidecar
-image-sidecar: ## Build sidecar docker image
-	$(MAKE) -C internal/sidecar image \
-		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
-		IMAGE_TAG=$(IMAGE_TAG) \
-		IMAGE_BUILD_EXTRA_FLAGS="$(IMAGE_BUILD_EXTRA_FLAGS)" \
-		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: image-application
 image-application: ## Build application docker image
@@ -166,18 +154,11 @@ image-application: ## Build application docker image
 		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: image-push
-image-push: image-push-controller image-push-sidecar image-push-application ## Push all docker images
+image-push: image-push-controller image-push-application ## Push all docker images
 
 .PHONY: image-push-controller
 image-push-controller: ## Push controller docker image
 	$(CONTAINER_TOOL) push $(IMAGE_NAME)
-
-.PHONY: image-push-sidecar
-image-push-sidecar: ## Push sidecar docker image
-	$(MAKE) -C internal/sidecar image-push \
-		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
-		IMAGE_TAG=$(IMAGE_TAG) \
-		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: image-push-application
 image-push-application: ## Push application docker image
@@ -188,7 +169,7 @@ image-push-application: ## Push application docker image
 		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: image-manifest
-image-manifest: image-manifest-controller image-manifest-sidecar image-manifest-application ## Create and push all multi-arch manifests
+image-manifest: image-manifest-controller image-manifest-application ## Create and push all multi-arch manifests
 
 .PHONY: image-manifest-controller
 image-manifest-controller: ## Create and push controller multi-arch manifest
@@ -200,13 +181,6 @@ image-manifest-controller: ## Create and push controller multi-arch manifest
 	$(CONTAINER_TOOL) manifest annotate $(IMAGE_NAME) \
 		$(IMAGE_REGISTRY)/federated-learning-controller:$(IMAGE_TAG)-arm64 --arch arm64
 	$(CONTAINER_TOOL) manifest push $(IMAGE_NAME)
-
-.PHONY: image-manifest-sidecar
-image-manifest-sidecar: ## Create and push sidecar multi-arch manifest
-	$(MAKE) -C internal/sidecar image-manifest \
-		IMAGE_REGISTRY=$(IMAGE_REGISTRY) \
-		IMAGE_TAG=$(IMAGE_TAG) \
-		CONTAINER_TOOL=$(CONTAINER_TOOL)
 
 .PHONY: image-manifest-application
 image-manifest-application: ## Create and push application multi-arch manifest
@@ -225,21 +199,6 @@ docker-platform-build: ## Build docker image for multiple platforms (linux/amd64
 docker-platform-push: ## Build and push docker image for multiple platforms (linux/amd64,linux/arm64).
 	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 --push -t ${IMG} .
 
-.PHONY: docker-sidecar-build
-docker-sidecar-build: ## Build sidecar docker image.
-	$(CONTAINER_TOOL) build -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
-
-.PHONY: docker-sidecar-push
-docker-sidecar-push: ## Push sidecar docker image.
-	$(CONTAINER_TOOL) push ${SIDECAR_IMG}
-
-.PHONY: docker-sidecar-platform-build
-docker-sidecar-platform-build: ## Build sidecar docker image for multiple platforms (linux/amd64,linux/arm64).
-	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
-
-.PHONY: docker-sidecar-platform-push
-docker-sidecar-platform-push: ## Build and push sidecar docker image for multiple platforms (linux/amd64,linux/arm64).
-	$(CONTAINER_TOOL) buildx build --platform linux/amd64,linux/arm64 --push -t ${SIDECAR_IMG} -f internal/sidecar/Dockerfile internal/sidecar
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/

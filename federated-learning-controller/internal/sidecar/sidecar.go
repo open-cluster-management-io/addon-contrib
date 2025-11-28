@@ -1,4 +1,4 @@
-package main
+package sidecar
 
 import (
 	"context"
@@ -11,31 +11,23 @@ import (
 	"syscall"
 	"time"
 
-	"fl_sidecar/exporter"
-	"fl_sidecar/watcher"
+	"github/open-cluster-management/federated-learning/internal/sidecar/exporter"
+	"github/open-cluster-management/federated-learning/internal/sidecar/watcher"
 )
 
-// Command-line flags
-var (
-	metricFile       string
-	endpoint         string
-	reporterInterval int
-	jobName          string
-)
+// Config holds the configuration for the sidecar
+type Config struct {
+	MetricFile       string
+	Endpoint         string
+	ReporterInterval int
+	JobName          string
+}
 
-func main() {
-	// Define and parse command-line flags
-	flag.StringVar(&metricFile, "metricfile", "", "Path to the metric file")
-	flag.StringVar(&endpoint, "endpoint", "", "Target endpoint address")
-	flag.IntVar(&reporterInterval, "interval", 60, "Reporter automatic push interval in seconds")
-	flag.StringVar(&jobName, "jobname", "federated-learning-obs-sidecar", "Job name for the metric service")
-	flag.Parse()
-
-	// Ensure required flags are provided
-	if metricFile == "" || endpoint == "" {
-		fmt.Println("Error: -metricfile and -endpoint are required")
-		flag.Usage()
-		os.Exit(1)
+// Run starts the sidecar with the given configuration
+func Run(cfg *Config) error {
+	// Ensure required config is provided
+	if cfg.MetricFile == "" || cfg.Endpoint == "" {
+		return fmt.Errorf("metricfile and endpoint are required")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -51,22 +43,22 @@ func main() {
 	}()
 
 	// Initialize the metrics reporter
-	reporter, err := exporter.NewReporter(ctx, endpoint, reporterInterval, jobName)
+	reporter, err := exporter.NewReporter(ctx, cfg.Endpoint, cfg.ReporterInterval, cfg.JobName)
 	if err != nil {
-		log.Fatalf("Init metrics reporter failed: %v", err)
+		return fmt.Errorf("init metrics reporter failed: %w", err)
 	}
 	defer reporter.Shutdown(ctx)
 
 	// Initialize the file watcher
-	fileWatcher, err := watcher.New(metricFile)
+	fileWatcher, err := watcher.New(cfg.MetricFile)
 	if err != nil {
-		log.Fatalf("Init file watcher failed: %v", err)
+		return fmt.Errorf("init file watcher failed: %w", err)
 	}
 
 	// Start watching the file for updates
 	updateChan := fileWatcher.Start(ctx)
 
-	log.Printf("Start watching file %s", metricFile)
+	log.Printf("Start watching file %s", cfg.MetricFile)
 
 	// Check if main container process is still running periodically
 	go func() {
@@ -94,17 +86,27 @@ func main() {
 		case content, ok := <-updateChan:
 			if !ok {
 				log.Println("Watcher channel closed")
-				return
+				return nil
 			}
 
 			// Parse and push metrics in a new goroutine
-			go parseAndPushMtrics(reporter, content)
+			go parseAndPushMetrics(reporter, content)
 
 		case <-ctx.Done():
 			log.Printf("exiting")
-			return
+			return nil
 		}
 	}
+}
+
+// ParseFlags parses command-line flags and returns a Config
+func ParseFlags() *Config {
+	cfg := &Config{}
+	flag.StringVar(&cfg.MetricFile, "metricfile", "", "Path to the metric file")
+	flag.StringVar(&cfg.Endpoint, "endpoint", "", "Target endpoint address")
+	flag.IntVar(&cfg.ReporterInterval, "interval", 60, "Reporter automatic push interval in seconds")
+	flag.StringVar(&cfg.JobName, "jobname", "federated-learning-obs-sidecar", "Job name for the metric service")
+	return cfg
 }
 
 // checkMainContainerExited checks if the main container (flower-server or flower-client) process has exited
@@ -131,8 +133,8 @@ func checkMainContainerExited() bool {
 	return true
 }
 
-// parseAndPushMtrics parses the content of the metric file and pushes the metrics to the reporter.
-func parseAndPushMtrics(reporter *exporter.Reporter, content []byte) {
+// parseAndPushMetrics parses the content of the metric file and pushes the metrics to the reporter.
+func parseAndPushMetrics(reporter *exporter.Reporter, content []byte) {
 	metrics, labels, err := exporter.ParseContetnt(content)
 	if err != nil {
 		log.Printf("Parse metrics err: %v", err)

@@ -1,4 +1,4 @@
-# Build the manager binary
+# Build the unified binary (controller + sidecar)
 FROM golang:1.23 AS builder
 ARG OS=linux
 ARG ARCH=amd64
@@ -12,11 +12,11 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY cmd/main.go cmd/main.go
+COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/ internal/
 
-# Build
+# Build unified binary
 RUN CGO_ENABLED=0 GOOS=${OS} GOARCH=${ARCH} go build -a -o manager cmd/main.go
 
 # Use UBI minimal as base image for consistency with other addons
@@ -27,4 +27,7 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 USER ${USER_UID}
 
+# Default to controller mode
+# Override with: docker run <image> --mode=sidecar [sidecar-flags]
 ENTRYPOINT ["/manager"]
+CMD ["--mode=controller"]
