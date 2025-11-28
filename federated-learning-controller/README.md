@@ -69,6 +69,7 @@ cd ./addon-contrib/federated-learning-controller
 #### 2. Build and push the controller image
 
 Use your custom image or the pre-built one: `quay.io/myan/federated-learning-controller:latest`.
+You need to set `IMG=<your-image>` for the make command to work.
 
 ```bash
 make docker-build docker-push IMG=<your-image>
