@@ -112,13 +112,13 @@ func (r *Reporter) UpdateMetrics(newMetrics map[string]float64, newLabels map[st
 
 	// Check if metrics values have actually changed (excluding timestamp)
 	metricsChanged := false
-	
+
 	// Compare metrics count (excluding timestamp which we'll add/update later)
 	currentMetricsCount := len(r.metrics)
 	if _, hasTimestamp := r.metrics["timestamp"]; hasTimestamp {
 		currentMetricsCount--
 	}
-	
+
 	if len(newMetrics) != currentMetricsCount {
 		metricsChanged = true
 	} else {
