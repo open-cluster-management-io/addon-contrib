@@ -66,25 +66,37 @@ git clone git@github.com:open-cluster-management-io/addon-contrib.git
 cd ./addon-contrib/federated-learning-controller
 ```
 
-#### 2. Build and push the controller image
+#### 2. Deploy the controller to the hub cluster
 
-Use your custom image or the pre-built one: `quay.io/myan/federated-learning-controller:latest`.
-
-```bash
-make docker-build docker-push IMG=<your-image>
-```
-
-#### 3. Deploy the controller to the hub cluster
+Use the pre-built image `quay.io/open-cluster-management/federated-learning-controller:latest`:
 
 ```bash
 kubectl config use-context kind-hub
-make deploy IMG=<your-image> NAMESPACE=<namespace>  # Default namespace is open-cluster-management
+make deploy IMG=quay.io/open-cluster-management/federated-learning-controller:latest NAMESPACE=open-cluster-management
 ```
+
+<details>
+
+<summary><strong>Alternatively: Build and Use Your Own Controller Image</strong></summary>
+
+  **Build and push the controller image:**
+
+  ```bash
+  make docker-build docker-push IMG=<your-registry>/federated-learning-controller:<your-tag>
+  ```
+
+  **Deploy with your custom image:**
+
+  ```bash
+  kubectl config use-context kind-hub
+  make deploy IMG=<your-registry>/federated-learning-controller:<your-tag> NAMESPACE=open-cluster-management
+  ```
+</details>
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
 
-#### 4. Verify the deployment
+#### 3. Verify the deployment
 
 ```bash
 $ kubectl get pods -n open-cluster-management
@@ -116,24 +128,54 @@ federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3
 
 ### Deploy the Federated Learning Instance
 
-#### 1. Build the Application Image
+#### 1. Deploy a Federated Learning Instance
 
-> **Note**: You can skip this step by using the pre-built image `quay.io/myan/flower-app-torch:latest`.
+In this example, both the server and clients use the pre-built image `quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest`. Once the resource is created, the server is deployed to the hub cluster, and the clients are prepared for deployment to the managed clusters.
 
-```bash
-cd examples/flower
+Create a `FederatedLearning` resource in the controller namespace on the hub cluster:
 
-export REGISTRY=<your-registry>
-export IMAGE_TAG=<your-tag>
-make build-app-image
-make push-app-image
+```yaml
+apiVersion: federation-ai.open-cluster-management.io/v1alpha1
+kind: FederatedLearning
+metadata:
+  name: federated-learning-sample
+spec:
+  framework: flower
+  server:
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
+    rounds: 3
+    minAvailableClients: 2
+    listeners:
+      - name: server-listener
+        port: 8080
+        type: NodePort
+    storage:
+      type: PersistentVolumeClaim # switch to S3Bucket for S3-backed static volumes
+      name: model-pvc
+      path: /data/models
+      size: 2Gi
+      # s3:
+      #   bucketName: <your-bucket-name>
+      #   region: us-east-1
+      #   prefix: optional/prefix/
+  client:
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
+    placement:
+      clusterSets:
+        - global
+      predicates:
+        - requiredClusterSelector:
+            claimSelector:
+              matchExpressions:
+                - key: federated-learning-sample.client-data
+                  operator: Exists
 ```
 
-Image format: `<REGISTRY>/flower-app-torch:<IMAGE_TAG>`
+> **Note**: Only `NodePort` is supported in KinD clusters.
 
 <details>
 
-<summary><strong>About Containerized Federated Learning</strong></summary>
+<summary><strong>Alternatively: Build and Use Your Own Application Image</strong></summary>
 
 ### Containerized Federated Learning Application
 
@@ -151,56 +193,33 @@ The controller manages the lifecycle of federated learning across multiple clust
   client --data-config <data-path> --server-address <address> ...
   ```
 
-For example, see: [Flower PyTorch App](./examples/flower/Makefile)
+You can use the [Flower PyTorch App](./examples/flower/) as a reference template. Customize the model, adjust hyperparameters, add different datasets, etc. Ensure your built image can be launched as server and client using the command patterns above.
+
+  **Navigate to the flower example directory:**
+
+  ```bash
+  cd examples/flower
+  ```
+
+  **Build and push the application image:**
+
+  ```bash
+  export IMAGE_REGISTRY=<your-registry>
+  export IMAGE_TAG=<your-tag>
+  export APP_NAME=flower-mnist
+  make build-app-image
+  make push-app-image
+  ```
+
+  This will create an image with the format: `<IMAGE_REGISTRY>/federated-learning-application:<APP_NAME>-<IMAGE_TAG>`
+
+  **Update the YAML with your custom image:**
+
+  Replace the `image` fields in both `server` and `client` sections with your custom image reference.
 
 </details>
 
-#### 2. Deploy a Federated Learning Instance
-
-In this example, both the server and clients use the same image—either the one built above or the pre-built `quay.io/myan/flower-app-torch:latest`. Once the resource is created, the server is deployed to the hub cluster, and the clients are prepared for deployment to the managed clusters.
-
-Create a `FederatedLearning` resource in the controller namespace on the hub cluster:
-
-```yaml
-apiVersion: federation-ai.open-cluster-management.io/v1alpha1
-kind: FederatedLearning
-metadata:
-  name: federated-learning-sample
-spec:
-  framework: flower
-  server:
-    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
-    rounds: 3
-    minAvailableClients: 2
-    listeners:
-      - name: server-listener
-        port: 8080
-        type: NodePort
-    storage:
-      type: PersistentVolumeClaim # switch to S3Bucket for S3-backed static volumes
-      name: model-pvc
-      path: /data/models
-      size: 2Gi
-      # s3:
-      #   bucketName: <your-bucket-name>
-      #   region: us-east-1
-      #   prefix: optional/prefix/
-  client:
-    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
-    placement:
-      clusterSets:
-        - global
-      predicates:
-        - requiredClusterSelector:
-            claimSelector:
-              matchExpressions:
-                - key: federated-learning-sample.client-data
-                  operator: Exists
-```
-
-> **Note**: Only `NodePort` is supported in KinD clusters.
-
-#### 3. Schedule the Federated Learning Clients into Managed Clusters
+#### 2. Schedule the Federated Learning Clients into Managed Clusters
 
 The above configuration schedules only clusters with a `ClusterClaim` having the key `federated-learning-sample.client-data`. You can combine this with other scheduling policies (refer to the Placement API for details).
 
@@ -228,7 +247,7 @@ spec:
   value: /data/private/cluster2
 ```
 
-#### 4. Check the Federated Learning Instance Status
+#### 3. Check the Federated Learning Instance Status
 
 - After creating the instance, the server initially shows a status of `Waiting`
 
@@ -265,7 +284,7 @@ spec:
     phase: Completed
   ```
 
-#### 5. Download and Verify the Trained Model
+#### 4. Download and Verify the Trained Model
 
 The trained model is saved in the `model-pvc` volume.
 
