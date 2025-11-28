@@ -82,11 +82,15 @@ install-prometheus: generate-certs
 		--set prometheus.prometheusSpec.web.tlsConfig.client_ca.secret.key=client-ca.crt \
 		--set prometheus.prometheusSpec.web.tlsConfig.client_ca.secret.name=prometheus-tls \
 		--set prometheus.prometheusSpec.web.tlsConfig.clientAuthType=RequestClientCert \
-		--set datasources."datasources\.yaml".apiVersion=1 \
-  		--set datasources."datasources\.yaml".datasources[0].name=Prometheus \
-  		--set datasources."datasources\.yaml".datasources[0].type=prometheus \
-  		--set datasources."datasources\.yaml".datasources[0].url=https://prometheus-stack-kube-prom-prometheus.monitoring:9090 \
-  		--set datasources."datasources\.yaml".datasources[0].jsonData.tlsSkipVerify=true \
+		--set grafana.sidecar.datasources.url=https://prometheus-stack-kube-prom-prometheus.monitoring:9090 \
+		--set grafana.sidecar.datasources.extraJsonData.tlsSkipVerify=true \
+		--set kubeApiServer.serviceMonitor.relabelings[0].targetLabel=cluster_name \
+		--set kubeApiServer.serviceMonitor.relabelings[0].replacement=hub \
+		--set kubelet.serviceMonitor.cAdvisorRelabelings[0].action=replace \
+		--set kubelet.serviceMonitor.cAdvisorRelabelings[0].sourceLabels[0]=__metrics_path__ \
+		--set kubelet.serviceMonitor.cAdvisorRelabelings[0].targetLabel=metrics_path \
+		--set kubelet.serviceMonitor.cAdvisorRelabelings[1].targetLabel=cluster_name \
+		--set kubelet.serviceMonitor.cAdvisorRelabelings[1].replacement=hub \
 		--set prometheus.service.type=NodePort \
 		--set prometheusOperator.enabled=true
 	@echo "kube-prometheus-stack installed successfully"
