@@ -154,6 +154,15 @@ spec:
                           - action: labelmap
                             regex: __meta_kubernetes_node_label_(.+)
                         scrape_interval: 10s
+                      - job_name: kube-apiserver
+                        scheme: https
+                        metrics_path: /metrics
+                        tls_config:
+                          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+                        static_configs:
+                          - targets: ['kubernetes.default.svc:443']
+                        scrape_interval: 30s
               service:
                 extensions:
                   - health_check
@@ -202,6 +211,14 @@ spec:
                 - get
                 - list
                 - watch
+            - apiGroups:
+                - ""
+              resources:
+                - services
+              resourceNames:
+                - kubernetes
+              verbs:
+                - get
         - apiVersion: rbac.authorization.k8s.io/v1
           kind: ClusterRoleBinding
           metadata:
