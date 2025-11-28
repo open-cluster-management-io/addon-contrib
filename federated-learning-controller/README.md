@@ -177,7 +177,23 @@ spec:
 
 <summary><strong>Alternatively: Build and Use Your Own Application Image</strong></summary>
 
-If you want to customize the federated learning application, you can build your own image:
+### Containerized Federated Learning Application
+
+The controller manages the lifecycle of federated learning across multiple clusters by creating server and client jobs from your containerized app.
+
+- **Server Job Example**:
+
+  ```bash
+  server --num-rounds <number>
+  ```
+
+- **Client Job Example**:
+
+  ```bash
+  client --data-config <data-path> --server-address <address> ...
+  ```
+
+You can use the [Flower PyTorch App](./examples/flower/) as a reference template. Customize the model, adjust hyperparameters, add different datasets, etc. Ensure your built image can be launched as server and client using the command patterns above.
 
   **Navigate to the flower example directory:**
 
@@ -200,8 +216,6 @@ If you want to customize the federated learning application, you can build your 
   **Update the YAML with your custom image:**
 
   Replace the `image` fields in both `server` and `client` sections with your custom image reference.
-
-  For more details on containerized federated learning applications, see: [Flower PyTorch App](./examples/flower/Makefile)
 
 </details>
 
