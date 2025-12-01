@@ -221,7 +221,7 @@ metadata:
 spec:
   framework: flower
   server:
-    image: quay.io/open-cluster-management/flower-app-torch:latest
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     rounds: 3
     minAvailableClients: 2
     listeners:
@@ -238,7 +238,7 @@ spec:
       #   region: us-east-1
       #   prefix: optional/prefix/
   client:
-    image: quay.io/open-cluster-management/flower-app-torch:latest
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     placement:
       clusterSets:
         - global

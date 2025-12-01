@@ -66,7 +66,7 @@ metadata:
 spec:
   framework: flower
   server:
-    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     rounds: 3
     minAvailableClients: 2
     listeners:
@@ -83,7 +83,7 @@ spec:
         region: us-east-1            # optional but recommended
         prefix: models/round-1/      # optional logical folder within the bucket
   client:
-    image: <REGISTRY>/flower-app-torch:<IMAGE_TAG>
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     placement:
       clusterSets:
         - global
