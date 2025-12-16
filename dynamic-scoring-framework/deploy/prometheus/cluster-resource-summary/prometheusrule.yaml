@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-resource-summary
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  groups:
+    - name: cluster-summary
+      interval: 15s
+      rules:
+        - record: cluster_cpu_free
+          expr: sum(kube_node_status_allocatable{resource="cpu"}) - sum(kube_pod_container_resource_requests{resource="cpu"})
+          labels:
+            cluster: ${CLUSTER_NAME}
+        - record: cluster_memory_free
+          expr: sum(kube_node_status_allocatable{resource="memory"}) - sum(kube_pod_container_resource_requests{resource="memory"})
+          labels:
+            cluster: ${CLUSTER_NAME}

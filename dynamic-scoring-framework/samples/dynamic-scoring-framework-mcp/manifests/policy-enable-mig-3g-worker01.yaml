@@ -1,0 +1,46 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: policy-enable-mig-3g-worker01
+  namespace: default
+  labels:
+    resource-supply-kind: "gpu"
+    resource-supply-amount: "2"
+    resource-supply-device: "3g.48gb"
+spec:
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: enforce-miglabel
+        spec:
+          remediationAction: enforce
+          severity: low
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Node
+                metadata:
+                  name: worker01-control-plane
+                  labels:
+                    migsettinglabel: "3g.48gb"
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: check-migresultlabel
+        spec:
+          remediationAction: inform
+          severity: low
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Node
+                metadata:
+                  name: worker01-control-plane
+                  labels:
+                    migresultlabel: "true"

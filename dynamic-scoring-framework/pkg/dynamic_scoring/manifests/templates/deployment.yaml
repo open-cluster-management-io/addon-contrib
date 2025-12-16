@@ -1,0 +1,92 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: dynamic-scoring-agent
+  namespace: {{ .AddonInstallNamespace }}
+  labels:
+    app: dynamic-scoring-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dynamic-scoring-agent
+  template:
+    metadata:
+      labels:
+        app: dynamic-scoring-agent
+    spec:
+      serviceAccountName: dynamic-scoring-agent-sa
+{{- if .NodeSelector }}
+      nodeSelector:
+      {{- range $key, $value := .NodeSelector }}
+        "{{ $key }}": "{{ $value }}"
+      {{- end }}
+{{- end }}
+{{- if .Tolerations }}
+      tolerations:
+      {{- range $toleration := .Tolerations }}
+      - key: "{{ $toleration.Key }}"
+        value: "{{ $toleration.Value }}"
+        effect: "{{ $toleration.Effect }}"
+        operator: "{{ $toleration.Operator }}"
+        {{- if $toleration.TolerationSeconds }}
+        tolerationSeconds: {{ $toleration.TolerationSeconds }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+      volumes:
+      - name: hub-config
+        secret:
+          secretName: {{ .KubeConfigSecret }}
+      containers:
+      - name: dynamic-scoring-agent
+        image: {{ .Image }}
+        imagePullPolicy: IfNotPresent
+{{- with .ResourceRequirements}}
+    {{- $matchedIndex := -1 }}
+    {{- range $index, $item := . }}
+        {{- if regexMatch $item.ContainerIDRegex "deployments:dynamic-scoring-agent:dynamic-scoring-agent" }}
+          {{- $matchedIndex = $index }}
+        {{- end }}
+    {{- end }}
+    {{- if ne $matchedIndex -1 }}
+        {{- $matched := index . $matchedIndex }}
+        resources:
+        {{- if $matched.Resources.Requests}}
+          requests:
+          {{- range $key, $value := $matched.Resources.Requests }}
+            "{{ $key }}": "{{ $value }}"
+          {{- end }}
+        {{- end }}
+        {{- if $matched.Resources.Limits}}
+          limits:
+          {{- range $key, $value := $matched.Resources.Limits }}
+            "{{ $key }}": "{{ $value }}"
+          {{- end }}
+        {{- end }}
+    {{- end }}
+{{- end }}
+{{- if or .HTTPProxy .HTTPSProxy}}
+        env:
+        {{- if .HTTPProxy }}
+          - name: HTTP_PROXY
+            value: {{ .HTTPProxy }}
+        {{- end }}
+        {{- if .HTTPSProxy }}
+          - name: HTTPS_PROXY
+            value: {{ .HTTPSProxy }}
+        {{- end }}
+        {{- if .NoProxy }}
+          - name: NO_PROXY
+            value: {{ .NoProxy }}
+        {{- end }}
+{{- end }}
+        args:
+          - "/dynamic-scoring-addon"
+          - "agent"
+          - "--hub-kubeconfig=/var/run/hub/kubeconfig"
+          - "--cluster-name={{ .ClusterName }}"
+          - "--addon-namespace={{ .AddonInstallNamespace }}"
+        volumeMounts:
+          - name: hub-config
+            mountPath: /var/run/hub

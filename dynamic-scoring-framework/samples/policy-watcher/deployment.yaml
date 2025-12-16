@@ -1,0 +1,65 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: policy-watcher
+rules:
+  - apiGroups: ["policy.open-cluster-management.io"]
+    resources: ["policies"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["clusterclaims"]
+    verbs: ["get", "patch", "update"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: policy-watcher-sa
+  namespace: dynamic-scoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: policy-watcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: policy-watcher
+subjects:
+  - kind: ServiceAccount
+    name: policy-watcher-sa
+    namespace: dynamic-scoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-watcher
+  namespace: dynamic-scoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-watcher
+  template:
+    metadata:
+      labels:
+        app: policy-watcher
+    spec:
+      serviceAccountName: policy-watcher-sa
+      containers:
+        - name: policy-watcher
+          image: quay.io/dynamic-scoring/policy-watcher:v0.1.0
+          imagePullPolicy: Never
+          env:
+            - name: WATCH_NAMESPACE
+              value: ${CLUSTER_NAME}
+            - name: POLL_INTERVAL_SEC
+              value: "10"
+            - name: STABLE_DURATION_SEC
+              value: "30"
+---
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: ClusterClaim
+metadata:
+  name: policy-watcher-claim
+spec:
+  value: "empty"

@@ -1,0 +1,9 @@
+apiVersion: dynamic-scoring.open-cluster-management.io/v1
+kind: DynamicScoringConfig
+metadata:
+  name: dynamic-scoring-config
+  namespace: dynamic-scoring
+spec:
+  masks:
+    - clusterName: "worker02"
+      scoreName: "llm_forecast_score"

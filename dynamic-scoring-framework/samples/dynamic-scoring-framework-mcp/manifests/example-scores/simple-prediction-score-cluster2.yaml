@@ -1,0 +1,15 @@
+apiVersion: cluster.open-cluster-management.io/v1alpha1
+kind: AddOnPlacementScore
+metadata:
+  name: simple-prediction-score
+  namespace: cluster2
+status:
+  scores:
+  - name: app01;all
+    value: 80
+  - name: app02;all
+    value: 70
+  - name: app01;3g.48gb
+    value: 40
+  - name: app02;3g.48gb
+    value: 35

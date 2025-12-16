@@ -1,0 +1,21 @@
+[project]
+name = "dynamic-scoring-framework-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.121.1",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "uvicorn[standard]>=0.24.0.post1",
+    "fastapi-mcp",
+    "kubernetes>=31.0.0",
+    "pulp",
+    "jinja2"
+]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250915",
+]

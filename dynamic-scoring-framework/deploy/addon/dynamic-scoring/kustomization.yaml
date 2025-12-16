@@ -1,0 +1,28 @@
+namespace: open-cluster-management
+# namespace: dynamic-scoring
+
+resources:
+- resources/cluster_role.yaml
+- resources/cluster_role_binding.yaml
+- resources/service_account.yaml
+- resources/managed_clusterset_binding.yaml
+- resources/placement.yaml
+- resources/addon_deployment_config.yaml
+- resources/clustermanagementaddon.yaml
+- resources/controller.yaml
+
+images:
+- name: quay.io/open-cluster-management/dynamic-scoring-addon
+  newName: quay.io/open-cluster-management/dynamic-scoring-addon
+  newTag: latest
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+vars:
+- fieldref:
+    fieldPath: spec.template.spec.containers.[name=dynamic-scoring-addon-controller].image
+  name: IMG_ADDON
+  objref:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dynamic-scoring-addon-controller

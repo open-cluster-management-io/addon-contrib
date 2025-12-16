@@ -1,0 +1,200 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: dynamicscorers.dynamic-scoring.open-cluster-management.io
+spec:
+  group: dynamic-scoring.open-cluster-management.io
+  names:
+    kind: DynamicScorer
+    listKind: DynamicScorerList
+    plural: dynamicscorers
+    singular: dynamicscorer
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: DynamicScorer is the Schema for the dynamicscorers API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DynamicScorerSpec defines the desired state of DynamicScorer.
+            properties:
+              configSyncMode:
+                type: string
+              configURL:
+                type: string
+              description:
+                type: string
+              location:
+                type: string
+              scoreDestination:
+                type: string
+              scoreDimensionFormat:
+                type: string
+              scoring:
+                properties:
+                  auth:
+                    properties:
+                      tokenSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - tokenSecretRef
+                    type: object
+                  host:
+                    type: string
+                  params:
+                    properties:
+                      interval:
+                        type: integer
+                      name:
+                        type: string
+                    required:
+                    - interval
+                    - name
+                    type: object
+                  path:
+                    type: string
+                type: object
+              source:
+                properties:
+                  auth:
+                    properties:
+                      tokenSecretRef:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - tokenSecretRef
+                    type: object
+                  host:
+                    type: string
+                  params:
+                    properties:
+                      query:
+                        type: string
+                      range:
+                        type: integer
+                      step:
+                        type: integer
+                    required:
+                    - query
+                    - range
+                    - step
+                    type: object
+                  path:
+                    type: string
+                  type:
+                    type: string
+                type: object
+            required:
+            - configSyncMode
+            - configURL
+            - description
+            type: object
+          status:
+            description: DynamicScorerStatus defines the observed state of DynamicScorer.
+            properties:
+              healthStatus:
+                description: |-
+                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+                  Important: Run "make" to regenerate code after modifying this file
+                type: string
+              lastSyncedConfig:
+                properties:
+                  description:
+                    type: string
+                  name:
+                    type: string
+                  scoring:
+                    properties:
+                      host:
+                        type: string
+                      params:
+                        properties:
+                          interval:
+                            type: integer
+                          name:
+                            type: string
+                        required:
+                        - interval
+                        - name
+                        type: object
+                      path:
+                        type: string
+                    required:
+                    - params
+                    - path
+                    type: object
+                  source:
+                    properties:
+                      host:
+                        type: string
+                      params:
+                        properties:
+                          query:
+                            type: string
+                          range:
+                            type: integer
+                          step:
+                            type: integer
+                        required:
+                        - query
+                        - range
+                        - step
+                        type: object
+                      path:
+                        type: string
+                      type:
+                        type: string
+                    required:
+                    - params
+                    - path
+                    type: object
+                required:
+                - description
+                - name
+                - scoring
+                - source
+                type: object
+            required:
+            - healthStatus
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
