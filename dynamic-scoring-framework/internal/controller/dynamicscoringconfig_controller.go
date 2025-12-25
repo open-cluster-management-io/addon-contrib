@@ -35,7 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
-	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
+	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
 	"open-cluster-management.io/dynamic-scoring/pkg/common"
 )
 
@@ -51,27 +51,18 @@ type DynamicScoringConfigReconciler struct {
 // +kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the DynamicScoringConfig object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *DynamicScoringConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	klog.Infof("Reconciling DynamicScoringConfig : %s", req.Name)
+	klog.Infof("Reconciling DynamicScoringConfig: %s", req.Name)
 
-	var config dynamicscoringv1.DynamicScoringConfig
+	var config dynamicscoringv1alpha1.DynamicScoringConfig
 	if err := r.Get(ctx, req.NamespacedName, &config); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	maskMap := buildMaskMap(config.Spec.Masks)
 
-	var scorerList dynamicscoringv1.DynamicScorerList
+	var scorerList dynamicscoringv1alpha1.DynamicScorerList
 	klog.InfoS("Fetching DynamicScorers in namespace", "namespace", req.Namespace, scorerList)
 	if err := r.List(ctx, &scorerList, client.InNamespace(req.Namespace)); err != nil {
 		klog.ErrorS(err, "Failed to list DynamicScorers", "namespace", req.Namespace)
@@ -113,10 +104,10 @@ func (r *DynamicScoringConfigReconciler) SetupWithManager(mgr ctrl.Manager) erro
 		})
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&dynamicscoringv1.DynamicScoringConfig{}).
+		For(&dynamicscoringv1alpha1.DynamicScoringConfig{}).
 		Named("dynamicscoringconfig").
 		Watches(
-			&dynamicscoringv1.DynamicScorer{}, // Watch for changes in DynamicScorer
+			&dynamicscoringv1alpha1.DynamicScorer{}, // Watch for changes in DynamicScorer
 			mapFn,
 		).
 		Complete(r)
@@ -145,7 +136,7 @@ func isValidURL(s string) bool {
 func buildClusterToSummaries(
 	ctx context.Context,
 	clusters []clusterv1.ManagedCluster,
-	scorers []dynamicscoringv1.DynamicScorer,
+	scorers []dynamicscoringv1alpha1.DynamicScorer,
 	maskMap map[string]struct{},
 ) map[string][]common.ScorerSummary {
 	clusterToSummaries := make(map[string][]common.ScorerSummary)
@@ -163,11 +154,11 @@ func buildClusterToSummaries(
 				continue
 			}
 
-			if scorer.Status.HealthStatus != "Active" {
+			if scorer.Status.HealthStatus != common.ScorerHealthStatusActive {
 				continue
 			}
 
-			if scorer.Status.LastSyncedConfig == nil && scorer.Spec.ConfigSyncMode == "Full" {
+			if scorer.Status.LastSyncedConfig == nil && scorer.Spec.ConfigSyncMode == common.ConfigSyncModeFull {
 				klog.ErrorS(nil, "LastSyncedConfig is nil for scorer", "scorer", scorer.Name)
 				continue
 			}
@@ -181,14 +172,14 @@ func buildClusterToSummaries(
 			sourceFullEndpoint, err := getValidSourceFullEndpoint(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Source Full Endpoint", "scorer", scorer.Name)
-				if sourceType != "none" {
+				if sourceType != common.SourceTypeNone {
 					continue
 				}
 			}
 			sourceEndpointAuthName, sourceEndpointAuthKey, err := getValidSourceAuthSecretRef(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Source Auth Secret Ref", "scorer", scorer.Name)
-				if sourceType != "none" {
+				if sourceType != common.SourceTypeNone {
 					continue
 				}
 			}
@@ -207,7 +198,7 @@ func buildClusterToSummaries(
 			sourceQuery, err := getValidSourceQuery(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Source Query", "scorer", scorer.Name)
-				if sourceType != "none" {
+				if sourceType != common.SourceTypeNone {
 					continue
 				}
 			}
@@ -215,7 +206,7 @@ func buildClusterToSummaries(
 			sourceRange, err := getValidSourceRange(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Source Range", "scorer", scorer.Name)
-				if sourceType != "none" {
+				if sourceType != common.SourceTypeNone {
 					continue
 				}
 			}
@@ -223,7 +214,7 @@ func buildClusterToSummaries(
 			sourceStep, err := getValidSourceStep(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Source Step", "scorer", scorer.Name)
-				if sourceType != "none" {
+				if sourceType != common.SourceTypeNone {
 					continue
 				}
 			}
@@ -329,7 +320,7 @@ func updateConfigManifestWork(ctx context.Context, c client.Client, clusterName 
 			return err
 		}
 	} else if err == nil {
-		// 差分チェック：既存の summaries と currentSummaries を比較
+		// check for differences
 		var existingCM corev1.ConfigMap
 		for _, m := range existing.Spec.Workload.Manifests {
 			if err := json.Unmarshal(m.RawExtension.Raw, &existingCM); err == nil && existingCM.Name == common.DynamicScoringConfigName {
@@ -350,7 +341,7 @@ func updateConfigManifestWork(ctx context.Context, c client.Client, clusterName 
 			}
 		}
 
-		// 差分あり → Update
+		// Differences found -> update
 		manifest.ResourceVersion = existing.ResourceVersion
 		if err := c.Update(ctx, &manifest); err != nil {
 			klog.ErrorS(err, "Failed to update ManifestWork", "name", manifest.Name, "namespace", manifest.Namespace)
@@ -362,7 +353,7 @@ func updateConfigManifestWork(ctx context.Context, c client.Client, clusterName 
 	return nil
 }
 
-func getValidSourceType(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidSourceType(scorer dynamicscoringv1alpha1.DynamicScorer) (common.SourceType, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Source.Type != "" {
 		return scorer.Status.LastSyncedConfig.Source.Type, nil
 	} else if scorer.Spec.Source.Type != "" {
@@ -371,7 +362,7 @@ func getValidSourceType(scorer dynamicscoringv1.DynamicScorer) (string, error) {
 	return "", fmt.Errorf("failed to fetch valid sourceType")
 }
 
-func getValidSourceFullEndpoint(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidSourceFullEndpoint(scorer dynamicscoringv1alpha1.DynamicScorer) (string, error) {
 	parsedConfigURL, err := url.Parse(scorer.Spec.ConfigURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse Config URL: %w", err)
@@ -399,7 +390,7 @@ func getValidSourceFullEndpoint(scorer dynamicscoringv1.DynamicScorer) (string, 
 	return fullEndpoint, nil
 }
 
-func getValidScoringFullEndpoint(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidScoringFullEndpoint(scorer dynamicscoringv1alpha1.DynamicScorer) (string, error) {
 	parsedConfigURL, err := url.Parse(scorer.Spec.ConfigURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse Config URL: %w", err)
@@ -427,7 +418,7 @@ func getValidScoringFullEndpoint(scorer dynamicscoringv1.DynamicScorer) (string,
 	return fullEndpoint, nil
 }
 
-func getValidSourceAuthSecretRef(scorer dynamicscoringv1.DynamicScorer) (string, string, error) {
+func getValidSourceAuthSecretRef(scorer dynamicscoringv1alpha1.DynamicScorer) (string, string, error) {
 	if scorer.Spec.Source.Auth == nil {
 		return "", "", nil
 	} else if scorer.Spec.Source.Auth.TokenSecretRef.Name == "" {
@@ -437,8 +428,7 @@ func getValidSourceAuthSecretRef(scorer dynamicscoringv1.DynamicScorer) (string,
 	}
 	return scorer.Spec.Source.Auth.TokenSecretRef.Name, scorer.Spec.Source.Auth.TokenSecretRef.Key, nil
 }
-
-func getValidScoringAuthSecretRef(scorer dynamicscoringv1.DynamicScorer) (string, string, error) {
+func getValidScoringAuthSecretRef(scorer dynamicscoringv1alpha1.DynamicScorer) (string, string, error) {
 	if scorer.Spec.Scoring.Auth == nil {
 		return "", "", nil
 	} else if scorer.Spec.Scoring.Auth.TokenSecretRef.Name == "" {
@@ -449,7 +439,7 @@ func getValidScoringAuthSecretRef(scorer dynamicscoringv1.DynamicScorer) (string
 	return scorer.Spec.Scoring.Auth.TokenSecretRef.Name, scorer.Spec.Scoring.Auth.TokenSecretRef.Key, nil
 }
 
-func getValidScoreName(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidScoreName(scorer dynamicscoringv1alpha1.DynamicScorer) (string, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Scoring.Params.Name != "" {
 		return scorer.Status.LastSyncedConfig.Scoring.Params.Name, nil
 	} else if scorer.Spec.Scoring.Params != nil && scorer.Spec.Scoring.Params.Name != "" {
@@ -458,7 +448,7 @@ func getValidScoreName(scorer dynamicscoringv1.DynamicScorer) (string, error) {
 	return "", fmt.Errorf("failed to fetch valid scoreName")
 }
 
-func getValidSourceQuery(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidSourceQuery(scorer dynamicscoringv1alpha1.DynamicScorer) (string, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Source.Params.Query != "" {
 		return scorer.Status.LastSyncedConfig.Source.Params.Query, nil
 	} else if scorer.Spec.Source.Params != nil && scorer.Spec.Source.Params.Query != "" {
@@ -467,7 +457,7 @@ func getValidSourceQuery(scorer dynamicscoringv1.DynamicScorer) (string, error) 
 	return "", fmt.Errorf("failed to fetch valid sourceQuery")
 }
 
-func getValidSourceRange(scorer dynamicscoringv1.DynamicScorer) (int, error) {
+func getValidSourceRange(scorer dynamicscoringv1alpha1.DynamicScorer) (int, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Source.Params.Range > 0 {
 		return scorer.Status.LastSyncedConfig.Source.Params.Range, nil
 	} else if scorer.Spec.Source.Params != nil && scorer.Spec.Source.Params.Range > 0 {
@@ -476,7 +466,7 @@ func getValidSourceRange(scorer dynamicscoringv1.DynamicScorer) (int, error) {
 	return 0, fmt.Errorf("failed to fetch valid sourceRange")
 }
 
-func getValidSourceStep(scorer dynamicscoringv1.DynamicScorer) (int, error) {
+func getValidSourceStep(scorer dynamicscoringv1alpha1.DynamicScorer) (int, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Source.Params.Step > 0 {
 		return scorer.Status.LastSyncedConfig.Source.Params.Step, nil
 	} else if scorer.Spec.Source.Params != nil && scorer.Spec.Source.Params.Step > 0 {
@@ -485,7 +475,7 @@ func getValidSourceStep(scorer dynamicscoringv1.DynamicScorer) (int, error) {
 	return 0, fmt.Errorf("failed to fetch valid sourceStep")
 }
 
-func getValidScoringInterval(scorer dynamicscoringv1.DynamicScorer) (int, error) {
+func getValidScoringInterval(scorer dynamicscoringv1alpha1.DynamicScorer) (int, error) {
 	if scorer.Status.LastSyncedConfig != nil && scorer.Status.LastSyncedConfig.Scoring.Params.Interval > 0 {
 		return scorer.Status.LastSyncedConfig.Scoring.Params.Interval, nil
 	} else if scorer.Spec.Scoring.Params != nil && scorer.Spec.Scoring.Params.Interval > 0 {
@@ -494,21 +484,21 @@ func getValidScoringInterval(scorer dynamicscoringv1.DynamicScorer) (int, error)
 	return 0, fmt.Errorf("failed to fetch valid scoringInterval")
 }
 
-func getValidLocation(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidLocation(scorer dynamicscoringv1alpha1.DynamicScorer) (common.Location, error) {
 	if scorer.Spec.Location != "" {
 		return scorer.Spec.Location, nil
 	}
 	return "", fmt.Errorf("failed to fetch valid location")
 }
 
-func getValidScoreDestination(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidScoreDestination(scorer dynamicscoringv1alpha1.DynamicScorer) (common.ScoreDestination, error) {
 	if scorer.Spec.ScoreDestination != "" {
 		return scorer.Spec.ScoreDestination, nil
 	}
 	return "", fmt.Errorf("failed to fetch valid scoreDestination")
 }
 
-func getValidScoreDimentionFormat(scorer dynamicscoringv1.DynamicScorer) (string, error) {
+func getValidScoreDimentionFormat(scorer dynamicscoringv1alpha1.DynamicScorer) (string, error) {
 	if scorer.Spec.ScoreDimensionFormat != "" {
 		return scorer.Spec.ScoreDimensionFormat, nil
 	}

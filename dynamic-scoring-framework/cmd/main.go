@@ -40,6 +40,7 @@ import (
 	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
 	"open-cluster-management.io/dynamic-scoring/internal/controller"
 
+	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -55,6 +56,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(dynamicscoringv1.AddToScheme(scheme))
+	utilruntime.Must(dynamicscoringv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	utilruntime.Must(workv1.AddToScheme(scheme))
@@ -139,6 +141,8 @@ func main() {
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: webhookTLSOpts,
 	})
+
+	//aaaaaaa
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
 	// More info:

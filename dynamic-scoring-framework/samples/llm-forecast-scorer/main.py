@@ -124,7 +124,7 @@ async def get_config():
         "name": "llm-forecast-scorer",
         "description": "A sample score for time series data with vLLM",
         "source": {
-            "type": "prometheus",
+            "type": "Prometheus",
             "host": "http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090",
             "path": "/api/v1/query_range",
             "params": {

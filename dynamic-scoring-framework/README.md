@@ -33,3 +33,14 @@ For more details, refer to the [design document](docs/concept_and_design.md).
 
 Please refer to the [development guide](docs/development.md) for instructions on setting up your local development environment.
 
+## Directory Structure
+
+- `api/`: API definitions for CRDs
+- `internal/controller/`: Controllers for managing CRDs (DynamicScorer, DynamicScoringConfig)
+- `config/`: Configuration files for deploying the operator
+- `docs/`: Documentation files
+- `pkg/`: Package source code. It contains the common and addon agents implementation.
+  - `pkg/common/`: Common utilities and types used across the project.
+  - `pkg/dynamic_scoring/`: Implementation of the DynamicScoring addon controller in hub cluster.
+  - `pkg/dynamic_scoring_agent/`: Implementation of the DynamicScoringAgent that runs in managed clusters.
+- `samples/`: Sample CRDs and Scoring APIs for testing and demonstration

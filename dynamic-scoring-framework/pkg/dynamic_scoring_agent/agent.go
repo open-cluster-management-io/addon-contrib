@@ -57,10 +57,51 @@ var (
 			common.DynamicScoreLabelPrefix + "score_name",
 		},
 	)
+	requestsCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: common.DynamicScoreRequestsCounterName,
+			Help: "Counter for scoring attempts",
+		},
+		[]string{
+			"score_name",
+			"status",
+		},
+	)
+	fetchSecondsCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: common.DynamicScoreFetchSecondsCounterName,
+			Help: "Counter for scoring fetch duration in seconds",
+		},
+		[]string{
+			"score_name",
+		},
+	)
+	performSecondsCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: common.DynamicScorePerformSecondsCounterName,
+			Help: "Counter for scoring perform duration in seconds",
+		},
+		[]string{
+			"score_name",
+		},
+	)
+	sendSecondsCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: common.DynamicScoreSendSecondsCounterName,
+			Help: "Counter for scoring send duration in seconds",
+		},
+		[]string{
+			"score_name",
+		},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(dynamicScoreGauge)
+	prometheus.MustRegister(requestsCounter)
+	prometheus.MustRegister(fetchSecondsCounter)
+	prometheus.MustRegister(performSecondsCounter)
+	prometheus.MustRegister(sendSecondsCounter)
 }
 
 func startMetricsServer() {
@@ -345,6 +386,9 @@ func (c *agentController) startScoringLoop(ctx context.Context, summary *common.
 		case <-ticker.C:
 			if err := c.performScoring(ctx, summary); err != nil {
 				klog.Errorf("Scoring error (%s): %v", summary.ScoreName, err)
+				requestsCounter.WithLabelValues(summary.ScoreName, "failure").Inc()
+			} else {
+				requestsCounter.WithLabelValues(summary.ScoreName, "success").Inc()
 			}
 		}
 	}
@@ -372,7 +416,9 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 	}
 
 	// Fetch source data
-	if summary.SourceType == "prometheus" {
+	if summary.SourceType == common.SourceTypePrometheus {
+		fetchStart := time.Now()
+
 		parsedQueries := strings.Split(summary.SourceQuery, ";")
 		klog.Infof("Parsed Queries Count: %d for %s", len(parsedQueries), summary.ScoreName)
 
@@ -429,6 +475,11 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 			}
 			scoringInputData = append(scoringInputData, promResp.Data.Result...)
 		}
+
+		// Record fetch duration
+		fetchDuration := time.Since(fetchStart).Seconds()
+		fetchSecondsCounter.WithLabelValues(summary.ScoreName).Add(fetchDuration)
+		klog.Infof("Fetched source data in %.2f seconds for %s", fetchDuration, summary.ScoreName)
 	}
 
 	scoringPayload := map[string]interface{}{"data": scoringInputData}
@@ -449,6 +500,7 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 		req2.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
 
+	performStart := time.Now()
 	resp2, err := c.httpClient.Do(req2)
 	if err != nil {
 		return fmt.Errorf("failed to query scoring endpoint (%s): %w", summary.ScoreName, err)
@@ -463,6 +515,11 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 	if err != nil {
 		return fmt.Errorf("failed to read scoring response (%s): %w", summary.ScoreName, err)
 	}
+
+	// Record perform duration
+	performDuration := time.Since(performStart).Seconds()
+	performSecondsCounter.WithLabelValues(summary.ScoreName).Add(performDuration)
+	klog.Infof("Performed scoring in %.2f seconds for %s", performDuration, summary.ScoreName)
 
 	var scoringResp struct {
 		Results []struct {
@@ -511,7 +568,7 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 
 	klog.Infof("performScoring success : %s", summary.ScoreName)
 
-	// 前回との比較と削除
+	// Clean up old metrics
 	if prev, ok := c.previousLabelSets[summary.ScoreName]; ok {
 		for labelStr := range prev {
 			if _, stillExists := currentLabels[labelStr]; !stillExists {
@@ -523,11 +580,18 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 
 	c.previousLabelSets[summary.ScoreName] = currentLabels
 
+	// Send scores to storage
+	sendStart := time.Now()
+
 	if summary.ScoreDestination == "AddOnPlacementScore" {
 		if err := c.updateAddonPlacementScore(ctx, summary, currentPlaceHolderMapping, currentScores); err != nil {
 			return fmt.Errorf("failed to update AddOnPlacementScore (%s): %w", summary.ScoreName, err)
 		}
 	}
+	// Record send duration
+	sendDuration := time.Since(sendStart).Seconds()
+	sendSecondsCounter.WithLabelValues(summary.ScoreName).Add(sendDuration)
+	klog.Infof("Sent scores in %.2f seconds for %s", sendDuration, summary.ScoreName)
 
 	return nil
 }

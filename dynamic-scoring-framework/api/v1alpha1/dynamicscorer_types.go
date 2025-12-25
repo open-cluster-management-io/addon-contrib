@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +31,8 @@ type SecretRef struct {
 }
 
 type SourceConfigWithAuth struct {
-	Type   string               `json:"type,omitempty"`
+	// +kubebuilder:validation:Enum=Prometheus;None
+	Type   common.SourceType    `json:"type,omitempty"`
 	Host   string               `json:"host,omitempty"`
 	Path   string               `json:"path,omitempty"`
 	Params *common.SourceParams `json:"params,omitempty"`
@@ -50,24 +51,26 @@ type DynamicScorerSpec struct {
 	Description string `json:"description"`
 	ConfigURL   string `json:"configURL"`
 	// +kubebuilder:validation:Enum=Full;None
-	ConfigSyncMode string `json:"configSyncMode"`
+	ConfigSyncMode common.ConfigSyncMode `json:"configSyncMode"`
 	// +kubebuilder:validation:Enum=Internal;External
-	Location string                `json:"location,omitempty"`
+	Location common.Location       `json:"location,omitempty"`
 	Source   SourceConfigWithAuth  `json:"source,omitempty"`
 	Scoring  ScoringConfigWithAuth `json:"scoring,omitempty"`
 	// +kubebuilder:validation:Enum=AddonPlacementScore;None
-	ScoreDestination     string `json:"scoreDestination,omitempty"`
-	ScoreDimensionFormat string `json:"scoreDimensionFormat,omitempty"`
+	ScoreDestination     common.ScoreDestination `json:"scoreDestination,omitempty"`
+	ScoreDimensionFormat string                  `json:"scoreDimensionFormat,omitempty"`
 }
 
 // DynamicScorerStatus defines the observed state of DynamicScorer.
 type DynamicScorerStatus struct {
-	HealthStatus     string         `json:"healthStatus"`
-	LastSyncedConfig *common.Config `json:"lastSyncedConfig,omitempty"`
+	// +kubebuilder:validation:Enum=Active;Inactive;Unknown
+	HealthStatus     common.ScorerHealthStatus `json:"healthStatus"`
+	LastSyncedConfig *common.Config            `json:"lastSyncedConfig,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:storageversion
 
 // DynamicScorer is the Schema for the dynamicscorers API.
 type DynamicScorer struct {

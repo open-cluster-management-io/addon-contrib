@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
+	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
 	"open-cluster-management.io/dynamic-scoring/pkg/common"
 )
 
@@ -46,21 +46,12 @@ type DynamicScorerReconciler struct {
 // +kubebuilder:rbac:groups=dynamic-scoring.open-cluster-management.io,resources=dynamicscorers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=dynamic-scoring.open-cluster-management.io,resources=dynamicscorers/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the DynamicScorer object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *DynamicScorerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	klog.Info("Reconciling DynamicScorer :", req.Name)
+	klog.Info("Reconciling DynamicScorer: ", req.Name)
 
-	var dynamicscorer dynamicscoringv1.DynamicScorer
+	var dynamicscorer dynamicscoringv1alpha1.DynamicScorer
 	if err := r.Get(ctx, req.NamespacedName, &dynamicscorer); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -75,7 +66,7 @@ func (r *DynamicScorerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *DynamicScorerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := ctrl.NewControllerManagedBy(mgr).
-		For(&dynamicscoringv1.DynamicScorer{}).
+		For(&dynamicscoringv1alpha1.DynamicScorer{}).
 		Named("dynamicscorer").
 		Complete(r); err != nil {
 		return err
@@ -91,13 +82,13 @@ func (r *DynamicScorerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func syncScoringHealthz(ctx context.Context, dynamicscorer *dynamicscoringv1.DynamicScorer) error {
+func syncScoringHealthz(ctx context.Context, dynamicscorer *dynamicscoringv1alpha1.DynamicScorer) error {
 
 	klog.Infof("Checking scoring healthz for %s", dynamicscorer.Name)
 	parsedURL, err := url.Parse(dynamicscorer.Spec.ConfigURL)
 
 	if err != nil {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 		klog.Errorf("Failed to parse URL: %v", err)
 		return err
 	}
@@ -106,29 +97,29 @@ func syncScoringHealthz(ctx context.Context, dynamicscorer *dynamicscoringv1.Dyn
 
 	resp, err := http.Get(scoringHealthzURL)
 	if err != nil {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 		klog.Errorf("Request failed: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		dynamicscorer.Status.HealthStatus = "Active"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusActive
 	} else {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 	}
 
 	return nil
 }
 
-func syncScoringConfig(ctx context.Context, dynamicscorer *dynamicscoringv1.DynamicScorer) error {
+func syncScoringConfig(ctx context.Context, dynamicscorer *dynamicscoringv1alpha1.DynamicScorer) error {
 
 	klog.Infof("Sync config for %s", dynamicscorer.Name)
 
 	resp, err := http.Get(dynamicscorer.Spec.ConfigURL)
 
 	if err != nil {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 		klog.Errorf("Request failed: %v", err)
 		return err
 	}
@@ -138,16 +129,16 @@ func syncScoringConfig(ctx context.Context, dynamicscorer *dynamicscoringv1.Dyna
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 		return err
 	}
 
 	if err := json.Unmarshal(body, &newConfig); err != nil {
-		dynamicscorer.Status.HealthStatus = "Inactive"
+		dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusInactive
 		return err
 	}
 
-	dynamicscorer.Status.HealthStatus = "Active"
+	dynamicscorer.Status.HealthStatus = common.ScorerHealthStatusActive
 	dynamicscorer.Status.LastSyncedConfig = &newConfig
 
 	return nil
@@ -162,7 +153,7 @@ func startPeriodicHealthCheck(ctx context.Context, c client.Client, interval tim
 	for {
 		select {
 		case <-ticker.C:
-			var list dynamicscoringv1.DynamicScorerList
+			var list dynamicscoringv1alpha1.DynamicScorerList
 			if err := c.List(ctx, &list); err != nil {
 				klog.Errorf("Failed to list DynamicScorers %v", err)
 				continue
@@ -172,7 +163,7 @@ func startPeriodicHealthCheck(ctx context.Context, c client.Client, interval tim
 				s := scorer // avoid pointer issues in loop
 				originalStatus := s.Status.DeepCopy()
 
-				if s.Spec.ConfigSyncMode == "Full" {
+				if s.Spec.ConfigSyncMode == common.ConfigSyncModeFull {
 					err := syncScoringConfig(ctx, &s)
 					if err != nil {
 						klog.Errorf("Failed to sync config %s", s.Name)

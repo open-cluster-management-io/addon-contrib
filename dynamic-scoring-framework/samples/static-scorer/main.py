@@ -64,7 +64,7 @@ async def get_performance_scoring_config():
         "name": "example-performance-scorer",
         "description": "An example performance score",
         "source": {
-            "type": "none",
+            "type": "None",
         },
         "scoring": {
             "path": "/performance/scoring",
@@ -132,7 +132,7 @@ async def get_powerconsumption_scoring_config():
         "name": "example-powerconsumption-scorer",
         "description": "An example power consumption score",
         "source": {
-            "type": "none",
+            "type": "None",
         },
         "scoring": {
             "path": "/powerconsumption/scoring",

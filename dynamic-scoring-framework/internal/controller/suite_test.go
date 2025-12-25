@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
+	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -60,6 +61,9 @@ var _ = BeforeSuite(func() {
 
 	var err error
 	err = dynamicscoringv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = dynamicscoringv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

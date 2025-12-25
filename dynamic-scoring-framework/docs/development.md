@@ -431,7 +431,7 @@ Then query the scorer's configuration endpoint:
   "name": "sample-scorer",
   "description": "A sample score for time series data",
   "source": {
-    "type": "prometheus",
+    "type": "Prometheus",
     "host": "http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090",
     "path": "/api/v1/query_range",
     "params": {
@@ -469,7 +469,7 @@ External DynamicScorer config:
   "name": "llm-forecast-scorer",
   "description": "A sample score for time series data with vLLM",
   "source": {
-    "type": "prometheus",
+    "type": "Prometheus",
     "host": "http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090",
     "path": "/api/v1/query_range",
     "params": {
@@ -541,7 +541,7 @@ Simple Prediction Scorer config:
   "name": "simple-prediction-scorer",
   "description": "A simple prediction score for time series data",
   "source": {
-    "type": "prometheus",
+    "type": "Prometheus",
     "host": "http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090",
     "path": "/api/v1/query_range",
     "params": {
@@ -580,7 +580,7 @@ Static Scorer config:
   "name": "example-performance-scorer",
   "description": "An example performance score",
   "source": {
-    "type": "none"
+    "type": "None"
   },
   "scoring": {
     "path": "/performance/scoring",
@@ -597,7 +597,7 @@ Static Scorer config:
   "name": "example-powerconsumption-scorer",
   "description": "An example power consumption score",
   "source": {
-    "type": "none"
+    "type": "None"
   },
   "scoring": {
     "path": "/powerconsumption/scoring",

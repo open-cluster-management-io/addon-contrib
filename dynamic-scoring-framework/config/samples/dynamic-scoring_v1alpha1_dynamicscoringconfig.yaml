@@ -1,0 +1,9 @@
+apiVersion: dynamic-scoring.open-cluster-management.io/v1alpha1
+kind: DynamicScoringConfig
+metadata:
+  labels:
+    app.kubernetes.io/name: ocm-dynamic-scoring
+    app.kubernetes.io/managed-by: kustomize
+  name: dynamicscoringconfig-sample
+spec:
+  # TODO(user): Add fields here
