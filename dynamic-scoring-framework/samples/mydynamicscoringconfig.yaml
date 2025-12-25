@@ -1,4 +1,4 @@
-apiVersion: dynamic-scoring.open-cluster-management.io/v1
+apiVersion: dynamic-scoring.open-cluster-management.io/v1alpha1
 kind: DynamicScoringConfig
 metadata:
   name: dynamic-scoring-config

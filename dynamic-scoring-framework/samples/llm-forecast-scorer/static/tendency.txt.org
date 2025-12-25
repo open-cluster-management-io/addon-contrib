@@ -1,5 +1,0 @@
-For the next time period, CPU load tends to increase sharply (by about 3 times) if the application is a chatbot-type system.
-Other systems do not show a significant increase.
-The type of application can be inferred from its name. Here are some examples:
-ChatBotSystemExample = chatbot, mybuddy, myfriend
-OtherSystemNameExample = evaluator, calculator, smartsystem
