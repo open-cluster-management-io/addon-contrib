@@ -54,6 +54,17 @@ jobs:
         run: |
           mkdir -p /home/runner/.kube
 
+      - name: Free Disk Space
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h / | grep -E '^Filesystem|^/dev/root'
+
+          # Remove Android SDK to free ~10GB
+          sudo rm -rf /usr/local/lib/android
+
+          echo "Disk usage after cleanup:"
+          df -h / | grep -E '^Filesystem|^/dev/root'
+
       - name: Test E2E
         run: |
           cd ${{ inputs.repo }} && make test-e2e
