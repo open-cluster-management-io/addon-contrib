@@ -165,19 +165,21 @@ test-unit:
 
 test-integration: ensure-kubebuilder-tools
 	@echo "Running integration tests..."
-	go test -c ./test/integration -o ./kueue-integration.test -tags=integration
+	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
 	./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
 .PHONY: test-integration
 
 test-e2e-setup:
 	@echo "Setting up e2e test environment..."
 	IMAGE_TAG=e2e make image
+	@echo "Cleaning Docker build cache..."
+	@docker builder prune -af || true
 	@build/setup-env.sh --e2e --clean --kueue-version $(KUEUE_VERSION)
 .PHONY: test-e2e-setup
 
 test-e2e: test-e2e-setup
 	@echo "Running e2e tests..."
-	go test -c ./test/e2e -o kueue-addon-e2e.test
+	go test -c -ldflags="-s -w" ./test/e2e -o kueue-addon-e2e.test
 	./kueue-addon-e2e.test -test.v -ginkgo.v --ginkgo.timeout=2h
 .PHONY: test-e2e
 
