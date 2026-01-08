@@ -1,0 +1,21 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: addon-aarch64-build
+  namespace: dynamic-scoring
+spec:
+  strategy:
+    type: Docker
+    dockerStrategy:
+      pullSecret:
+          name: dockerhub-secret
+      dockerfilePath: Dockerfile.addon
+  source:
+    type: Binary
+  output:
+    to:
+      kind: DockerImage
+      name: >-
+        your-image-registry/open-cluster-management/dynamic-scoring-addon:latest-aarch64
+    pushSecret:
+      name: hub-push-secret

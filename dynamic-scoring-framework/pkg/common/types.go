@@ -1,40 +1,60 @@
 package common
 
+// ConfigSyncMode represents the mode of scoring configuration synchronization.
 type ConfigSyncMode string
 
 const (
+	// Full: All configurations are synchronized.
 	ConfigSyncModeFull ConfigSyncMode = "Full"
+	// None: No configurations are synchronized and CR's fields are used instead.
+	// Dynamic Scoring Controller will check just health status of Scorers.
 	ConfigSyncModeNone ConfigSyncMode = "None"
 )
 
+// Location represents the location of the scorer.
 type Location string
 
 const (
+	// Internal: Scorer is located inside the clusters (hub or managed).
 	LocationInternal Location = "Internal"
+	// External: Scorer is located outside the clusters (external to both hub and managed).
 	LocationExternal Location = "External"
 )
 
+// ScoreDestination represents the destination where the score is sent.
 type ScoreDestination string
 
 const (
-	ScoreDestinationAddonPlacementScore ScoreDestination = "AddonPlacementScore"
-	ScoreDestinationNone                ScoreDestination = "None"
+	// AddonPlacementScore: Score is sent to AddonPlacementScore resource.
+	ScoreDestinationAddOnPlacementScore ScoreDestination = "AddOnPlacementScore"
+	// None: Score is not sent to any destination.
+	ScoreDestinationNone ScoreDestination = "None"
 )
 
+// ScorerHealthStatus represents the health status of a scorer.
 type ScorerHealthStatus string
 
 const (
-	ScorerHealthStatusActive   ScorerHealthStatus = "Active"
+	// Active: Scorer is active and functioning properly.
+	ScorerHealthStatusActive ScorerHealthStatus = "Active"
+	// Inactive: Scorer is inactive and not currently functioning.
 	ScorerHealthStatusInactive ScorerHealthStatus = "Inactive"
-	ScorerHealthStatusUnknown  ScorerHealthStatus = "Unknown"
+	// Unknown: Scorer health status is unknown.
+	ScorerHealthStatusUnknown ScorerHealthStatus = "Unknown"
 )
 
+// SourceType represents the type of the source.
 type SourceType string
 
 const (
+	// Prometheus: Source type is Prometheus.
 	SourceTypePrometheus SourceType = "Prometheus"
-	SourceTypeNone       SourceType = "None"
+	// None: No source type specified.
+	SourceTypeNone SourceType = "None"
 )
+
+// Config represents the scoring configuration.
+// Scoring API must implement config endpoint to serve this schema.
 
 type Config struct {
 	Name        string        `json:"name"`
@@ -43,34 +63,55 @@ type Config struct {
 	Scoring     ScoringConfig `json:"scoring"`
 }
 
+// SourceConfig represents the source configuration.
+// If the source type is Prometheus, the host should be the Prometheus server URL.
 type SourceConfig struct {
-	Type   SourceType   `json:"type,omitempty"`
-	Host   string       `json:"host,omitempty"`
+	Type SourceType `json:"type,omitempty"`
+	// The hostname or IP address of the source.
+	// e.g. "http://prometheus-server.monitoring.svc.cluster.local:9090"
+	Host string `json:"host,omitempty"`
+	// The API path of the source.
+	// e.g. "/api/v1/query_range" for Prometheus
 	Path   string       `json:"path"`
 	Params SourceParams `json:"params"`
 }
 
 type SourceParams struct {
+	// The Prometheus query string.
+	// If you want to use multiple time series, join them with semicolons.
 	Query string `json:"query"`
-	Range int    `json:"range"`
-	Step  int    `json:"step"`
+	// The time range in seconds for the query.
+	Range int `json:"range"`
+	// The query resolution step width in seconds.
+	Step int `json:"step"`
 }
 
 type ScoringConfig struct {
-	Host   string        `json:"host,omitempty"`
+	// The hostname or IP address of the scoring endpoint.
+	// e.g. "http://scoring-api.scoring.svc.cluster.local:8080"
+	Host string `json:"host,omitempty"`
+	// The API path of the scoring endpoint.
+	// e.g. "/api/v1/score"
 	Path   string        `json:"path"`
 	Params ScoringParams `json:"params"`
 }
 
 type ScoringParams struct {
-	Name     string `json:"name"`
-	Interval int    `json:"interval"`
+	// The name of the score
+	Name string `json:"name"`
+	// The interval in seconds for scoring
+	// Note: This interval also used for config synchronization interval.
+	Interval int `json:"interval"`
 }
 
 type Mask struct {
 	ClusterName string `json:"clusterName"`
 	ScoreName   string `json:"scoreName"`
 }
+
+// ScorerSummary represents a summary of the scorer configuration.
+// Dynamic Scoring Controller aggregate scorer configurations and generate this summary.
+// The list of summaries is provided to managed clusters as ConfigMap data via ManifestWork.
 
 type ScorerSummary struct {
 	Name                    string           `json:"name"`
@@ -89,4 +130,86 @@ type ScorerSummary struct {
 	Location                Location         `json:"location"`
 	ScoreDestination        ScoreDestination `json:"scoreDestination"`
 	ScoreDimensionFormat    string           `json:"scoreDimensionFormat"`
+}
+
+// ----------------------------
+// Prometheus HTTP API schemas
+// ----------------------------
+
+// PrometheusQueryRangeResponse represents the JSON response from Prometheus HTTP API
+// endpoint: GET /api/v1/query_range
+// Ref: https://prometheus.io/docs/prometheus/latest/querying/api/#range-queries
+//
+// Example (simplified):
+//
+//	{
+//	  "status": "success",
+//	  "data": {
+//	    "resultType": "matrix",
+//	    "result": [ {"metric": {...}, "values": [[<ts>, "<val>"], ...]} ]
+//	  }
+//	}
+type PrometheusQueryRangeResponse struct {
+	Status string              `json:"status"`
+	Data   PrometheusQueryData `json:"data"`
+}
+
+type PrometheusQueryData struct {
+	// ResultType is typically "matrix" for range queries.
+	ResultType string                   `json:"resultType,omitempty"`
+	Result     []PrometheusMatrixSeries `json:"result"`
+}
+
+// PrometheusMatrixSeries corresponds to one time-series item in a range query response.
+type PrometheusMatrixSeries struct {
+	Metric map[string]string `json:"metric"`
+	// Values is an array of [ <timestamp>, "<sample_value>" ] pairs.
+	// Prometheus returns the sample value as a string in JSON.
+	// We keep interface{} here because the agent currently forwards the raw structure
+	// to the scoring API without parsing values.
+	Values [][]interface{} `json:"values"`
+}
+
+// ----------------------------
+// Scoring API schemas
+// ----------------------------
+
+// ScoringRequest is the POST body schema used by the agent when calling a scorer.
+// When the source query is multiple time series joined with semicolons,
+// the agent flattens the Prometheus matrix result into this structure.
+//
+// Example:
+//
+//	{
+//	  "data": [ {"metric": {...}, "values": [[<ts>, "<val>"], ...]}, ... ]
+//	}
+type ScoringRequest struct {
+	Data []PrometheusMatrixSeries `json:"data"`
+}
+
+// ScoringResponse is the JSON response schema expected from a scorer.
+//
+// Example:
+//
+//	{
+//	  "results": [
+//	    {"metric": {"node":"..."}, "score": 12.3}
+//	  ]
+//	}
+type ScoringResponse struct {
+	Results []ScoringResult `json:"results"`
+}
+
+// ScoringResult represents an individual scoring result with associated metric labels and score value.
+// NOTE: metric labels are used to construct agent's metrics endpoint dimension.
+// mapping example:
+//
+//	metric: {"node":"node1", "score":"my-score"}
+//	-> my_score{ds_node="node1"}
+type ScoringResult struct {
+	Metric map[string]string `json:"metric"`
+	// Computed score value.
+	// Note: The score value must be a float64.
+	// But AddonPlacementScore uses integer scores so agent will cast the float64 to int when sending to APS.
+	Score float64 `json:"score"`
 }

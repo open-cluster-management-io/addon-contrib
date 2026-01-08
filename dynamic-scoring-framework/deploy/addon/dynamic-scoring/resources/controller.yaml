@@ -18,7 +18,7 @@ spec:
       containers:
       - name: dynamic-scoring-addon-controller
         image: quay.io/open-cluster-management/dynamic-scoring-addon
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         args:
           - "/dynamic-scoring-addon"
           - "controller"

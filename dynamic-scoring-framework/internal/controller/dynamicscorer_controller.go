@@ -76,12 +76,15 @@ func (r *DynamicScorerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		<-mgr.Elected()
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		startPeriodicHealthCheck(ctx, r.Client, 30*time.Second)
+		// start periodic health check
+		startPeriodicHealthCheck(ctx, r.Client, common.DynamicScorerHealthCheckInterval*time.Second)
 	}()
 
 	return nil
 }
 
+// syncScoringHealthz checks the /healthz endpoint of the scoring service
+// host is extracted from the ConfigURL specified in the DynamicScorer spec
 func syncScoringHealthz(ctx context.Context, dynamicscorer *dynamicscoringv1alpha1.DynamicScorer) error {
 
 	klog.Infof("Checking scoring healthz for %s", dynamicscorer.Name)
@@ -144,6 +147,8 @@ func syncScoringConfig(ctx context.Context, dynamicscorer *dynamicscoringv1alpha
 	return nil
 }
 
+// startPeriodicHealthCheck starts a goroutine that periodically checks the health of all DynamicScorers
+// and syncs their config if ConfigSyncMode is set to "Full"
 func startPeriodicHealthCheck(ctx context.Context, c client.Client, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -163,7 +168,7 @@ func startPeriodicHealthCheck(ctx context.Context, c client.Client, interval tim
 				s := scorer // avoid pointer issues in loop
 				originalStatus := s.Status.DeepCopy()
 
-				if s.Spec.ConfigSyncMode == common.ConfigSyncModeFull {
+				if s.Spec.ConfigSyncMode == common.ConfigSyncModeFull { // "Full"
 					err := syncScoringConfig(ctx, &s)
 					if err != nil {
 						klog.Errorf("Failed to sync config %s", s.Name)
@@ -177,7 +182,7 @@ func startPeriodicHealthCheck(ctx context.Context, c client.Client, interval tim
 					} else {
 						klog.Infof("No changes in DynamicScorer %s status", s.Name)
 					}
-				} else {
+				} else { // ConfigSyncModeNone "None", just check healthz
 					err := syncScoringHealthz(ctx, &s)
 					if err != nil {
 						klog.Errorf("Health check failed %s", s.Name)

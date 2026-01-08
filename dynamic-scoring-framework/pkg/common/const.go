@@ -11,4 +11,5 @@ const (
 	DynamicScoreSendSecondsCounterName    = "dynamic_scoring_send_seconds_total"
 	DynamicScoreLabelMaxLength            = 256
 	DynamicScoreLabelPrefix               = "ds_"
+	DynamicScorerHealthCheckInterval      = 30 // in seconds
 )

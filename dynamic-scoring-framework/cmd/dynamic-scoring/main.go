@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	goflag "flag"
 	"fmt"
 	"math/rand"
@@ -10,7 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	utilflag "k8s.io/component-base/cli/flag"
 	logs "k8s.io/component-base/logs/api/v1"
@@ -23,10 +28,84 @@ import (
 	cmdfactory "open-cluster-management.io/addon-framework/pkg/cmd/factory"
 	"open-cluster-management.io/addon-framework/pkg/utils"
 	"open-cluster-management.io/addon-framework/pkg/version"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"open-cluster-management.io/dynamic-scoring/pkg/dynamic_scoring"
 	"open-cluster-management.io/dynamic-scoring/pkg/dynamic_scoring_agent"
 )
+
+const (
+	// Hub side (source) pull secret location.
+	hubPullSecretNamespace = "open-cluster-management"
+	hubPullSecretName      = "dynamic-scoring-addon-pull-secret"
+
+	// Managed side (target) pull secret name (created in the addon install namespace).
+	managedPullSecretName = "hub-registry-secret"
+)
+
+// normalizeAddOnDeploymentConfigValuesFunc converts certain AddOnDeploymentConfig customizedVariables
+// from string form into the types expected by the go-template manifests.
+//
+// Today we support:
+// - ImagePullSecrets: JSON array string (e.g. '["a","b"]') -> []string
+func normalizeAddOnDeploymentConfigValuesFunc() addonfactory.AddOnDeploymentConfigToValuesFunc {
+	return func(config addonapiv1alpha1.AddOnDeploymentConfig) (addonfactory.Values, error) {
+		values, err := addonfactory.ToAddOnDeploymentConfigValues(config)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert ImagePullSecrets from string to []string so templates can "range" over it.
+		if raw, ok := values["ImagePullSecrets"]; ok {
+			if s, ok := raw.(string); ok {
+				if len(s) == 0 {
+					delete(values, "ImagePullSecrets")
+					return values, nil
+				}
+				var secrets []string
+				if err := json.Unmarshal([]byte(s), &secrets); err == nil {
+					values["ImagePullSecrets"] = secrets
+				}
+			}
+		}
+
+		return values, nil
+	}
+}
+
+// hubPullSecretValuesFunc reads a dockerconfigjson Secret from the hub cluster and passes it as template values
+// so a pull secret can be created on the managed cluster via ManifestWork.
+//
+// This is intentionally best-effort: if the secret doesn't exist (or is malformed), we don't fail the addon.
+func hubPullSecretValuesFunc(kubeClient kubernetes.Interface) addonfactory.GetValuesFunc {
+	return func(cluster *clusterv1.ManagedCluster, addon *addonapiv1alpha1.ManagedClusterAddOn) (addonfactory.Values, error) {
+		secret, err := kubeClient.CoreV1().Secrets(hubPullSecretNamespace).Get(context.TODO(), hubPullSecretName, metav1.GetOptions{})
+		if err != nil {
+			klog.V(2).Infof("hub pull secret %s/%s not available: %v", hubPullSecretNamespace, hubPullSecretName, err)
+			klog.Info("hub pull secret ", hubPullSecretNamespace, "/", hubPullSecretName, " not available")
+			return nil, nil
+		}
+		if secret.Type != corev1.SecretTypeDockerConfigJson {
+			klog.Info("hub pull secret ", hubPullSecretNamespace, "/", hubPullSecretName, " has unexpected type ", secret.Type, " (expected ", corev1.SecretTypeDockerConfigJson, ")")
+			klog.Warningf("hub pull secret %s/%s has unexpected type %q (expected %q)", hubPullSecretNamespace, hubPullSecretName, secret.Type, corev1.SecretTypeDockerConfigJson)
+			return nil, nil
+		}
+		b := secret.Data[corev1.DockerConfigJsonKey]
+		if len(b) == 0 {
+			klog.Info("hub pull secret ", hubPullSecretNamespace, "/", hubPullSecretName, " missing ", corev1.DockerConfigJsonKey, " key")
+			klog.Warningf("hub pull secret %s/%s missing %q key", hubPullSecretNamespace, hubPullSecretName, corev1.DockerConfigJsonKey)
+			return nil, nil
+		}
+
+		klog.Info("hub pull secret ", hubPullSecretNamespace, "/", hubPullSecretName, " available")
+
+		return addonfactory.Values{
+			"PullSecretName":             managedPullSecretName,
+			"PullSecretDockerConfigJson": base64.StdEncoding.EncodeToString(b),
+		}, nil
+	}
+}
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -86,6 +165,11 @@ type addManagerConfig struct {
 }
 
 func (c *addManagerConfig) runController(ctx context.Context, kubeConfig *rest.Config) error {
+	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
+		return err
+	}
+
 	addonClient, err := addonv1alpha1client.NewForConfig(kubeConfig)
 	if err != nil {
 		return err
@@ -115,14 +199,16 @@ func (c *addManagerConfig) runController(ctx context.Context, kubeConfig *rest.C
 		utils.NewAddOnDeploymentConfigGetter(addonClient),
 	)
 
+	klog.Info("agent install namespace for AddOn ", dynamic_scoring.AddonName)
+
 	agentAddon, err := addonfactory.NewAgentAddonFactory(dynamic_scoring.AddonName, dynamic_scoring.FS, "manifests/templates").
 		WithConfigGVRs(utils.AddOnDeploymentConfigGVR).
 		WithGetValuesFuncs(
 			dynamic_scoring.GetDefaultValues,
+			hubPullSecretValuesFunc(kubeClient),
 			addonfactory.GetAddOnDeploymentConfigValues(
 				utils.NewAddOnDeploymentConfigGetter(addonClient),
-				addonfactory.ToAddOnDeploymentConfigValues,
-				addonfactory.ToImageOverrideValuesFunc("Image", dynamic_scoring.DefaultDynamicScoringAddonImage),
+				normalizeAddOnDeploymentConfigValuesFunc(),
 			),
 		).
 		WithAgentRegistrationOption(registrationOption).

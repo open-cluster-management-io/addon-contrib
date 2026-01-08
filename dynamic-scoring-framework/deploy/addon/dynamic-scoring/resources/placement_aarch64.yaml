@@ -1,7 +1,7 @@
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: global
+  name: global-aarch64
 spec:
   clusterSets:
     - global
@@ -10,6 +10,6 @@ spec:
         labelSelector:
           matchExpressions:
             - key: cluster-arch
-              operator: NotIn
+              operator: In
               values:
                 - aarch64

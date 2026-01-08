@@ -271,7 +271,7 @@ echo $HUB_NODE_IP
 Run the skupper setup script to configure sites and establish connections:
 
 ```bash
-HUB_NODE_IP=$HUB_NODE_IP ./reset_skupper.sh
+HUB_NODE_IP=$HUB_NODE_IP ./hack/reset_skupper.sh
 ```
 
 By default, the script uses the `dynamic-scoring` namespace. To use a different namespace, set the `NAMESPACE` environment variable.
@@ -333,7 +333,7 @@ helm repo update
 Set up Skupper in the monitoring namespace and install VictoriaMetrics:
 
 ```bash
-HUB_NODE_IP=$HUB_NODE_IP NAMESPACE=monitoring ./reset_skupper.sh
+HUB_NODE_IP=$HUB_NODE_IP NAMESPACE=monitoring ./hack/reset_skupper.sh
 helm install victoria-metrics vm/victoria-metrics-single -n monitoring
 ```
 
@@ -1087,7 +1087,7 @@ With this configuration, you can use VS Code Copilot to:
 - Explore scoring data interactively
 
 Example prompts:
-- "Please get AddonPlacementScores and summarize them"
+- "Please get AddOnPlacementScores and summarize them"
 - "Optimize for performance"
 - "Optimize for power consumption"
 

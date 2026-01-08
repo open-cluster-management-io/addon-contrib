@@ -37,7 +37,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
 	"open-cluster-management.io/dynamic-scoring/internal/controller"
 
 	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
@@ -55,7 +54,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(dynamicscoringv1.AddToScheme(scheme))
 	utilruntime.Must(dynamicscoringv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 

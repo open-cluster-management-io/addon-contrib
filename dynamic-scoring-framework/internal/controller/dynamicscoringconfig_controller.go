@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -45,6 +46,8 @@ type DynamicScoringConfigReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+const dsFinalizer = "dynamic-scoring.open-cluster-management.io/dynamic-scoring-config-finalizer"
+
 // +kubebuilder:rbac:groups=dynamic-scoring.open-cluster-management.io,resources=dynamicscoringconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=dynamic-scoring.open-cluster-management.io,resources=dynamicscoringconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=dynamic-scoring.open-cluster-management.io,resources=dynamicscoringconfigs/finalizers,verbs=update
@@ -60,25 +63,69 @@ func (r *DynamicScoringConfigReconciler) Reconcile(ctx context.Context, req ctrl
 	if err := r.Get(ctx, req.NamespacedName, &config); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+
+	// ignore if not the singleton config
+	if config.Name != common.DynamicScoringConfigName {
+		klog.InfoS("Ignoring DynamicScoringConfig with unexpected name", "name", config.Name)
+		return ctrl.Result{}, nil
+	}
+
+	// add finalizer if not present
+	if !controllerutil.ContainsFinalizer(&config, dsFinalizer) {
+		klog.InfoS("Adding Finalizer for DynamicScoringConfig", "name", config.Name)
+		controllerutil.AddFinalizer(&config, dsFinalizer)
+		if err := r.Update(ctx, &config); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// delete existing ManifestWorks if config is deleted
+	if !config.DeletionTimestamp.IsZero() {
+		klog.InfoS("Deleting ManifestWorks for DynamicScoringConfig", "name", config.Name)
+		var clusters clusterv1.ManagedClusterList
+		if err := r.List(ctx, &clusters); err != nil {
+			klog.ErrorS(err, "Failed to list ManagedClusters")
+			return ctrl.Result{}, err
+		}
+
+		for _, cluster := range clusters.Items {
+			err := deleteConfigManifestWork(ctx, r.Client, cluster.Name)
+			if err != nil {
+				klog.ErrorS(err, "Failed to delete ManifestWork for cluster", "cluster", cluster.Name)
+				// continue deleting for other clusters even if one fails
+			}
+		}
+		controllerutil.RemoveFinalizer(&config, dsFinalizer)
+		if err := r.Update(ctx, &config); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	} else {
+		klog.InfoS("No DynamicScoringConfig deletion detected", "name", config.Name)
+	}
+
+	// build mask map for quick lookup
 	maskMap := buildMaskMap(config.Spec.Masks)
 
+	// list all DynamicScorers in the namespace
 	var scorerList dynamicscoringv1alpha1.DynamicScorerList
-	klog.InfoS("Fetching DynamicScorers in namespace", "namespace", req.Namespace, scorerList)
 	if err := r.List(ctx, &scorerList, client.InNamespace(req.Namespace)); err != nil {
 		klog.ErrorS(err, "Failed to list DynamicScorers", "namespace", req.Namespace)
 		return ctrl.Result{}, err
 	}
 
+	// list all ManagedClusters
 	var clusters clusterv1.ManagedClusterList
-	klog.InfoS("Fetching DynamicScorers in namespace", "namespace", req.Namespace, scorerList)
 	if err := r.List(ctx, &clusters); err != nil {
 		klog.ErrorS(err, "Failed to list ManagedClusters")
 		return ctrl.Result{}, err
 	}
 
+	// build summary per cluster from scorers and config (e.g. masking)
 	clusterToSummaries := buildClusterToSummaries(ctx, clusters.Items, scorerList.Items, maskMap)
 	klog.InfoS("Cluster to Summaries Mapping", "mapping", clusterToSummaries)
 
+	// update or create ManifestWork per cluster
 	for _, cluster := range clusters.Items {
 		clusterName := cluster.Name
 		currentSummaries := clusterToSummaries[clusterName]
@@ -143,7 +190,11 @@ func buildClusterToSummaries(
 	for _, cluster := range clusters {
 		clusterName := cluster.Name
 		currentSummaries := []common.ScorerSummary{}
+
+		// build summaries for the cluster
+		// each element represents one scorer's summary
 		for _, scorer := range scorers {
+			// validate required fields
 			scoreName, err := getValidScoreName(scorer)
 			if err != nil {
 				klog.ErrorS(err, "Failed to get valid Score Name", "scorer", scorer.Name)
@@ -243,6 +294,7 @@ func buildClusterToSummaries(
 				continue
 			}
 
+			// build summary
 			summary := common.ScorerSummary{
 				Name:                    scorer.Name,
 				ScoreName:               scoreName,
@@ -350,6 +402,29 @@ func updateConfigManifestWork(ctx context.Context, c client.Client, clusterName 
 	} else {
 		klog.ErrorS(err, "Failed to get ManifestWork", "name", manifest.Name, "namespace", manifest.Namespace)
 	}
+	return nil
+}
+
+func deleteConfigManifestWork(ctx context.Context, c client.Client, clusterName string) error {
+	var existing workv1.ManifestWork
+	err := c.Get(ctx, client.ObjectKey{
+		Name:      common.ManifestWorkConfigMapName,
+		Namespace: clusterName,
+	}, &existing)
+	if errors.IsNotFound(err) {
+		klog.InfoS("ManifestWork not found, nothing to delete", "name", common.ManifestWorkConfigMapName, "namespace", clusterName)
+		return nil
+	} else if err == nil {
+		if err := c.Delete(ctx, &existing); err != nil {
+			klog.ErrorS(err, "Failed to delete ManifestWork", "name", existing.Name, "namespace", existing.Namespace)
+			return err
+		}
+	} else {
+		klog.ErrorS(err, "Failed to get ManifestWork", "name", existing.Name, "namespace", existing.Namespace)
+		return err
+	}
+
+	klog.InfoS("Deleted ManifestWork", "name", existing.Name, "namespace", existing.Namespace)
 	return nil
 }
 

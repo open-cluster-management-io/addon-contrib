@@ -1,0 +1,12 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: dynamic-scoring-addon-config
+  namespace: open-cluster-management
+spec:
+  agentInstallNamespace: dynamic-scoring
+  customizedVariables:
+    - name: Image
+      value: your-image-registry/open-cluster-management/dynamic-scoring-addon:latest
+    - name: ImagePullSecrets
+      value: '["hub-registry-secret"]'

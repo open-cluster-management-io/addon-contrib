@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	dynamicscoringv1 "open-cluster-management.io/dynamic-scoring/api/v1"
+	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
 )
 
 var _ = Describe("DynamicScoringConfig Controller", func() {
@@ -40,13 +40,13 @@ var _ = Describe("DynamicScoringConfig Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		dynamicscoringconfig := &dynamicscoringv1.DynamicScoringConfig{}
+		dynamicscoringconfig := &dynamicscoringv1alpha1.DynamicScoringConfig{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind DynamicScoringConfig")
 			err := k8sClient.Get(ctx, typeNamespacedName, dynamicscoringconfig)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &dynamicscoringv1.DynamicScoringConfig{
+				resource := &dynamicscoringv1alpha1.DynamicScoringConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,7 +59,7 @@ var _ = Describe("DynamicScoringConfig Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &dynamicscoringv1.DynamicScoringConfig{}
+			resource := &dynamicscoringv1alpha1.DynamicScoringConfig{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 

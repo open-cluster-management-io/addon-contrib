@@ -35,7 +35,7 @@ func NewRegistrationOption(kubeConfig *rest.Config, addonName, agentName string)
 func GetDefaultValues(cluster *clusterv1.ManagedCluster,
 	addon *addonapiv1alpha1.ManagedClusterAddOn) (addonfactory.Values, error) {
 
-	image := os.Getenv("EXAMPLE_IMAGE_NAME")
+	image := os.Getenv("DYNAMIC_SCORING_ADDON_IMAGE")
 	if len(image) == 0 {
 		image = DefaultDynamicScoringAddonImage
 	}
@@ -44,10 +44,12 @@ func GetDefaultValues(cluster *clusterv1.ManagedCluster,
 		KubeConfigSecret string
 		ClusterName      string
 		Image            string
+		ImagePullSecrets []string
 	}{
 		KubeConfigSecret: fmt.Sprintf("%s-hub-kubeconfig", addon.Name),
 		ClusterName:      cluster.Name,
 		Image:            image,
+		ImagePullSecrets: nil,
 	}
 
 	return addonfactory.StructToValues(manifestConfig), nil

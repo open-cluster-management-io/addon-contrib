@@ -56,7 +56,7 @@ type DynamicScorerSpec struct {
 	Location common.Location       `json:"location,omitempty"`
 	Source   SourceConfigWithAuth  `json:"source,omitempty"`
 	Scoring  ScoringConfigWithAuth `json:"scoring,omitempty"`
-	// +kubebuilder:validation:Enum=AddonPlacementScore;None
+	// +kubebuilder:validation:Enum=AddOnPlacementScore;None
 	ScoreDestination     common.ScoreDestination `json:"scoreDestination,omitempty"`
 	ScoreDimensionFormat string                  `json:"scoreDimensionFormat,omitempty"`
 }

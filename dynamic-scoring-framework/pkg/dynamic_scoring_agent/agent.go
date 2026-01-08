@@ -104,6 +104,7 @@ func init() {
 	prometheus.MustRegister(sendSecondsCounter)
 }
 
+// startMetricsServer starts an HTTP server to expose Prometheus metrics.
 func startMetricsServer() {
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
@@ -318,6 +319,7 @@ func (c *agentController) handleConfigMapUpdate(ctx context.Context, cm *corev1.
 
 	klog.Infof("Summay Num: %d", len(summaries))
 
+	// Track active scorers and manage workers
 	active := make(map[string]bool)
 	for _, s := range summaries {
 		active[s.ScoreName] = true
@@ -394,26 +396,10 @@ func (c *agentController) startScoringLoop(ctx context.Context, summary *common.
 	}
 }
 
-type ScoringRequest struct {
-	Data interface{} `json:"data"`
-}
-
-type ScoringResult struct {
-	Metric map[string]string `json:"metric"`
-	Value  float64           `json:"score"`
-}
-
-type ScoringResponse struct {
-	Results []ScoringResult `json:"results"`
-}
-
 func (c *agentController) performScoring(ctx context.Context, summary *common.ScorerSummary) error {
 	klog.Infof("performScoring start : %s", summary.ScoreName)
 
-	var scoringInputData []struct {
-		Metric map[string]string `json:"metric"`
-		Values [][]interface{}   `json:"values"`
-	}
+	var scoringInputData []common.PrometheusMatrixSeries
 
 	// Fetch source data
 	if summary.SourceType == common.SourceTypePrometheus {
@@ -458,15 +444,7 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 				return fmt.Errorf("failed to read prometheus response: %w", err)
 			}
 
-			var promResp struct {
-				Status string `json:"status"`
-				Data   struct {
-					Result []struct {
-						Metric map[string]string `json:"metric"`
-						Values [][]interface{}   `json:"values"`
-					} `json:"result"`
-				} `json:"data"`
-			}
+			var promResp common.PrometheusQueryRangeResponse
 			if err := json.Unmarshal(body, &promResp); err != nil {
 				return fmt.Errorf("Prometheus Response JSON unmarshal error: %w", err)
 			}
@@ -482,7 +460,7 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 		klog.Infof("Fetched source data in %.2f seconds for %s", fetchDuration, summary.ScoreName)
 	}
 
-	scoringPayload := map[string]interface{}{"data": scoringInputData}
+	scoringPayload := common.ScoringRequest{Data: scoringInputData}
 	payloadBytes, err := json.Marshal(scoringPayload)
 
 	if err != nil {
@@ -521,12 +499,7 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 	performSecondsCounter.WithLabelValues(summary.ScoreName).Add(performDuration)
 	klog.Infof("Performed scoring in %.2f seconds for %s", performDuration, summary.ScoreName)
 
-	var scoringResp struct {
-		Results []struct {
-			Metric map[string]string `json:"metric"`
-			Value  float64           `json:"score"`
-		} `json:"results"`
-	}
+	var scoringResp common.ScoringResponse
 	if err := json.Unmarshal(resp2Body, &scoringResp); err != nil {
 		return fmt.Errorf("Scoring Response JSON unmarshal error: %w", err)
 	}
@@ -560,8 +533,8 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 		}
 		aggregatedLabels := aggregateLabels(labels)
 		currentPlaceHolderMapping[aggregatedLabels] = placeHolderMapping
-		currentScores[aggregatedLabels] = r.Value
-		dynamicScoreGauge.WithLabelValues(labels...).Set(r.Value)
+		currentScores[aggregatedLabels] = r.Score
+		dynamicScoreGauge.WithLabelValues(labels...).Set(r.Score)
 
 		currentLabels[labelKey(labels...)] = struct{}{}
 	}
@@ -583,8 +556,8 @@ func (c *agentController) performScoring(ctx context.Context, summary *common.Sc
 	// Send scores to storage
 	sendStart := time.Now()
 
-	if summary.ScoreDestination == "AddOnPlacementScore" {
-		if err := c.updateAddonPlacementScore(ctx, summary, currentPlaceHolderMapping, currentScores); err != nil {
+	if summary.ScoreDestination == common.ScoreDestinationAddOnPlacementScore {
+		if err := c.updateAddOnPlacementScore(ctx, summary, currentPlaceHolderMapping, currentScores); err != nil {
 			return fmt.Errorf("failed to update AddOnPlacementScore (%s): %w", summary.ScoreName, err)
 		}
 	}
@@ -642,7 +615,7 @@ func (c *agentController) fetchScoringAuth(ctx context.Context, summary common.S
 	return nil
 }
 
-func (c *agentController) updateAddonPlacementScore(ctx context.Context, summary *common.ScorerSummary, currentPlaceHolderMapping map[string]map[string]string, currentScores map[string]float64) error {
+func (c *agentController) updateAddOnPlacementScore(ctx context.Context, summary *common.ScorerSummary, currentPlaceHolderMapping map[string]map[string]string, currentScores map[string]float64) error {
 
 	// check https://github.com/open-cluster-management-io/addon-contrib/blob/main/resource-usage-collect-addon/pkg/addon/agent/agent.go
 	sanitizedName := sanitizeResourceName(summary.ScoreName)
@@ -697,7 +670,7 @@ func (c *agentController) updateAddonPlacementScore(ctx context.Context, summary
 }
 
 func labelKey(values ...string) string {
-	return strings.Join(values, "||") // シンプルなハッシュ
+	return strings.Join(values, "||")
 }
 
 func sanitizeResourceName(name string) string {

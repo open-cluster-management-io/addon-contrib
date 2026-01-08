@@ -16,6 +16,12 @@ spec:
         app: dynamic-scoring-agent
     spec:
       serviceAccountName: dynamic-scoring-agent-sa
+{{- if .ImagePullSecrets }}
+      imagePullSecrets:
+      {{- range $s := .ImagePullSecrets }}
+      - name: {{ $s }}
+      {{- end }}
+{{- end }}
 {{- if .NodeSelector }}
       nodeSelector:
       {{- range $key, $value := .NodeSelector }}
@@ -38,6 +44,10 @@ spec:
       - name: hub-config
         secret:
           secretName: {{ .KubeConfigSecret }}
+      - name: service-ca
+        configMap:
+          name: service-ca
+          optional: true
       containers:
       - name: dynamic-scoring-agent
         image: {{ .Image }}
@@ -66,8 +76,16 @@ spec:
         {{- end }}
     {{- end }}
 {{- end }}
-{{- if or .HTTPProxy .HTTPSProxy}}
         env:
+          # On OpenShift, a ConfigMap annotated with service.beta.openshift.io/inject-cabundle
+          # will be populated with a CA bundle. We reference it via SSL_CERT_FILE so Go's
+          # standard TLS verification can trust it without custom code.
+          #
+          # If the ConfigMap isn't present (or not injected), this file won't exist.
+          # In that case, the process will still start, but TLS may fail if the server
+          # certificate requires that CA.
+          - name: SSL_CERT_FILE
+            value: /var/run/secrets/openshift/service-ca/service-ca.crt
         {{- if .HTTPProxy }}
           - name: HTTP_PROXY
             value: {{ .HTTPProxy }}
@@ -80,7 +98,6 @@ spec:
           - name: NO_PROXY
             value: {{ .NoProxy }}
         {{- end }}
-{{- end }}
         args:
           - "/dynamic-scoring-addon"
           - "agent"
@@ -90,3 +107,6 @@ spec:
         volumeMounts:
           - name: hub-config
             mountPath: /var/run/hub
+          - name: service-ca
+            mountPath: /var/run/secrets/openshift/service-ca
+            readOnly: true

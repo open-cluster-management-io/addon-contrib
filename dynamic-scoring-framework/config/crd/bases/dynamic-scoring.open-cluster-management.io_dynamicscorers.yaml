@@ -14,187 +14,6 @@ spec:
     singular: dynamicscorer
   scope: Namespaced
   versions:
-  - name: v1
-    schema:
-      openAPIV3Schema:
-        description: DynamicScorer is the Schema for the dynamicscorers API.
-        properties:
-          apiVersion:
-            description: |-
-              APIVersion defines the versioned schema of this representation of an object.
-              Servers should convert recognized schemas to the latest internal value, and
-              may reject unrecognized values.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
-            type: string
-          kind:
-            description: |-
-              Kind is a string value representing the REST resource this object represents.
-              Servers may infer this from the endpoint the client submits requests to.
-              Cannot be updated.
-              In CamelCase.
-              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: DynamicScorerSpec defines the desired state of DynamicScorer.
-            properties:
-              configSyncMode:
-                type: string
-              configURL:
-                type: string
-              description:
-                type: string
-              location:
-                type: string
-              scoreDestination:
-                type: string
-              scoreDimensionFormat:
-                type: string
-              scoring:
-                properties:
-                  auth:
-                    properties:
-                      tokenSecretRef:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    required:
-                    - tokenSecretRef
-                    type: object
-                  host:
-                    type: string
-                  params:
-                    properties:
-                      interval:
-                        type: integer
-                      name:
-                        type: string
-                    required:
-                    - interval
-                    - name
-                    type: object
-                  path:
-                    type: string
-                type: object
-              source:
-                properties:
-                  auth:
-                    properties:
-                      tokenSecretRef:
-                        properties:
-                          key:
-                            type: string
-                          name:
-                            type: string
-                        required:
-                        - key
-                        - name
-                        type: object
-                    required:
-                    - tokenSecretRef
-                    type: object
-                  host:
-                    type: string
-                  params:
-                    properties:
-                      query:
-                        type: string
-                      range:
-                        type: integer
-                      step:
-                        type: integer
-                    required:
-                    - query
-                    - range
-                    - step
-                    type: object
-                  path:
-                    type: string
-                  type:
-                    type: string
-                type: object
-            required:
-            - configSyncMode
-            - configURL
-            - description
-            type: object
-          status:
-            description: DynamicScorerStatus defines the observed state of DynamicScorer.
-            properties:
-              healthStatus:
-                type: string
-              lastSyncedConfig:
-                properties:
-                  description:
-                    type: string
-                  name:
-                    type: string
-                  scoring:
-                    properties:
-                      host:
-                        type: string
-                      params:
-                        properties:
-                          interval:
-                            type: integer
-                          name:
-                            type: string
-                        required:
-                        - interval
-                        - name
-                        type: object
-                      path:
-                        type: string
-                    required:
-                    - params
-                    - path
-                    type: object
-                  source:
-                    properties:
-                      host:
-                        type: string
-                      params:
-                        properties:
-                          query:
-                            type: string
-                          range:
-                            type: integer
-                          step:
-                            type: integer
-                        required:
-                        - query
-                        - range
-                        - step
-                        type: object
-                      path:
-                        type: string
-                      type:
-                        type: string
-                    required:
-                    - params
-                    - path
-                    type: object
-                required:
-                - description
-                - name
-                - scoring
-                - source
-                type: object
-            required:
-            - healthStatus
-            type: object
-        type: object
-    served: true
-    storage: false
-    subresources:
-      status: {}
   - name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -221,14 +40,28 @@ spec:
             description: DynamicScorerSpec defines the desired state of DynamicScorer.
             properties:
               configSyncMode:
+                description: ConfigSyncMode represents the mode of scoring configuration
+                  synchronization.
+                enum:
+                - Full
+                - None
                 type: string
               configURL:
                 type: string
               description:
                 type: string
               location:
+                description: Location represents the location of the scorer.
+                enum:
+                - Internal
+                - External
                 type: string
               scoreDestination:
+                description: ScoreDestination represents the destination where the
+                  score is sent.
+                enum:
+                - AddOnPlacementScore
+                - None
                 type: string
               scoreDimensionFormat:
                 type: string
@@ -254,8 +87,12 @@ spec:
                   params:
                     properties:
                       interval:
+                        description: |-
+                          The interval in seconds for scoring
+                          Note: This interval also used for config synchronization interval.
                         type: integer
                       name:
+                        description: The name of the score
                         type: string
                     required:
                     - interval
@@ -286,10 +123,15 @@ spec:
                   params:
                     properties:
                       query:
+                        description: |-
+                          The Prometheus query string.
+                          If you want to use multiple time series, join them with semicolons.
                         type: string
                       range:
+                        description: The time range in seconds for the query.
                         type: integer
                       step:
+                        description: The query resolution step width in seconds.
                         type: integer
                     required:
                     - query
@@ -299,6 +141,10 @@ spec:
                   path:
                     type: string
                   type:
+                    description: SourceType represents the type of the source.
+                    enum:
+                    - Prometheus
+                    - None
                     type: string
                 type: object
             required:
@@ -310,6 +156,12 @@ spec:
             description: DynamicScorerStatus defines the observed state of DynamicScorer.
             properties:
               healthStatus:
+                description: ScorerHealthStatus represents the health status of a
+                  scorer.
+                enum:
+                - Active
+                - Inactive
+                - Unknown
                 type: string
               lastSyncedConfig:
                 properties:
@@ -320,34 +172,55 @@ spec:
                   scoring:
                     properties:
                       host:
+                        description: |-
+                          The hostname or IP address of the scoring endpoint.
+                          e.g. "http://scoring-api.scoring.svc.cluster.local:8080"
                         type: string
                       params:
                         properties:
                           interval:
+                            description: |-
+                              The interval in seconds for scoring
+                              Note: This interval also used for config synchronization interval.
                             type: integer
                           name:
+                            description: The name of the score
                             type: string
                         required:
                         - interval
                         - name
                         type: object
                       path:
+                        description: |-
+                          The API path of the scoring endpoint.
+                          e.g. "/api/v1/score"
                         type: string
                     required:
                     - params
                     - path
                     type: object
                   source:
+                    description: |-
+                      SourceConfig represents the source configuration.
+                      If the source type is Prometheus, the host should be the Prometheus server URL.
                     properties:
                       host:
+                        description: |-
+                          The hostname or IP address of the source.
+                          e.g. "http://prometheus-server.monitoring.svc.cluster.local:9090"
                         type: string
                       params:
                         properties:
                           query:
+                            description: |-
+                              The Prometheus query string.
+                              If you want to use multiple time series, join them with semicolons.
                             type: string
                           range:
+                            description: The time range in seconds for the query.
                             type: integer
                           step:
+                            description: The query resolution step width in seconds.
                             type: integer
                         required:
                         - query
@@ -355,8 +228,12 @@ spec:
                         - step
                         type: object
                       path:
+                        description: |-
+                          The API path of the source.
+                          e.g. "/api/v1/query_range" for Prometheus
                         type: string
                       type:
+                        description: SourceType represents the type of the source.
                         type: string
                     required:
                     - params

@@ -7,13 +7,16 @@ resources:
 - resources/service_account.yaml
 - resources/managed_clusterset_binding.yaml
 - resources/placement.yaml
+- resources/placement_aarch64.yaml
 - resources/addon_deployment_config.yaml
+- resources/dynamic_scoring_addon_config.yaml
+- resources/dynamic_scoring_addon_config_aarch64.yaml
 - resources/clustermanagementaddon.yaml
 - resources/controller.yaml
 
 images:
 - name: quay.io/open-cluster-management/dynamic-scoring-addon
-  newName: quay.io/open-cluster-management/dynamic-scoring-addon
+  newName: your-image-registry/open-cluster-management/dynamic-scoring-addon
   newTag: latest
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

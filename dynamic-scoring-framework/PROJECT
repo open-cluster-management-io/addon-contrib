@@ -15,17 +15,8 @@ resources:
   controller: true
   domain: open-cluster-management.io
   group: dynamic-scoring
-  kind: DynamicScorer
-  path: open-cluster-management.io/dynamic-scoring/api/v1
-  version: v1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: open-cluster-management.io
-  group: dynamic-scoring
-  kind: DynamicScorer
-  path: open-cluster-management.io/dynamic-scoring/api/v1
+  kind: DynamicScoringConfig
+  path: open-cluster-management.io/dynamic-scoring/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -33,15 +24,7 @@ resources:
   controller: true
   domain: open-cluster-management.io
   group: dynamic-scoring
-  kind: DynamicScoringConfig
-  path: open-cluster-management.io/dynamic-scoring/api/v1
-  version: v1
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: open-cluster-management.io
-  group: dynamic-scoring
-  kind: DynamicScoringConfig
+  kind: DynamicScorer
   path: open-cluster-management.io/dynamic-scoring/api/v1alpha1
   version: v1alpha1
 version: "3"
