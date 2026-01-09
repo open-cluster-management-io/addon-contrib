@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// This file defines the DynamicScoringConfig custom resource definition (CRD) for Kubernetes.
+// DynamicScoringConfig CRs represent distribution configuration for scoring APIs.
+
 package v1alpha1
 
 import (
@@ -23,6 +26,8 @@ import (
 
 // DynamicScoringConfigSpec defines the desired state of DynamicScoringConfig.
 type DynamicScoringConfigSpec struct {
+	// Masks defines a list of masks used to filter out unnecessary scores for specific clusters.
+	// For example, if a mask specifies a cluster name, only scores related to that cluster will be considered.
 	Masks []common.Mask `json:"masks,omitempty"`
 }
 
