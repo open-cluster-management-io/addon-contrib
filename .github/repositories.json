@@ -1,4 +1,7 @@
 {
+  "dynamic-scoring-framework": {
+    "e2e-artifacts": ["dynamic-scoring-framework.tar.gz"]
+  },
   "federated-learning-controller": {
     "e2e-artifacts": ["federated-learning-controller.tar.gz"]
   },
