@@ -1,0 +1,33 @@
+apiVersion: work.open-cluster-management.io/v1
+kind: ManifestWork
+metadata:
+  name: sample-scorer-deployment
+  namespace: ${CLUSTER_NAME}
+spec:
+  workload:
+    manifests:
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: sample-scorer
+          namespace: dynamic-scoring
+          annotations:
+            skupper.io/address: sample-scorer
+            skupper.io/port: "8000"
+            skupper.io/proxy: "tcp"
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: sample-scorer
+          template:
+            metadata:
+              labels:
+                app: sample-scorer
+            spec:
+              containers:
+                - name: sample-scorer
+                  image: quay.io/dynamic-scoring/sample-scorer:latest
+                  imagePullPolicy: Never
+                  ports:
+                    - containerPort: 8000

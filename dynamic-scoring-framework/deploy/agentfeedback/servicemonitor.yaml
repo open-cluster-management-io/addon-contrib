@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dynamic-scoring-agent-monitor
+  namespace: dynamic-scoring
+  labels:
+    release: kube-prometheus  # Prometheus インスタンスに合わせて変更
+spec:
+  selector:
+    matchLabels:
+      app: dynamic-scoring-agent
+  endpoints:
+    - port: http-metrics
+      interval: 15s
+  namespaceSelector:
+    matchNames:
+      - dynamic-scoring

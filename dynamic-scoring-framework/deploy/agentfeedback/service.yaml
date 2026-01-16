@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamic-scoring-agent-service
+  namespace: dynamic-scoring
+  labels:
+    app: dynamic-scoring-agent
+spec:
+  selector:
+    app: dynamic-scoring-agent
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: 8080

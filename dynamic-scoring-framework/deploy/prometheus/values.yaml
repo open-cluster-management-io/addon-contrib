@@ -1,0 +1,8 @@
+prometheus:
+  prometheusSpec:
+    remoteWrite:
+      - url: http://vm-hub:8428/api/v1/write
+        writeRelabelConfigs:
+          - sourceLabels: [__name__]
+            regex: 'dynamic_score|cluster_cpu_free|cluster_memory_free'
+            action: keep

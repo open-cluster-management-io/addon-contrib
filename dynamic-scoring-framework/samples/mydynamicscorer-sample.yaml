@@ -1,0 +1,21 @@
+apiVersion: dynamic-scoring.open-cluster-management.io/v1alpha1
+kind: DynamicScorer
+metadata:
+  name: sample-scorer
+  namespace: dynamic-scoring
+spec:
+  description: A sample scorer for time series data
+  configURL: http://sample-scorer:8000/config
+  configSyncMode: Full
+  location: Internal
+  scoreDestination: AddOnPlacementScore
+  scoreDimensionFormat: "${node};${namespace};${pod}"
+  source:
+    host: http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090
+    path: /api/v1/query_range
+  scoring:
+    path: /scoring
+    auth:
+      tokenSecretRef:
+        name: api-auth-secret
+        key: token

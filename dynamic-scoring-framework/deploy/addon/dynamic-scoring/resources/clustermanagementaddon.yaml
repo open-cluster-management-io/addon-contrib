@@ -1,0 +1,28 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: dynamic-scoring
+spec:
+  addOnMeta:
+    displayName: dynamic-scoring
+    description: "dynamic-scoring addon for Open Cluster Management"
+  supportedConfigs:
+  - group: addon.open-cluster-management.io
+    resource: addondeploymentconfigs
+  installStrategy:
+    type: Placements
+    placements:
+      - name: global
+        namespace: open-cluster-management
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: dynamic-scoring-addon-config
+            namespace: open-cluster-management
+      - name: global-aarch64
+        namespace: open-cluster-management
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: dynamic-scoring-addon-config-aarch64
+            namespace: open-cluster-management
