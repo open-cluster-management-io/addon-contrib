@@ -150,6 +150,27 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+## TODO Implement verify, test-unit, test-integration targets
+verify:
+	@echo "Skipping verify (not implemented)"
+	@true
+.PHONY: verify
+
+test-unit:
+	@echo "Skipping unit tests (not implemented)"
+	@true
+.PHONY: test-unit
+
+test-integration:
+	@echo "Skipping integration tests (not implemented)"
+	@true
+.PHONY: test-integration
+
+.PHONY: test-chart
+test-chart: ## Run chart tests
+	@echo "Skipping chart tests (not implemented)"
+	@true
+
 ##@ Build
 
 .PHONY: build
