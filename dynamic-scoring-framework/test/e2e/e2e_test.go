@@ -110,6 +110,15 @@ var _ = Describe("Manager", Ordered, func() {
 					fmt.Println("Failed to describe controller pod")
 				}
 			}
+		} else {
+			By("Fetching controller manager pod description")
+			cmd := exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
+			podDescription, err := utils.Run(cmd)
+			if err == nil {
+				fmt.Println("Pod description:\n", podDescription)
+			} else {
+				fmt.Println("Failed to describe controller pod")
+			}
 		}
 	})
 
