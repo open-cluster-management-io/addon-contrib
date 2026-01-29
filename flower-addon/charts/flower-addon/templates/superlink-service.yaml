@@ -1,0 +1,54 @@
+{{- if .Values.superlink.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: superlink
+  namespace: {{ .Values.superlink.namespace }}
+  labels:
+    {{- include "flower-addon.superlinkLabels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "flower-addon.superlinkSelectorLabels" . | nindent 4 }}
+  ports:
+  - name: exec
+    port: 9091
+    targetPort: 9091
+    nodePort: {{ .Values.superlink.nodePort.exec }}
+    protocol: TCP
+  - name: fleet
+    port: 9092
+    targetPort: 9092
+    nodePort: {{ .Values.superlink.nodePort.fleet }}
+    protocol: TCP
+  - name: control
+    port: 9093
+    targetPort: 9093
+    nodePort: {{ .Values.superlink.nodePort.control }}
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: superlink-internal
+  namespace: {{ .Values.superlink.namespace }}
+  labels:
+    {{- include "flower-addon.superlinkLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "flower-addon.superlinkSelectorLabels" . | nindent 4 }}
+  ports:
+  - name: exec
+    port: 9091
+    targetPort: 9091
+    protocol: TCP
+  - name: fleet
+    port: 9092
+    targetPort: 9092
+    protocol: TCP
+  - name: control
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+{{- end }}

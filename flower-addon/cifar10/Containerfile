@@ -1,0 +1,14 @@
+FROM flwr/superexec:1.25.0-py3.13-ubuntu24.04
+
+WORKDIR /app
+COPY pyproject.toml .
+COPY cifar10/ ./cifar10/
+
+# Install app dependencies (flwr already in base image)
+RUN pip install --no-cache-dir \
+    "flwr-datasets[vision]>=0.5.0" \
+    "torch==2.10.0" \
+    "torchvision==0.25.0" \
+    -e .
+
+ENTRYPOINT ["flower-superexec"]
