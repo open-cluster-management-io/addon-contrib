@@ -7,6 +7,6 @@ spec:
   agentInstallNamespace: dynamic-scoring
   customizedVariables:
     - name: Image
-      value: your-image-registry/open-cluster-management/dynamic-scoring-addon:latest-aarch64
+      value: default-route-openshift-image-registry.apps.hubdev01.airan.localdomain/open-cluster-management/dynamic-scoring-addon:latest-aarch64
     - name: ImagePullSecrets
       value: '["hub-registry-secret"]'

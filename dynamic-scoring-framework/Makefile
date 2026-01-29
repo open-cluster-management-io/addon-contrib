@@ -1,14 +1,28 @@
 # Image URL to use all building/pushing image targets
 CONTROLLER_IMAGE_NAME ?= dynamic-scoring-controller
-CONTROLLER_IMAGE_TAG ?= latest
-CONTROLLER_IMAGE_IMAGE_REGISTRY ?= quay.io/open-cluster-management
-IMG_CONTROLLER = $(CONTROLLER_IMAGE_IMAGE_REGISTRY)/$(CONTROLLER_IMAGE_NAME):$(CONTROLLER_IMAGE_TAG)
+ifdef CONTROLLER_IMAGE_TAG
+CONTROLLER_IMAGE_TAG := $(CONTROLLER_IMAGE_TAG)
+else ifdef IMAGE_TAG
+CONTROLLER_IMAGE_TAG := $(IMAGE_TAG)
+else
+CONTROLLER_IMAGE_TAG := latest
+endif
+CONTROLLER_IMAGE_REGISTRY ?= quay.io/open-cluster-management
+IMG_CONTROLLER = $(CONTROLLER_IMAGE_REGISTRY)/$(CONTROLLER_IMAGE_NAME):$(CONTROLLER_IMAGE_TAG)
+ifdef IMG
+IMG_CONTROLLER := $(IMG)
+endif
 
 ADDON_IMAGE_NAME ?= dynamic-scoring-addon
-ADDON_IMAGE_TAG ?= latest
-ADDON_IMAGE_IMAGE_REGISTRY ?= quay.io/open-cluster-management
-IMG_ADDON = $(ADDON_IMAGE_IMAGE_REGISTRY)/$(ADDON_IMAGE_NAME):$(ADDON_IMAGE_TAG)
-
+ifdef ADDON_IMAGE_TAG
+ADDON_IMAGE_TAG := $(ADDON_IMAGE_TAG)
+else ifdef IMAGE_TAG
+ADDON_IMAGE_TAG := $(IMAGE_TAG)
+else
+ADDON_IMAGE_TAG := latest
+endif
+ADDON_IMAGE_REGISTRY ?= quay.io/open-cluster-management
+IMG_ADDON = $(ADDON_IMAGE_REGISTRY)/$(ADDON_IMAGE_NAME):$(ADDON_IMAGE_TAG)
 
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -29,66 +43,6 @@ CONTAINER_TOOL ?= podman
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-# .PHONY: all
-# all: build
-
-# # Include the library makefile
-# include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
-# 	golang.mk \
-# 	targets/openshift/deps.mk \
-# 	targets/openshift/images.mk \
-# 	targets/openshift/kustomize.mk \
-# 	lib/tmp.mk \
-# )
-
-# export GOHOSTOS    ?=$(shell go env GOHOSTOS)
-# export GOHOSTARCH  ?=$(shell go env GOHOSTARCH)
-
-# # Tools for deploy
-# export KUBECONFIG ?= ./.kubeconfig
-# export MANAGED_CLUSTER_NAME ?= hub
-# export HOSTED_MANAGED_CLUSTER_NAME ?= managed
-# export HOSTED_MANAGED_KLUSTERLET_NAME ?= managed
-# export HOSTED_MANAGED_KUBECONFIG_SECRET_NAME ?= e2e-hosted-managed-kubeconfig
-
-# KUBECTL?=kubectl
-# KUSTOMIZE_VERSION:=4.5.5
-# PWD=$(shell pwd)
-
-# # Image URL to use all building/pushing image targets;
-# AGENT_IMAGE ?= dynamic-scoring-agent
-# IMAGE_REGISTRY ?= quay.io/open-cluster-management
-# IMAGE_TAG ?= latest
-# export AGENT_IMAGE_NAME ?= $(IMAGE_REGISTRY)/$(AGENT_IMAGE):$(IMAGE_TAG)
-
-# GIT_HOST ?= open-cluster-management.io
-# BASE_DIR := $(shell basename $(PWD))
-# DEST := $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
-
-# # Add packages to do unit test
-# GO_TEST_PACKAGES :=./pkg/...
-
-# # This will call a macro called "build-image" which will generate image specific targets based on the parameters:
-# # $0 - macro name
-# # $1 - target suffix
-# # $2 - Dockerfile path
-# # $3 - context directory for image build
-# # It will generate target "image-$(1)" for building the image and binding it as a prerequisite to target "images".
-# $(call build-image,$(AGENT_IMAGE),$(IMAGE_REGISTRY)/$(AGENT_IMAGE):$(IMAGE_TAG),./build/Dockerfile.example,.)
-
-##@ General
-
-# The help target prints out all targets with their descriptions organized
-# beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk command is responsible for reading the
-# entire set of makefiles included in this invocation, looking for lines of the
-# file as xyz: ## something, and then pretty-format the target and help. Then,
-# if there's a line with ##@ something, that gets pretty-printed as a category.
-# More info on the usage of ANSI control characters for terminal formatting:
-# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
-# More info on the awk command:
-# http://linuxcommand.org/lc3_adv_awk.php
-
 .PHONY: help
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
@@ -103,6 +57,26 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
+.PHONY: update-helm-crds
+update-helm-crds: manifests ## Update Helm CRDs
+	@echo "Updating Helm CRDs..."
+	@mkdir -p charts/dynamic-scoring-framework/crds
+	@rm -rf charts/dynamic-scoring-framework/crds/*
+	@cp -r config/crd/bases/* charts/dynamic-scoring-framework/crds/
+
+.PHONY: update-helm-controller-manifests
+update-helm-controller-manifests:
+	@echo "Generating controller default manifests..."
+	@mkdir -p build/dynamic-scoring
+	@$(KUSTOMIZE) build config/default > build/dynamic-scoring/dynamic-scoring-controller.yaml
+
+.PHONY: update-helm-addon-manifests
+update-helm-addon-manifests:
+	@echo "Generating addon default manifests..."
+	@mkdir -p build/dynamic-scoring
+	@$(KUSTOMIZE) build deploy/addon/dynamic-scoring > build/dynamic-scoring/addon-controller.yaml
+
+
 .PHONY: fmt
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -114,6 +88,33 @@ vet: ## Run go vet against code.
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
+# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
+# CertManager is installed by default; skip with:
+# - CERT_MANAGER_INSTALL_SKIP=true
+KIND_CLUSTER ?= dynamic-scoring-framework-test-e2e
+
+.PHONY: setup-test-e2e
+setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@if $(KIND) get clusters | grep -qx "$(KIND_CLUSTER)"; then \
+		echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping create."; \
+	else \
+		$(KIND) create cluster --name $(KIND_CLUSTER); \
+	fi
+
+.PHONY: test-e2e
+test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
+	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
+	$(MAKE) cleanup-test-e2e
+
+.PHONY: cleanup-test-e2e
+cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
+	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -127,26 +128,34 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
-## TODO Implement verify, test-unit, test-e2e, test-integration targets
+## TODO Implement verify, test-unit, test-integration targets
 verify:
 	@echo "Skipping verify (not implemented)"
 	@true
 .PHONY: verify
 
-test-unit:
-	@echo "Skipping unit tests (not implemented)"
-	@true
+# test-unit:
+# 	@echo "Skipping unit tests (not implemented)"
+# 	@true
+# .PHONY: test-unit
+test-unit-controller:
+	@echo "Running unit tests for controller..."
+	go test ./internal/controller/...
+.PHONY: test-unit-controller
+
+test-unit-addon:
+	@echo "Running unit tests for addon..."
+	go test ./pkg/dynamic_scoring/... ./pkg/dynamic_scoring_agent/...
+.PHONY: test-unit-addon
+
+test-unit: test-unit-controller test-unit-addon
 .PHONY: test-unit
+
 
 test-integration:
 	@echo "Skipping integration tests (not implemented)"
 	@true
 .PHONY: test-integration
-
-test-e2e:
-	@echo "Skipping e2e tests (not implemented)"
-	@true
-.PHONY: test-e2e
 
 .PHONY: test-chart
 test-chart: ## Run chart tests
@@ -163,24 +172,54 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
-# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+.PHONY: docker-build-controller
+docker-build-controller: ## Build docker image with the manager.
 	$(CONTAINER_TOOL) build -t ${IMG_CONTROLLER} .
 
 .PHONY: docker-build-addon
-docker-build-addon:
-	$(CONTAINER_TOOL) build -t ${IMG_ADDON} . -f Dockerfile.addon
+docker-build-addon: ## Build docker image with the addon.
+	$(CONTAINER_TOOL) build -t ${IMG_ADDON} . -f Dockerfile.addon --no-cache
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+.PHONY: docker-push-controller
+docker-push-controller: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG_CONTROLLER}
 
 .PHONY: docker-push-addon
-docker-push-addon: ## Push docker image with the manager.
+docker-push-addon: ## Push docker image with the addon.
 	$(CONTAINER_TOOL) push ${IMG_ADDON}
+
+
+image-manifest-controller:
+	$(CONTAINER_TOOL) manifest create $(IMG_CONTROLLER) \
+		$(IMG_CONTROLLER)-amd64 \
+		$(IMG_CONTROLLER)-arm64
+	$(CONTAINER_TOOL) manifest annotate $(IMG_CONTROLLER) \
+		$(IMG_CONTROLLER)-amd64 --arch amd64
+	$(CONTAINER_TOOL) manifest annotate $(IMG_CONTROLLER) \
+		$(IMG_CONTROLLER)-arm64 --arch arm64
+	$(CONTAINER_TOOL) manifest push $(IMG_CONTROLLER)
+.PHONY: image-manifest-controller
+
+image-manifest-addon:
+	$(CONTAINER_TOOL) manifest create $(IMG_ADDON) \
+		$(IMG_ADDON)-amd64 \
+		$(IMG_ADDON)-arm64
+	$(CONTAINER_TOOL) manifest annotate $(IMG_ADDON) \
+		$(IMG_ADDON)-amd64 --arch amd64
+	$(CONTAINER_TOOL) manifest annotate $(IMG_ADDON) \
+		$(IMG_ADDON)-arm64 --arch arm64
+	$(CONTAINER_TOOL) manifest push $(IMG_ADDON)
+.PHONY: image-manifest-addon
+
+image: docker-build-controller docker-build-addon
+.PHONY: image
+
+image-push: docker-push-controller docker-push-addon
+.PHONY: image-push
+
+image-manifest: image-manifest-controller image-manifest-addon
+.PHONY: image-manifest
+
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -193,10 +232,10 @@ PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name ocm-dynamic-scoring-builder
-	$(CONTAINER_TOOL) buildx use ocm-dynamic-scoring-builder
+	- $(CONTAINER_TOOL) buildx create --name dynamic-scoring-framework-builder
+	$(CONTAINER_TOOL) buildx use dynamic-scoring-framework-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG_CONTROLLER} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm ocm-dynamic-scoring-builder
+	- $(CONTAINER_TOOL) buildx rm dynamic-scoring-framework-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer

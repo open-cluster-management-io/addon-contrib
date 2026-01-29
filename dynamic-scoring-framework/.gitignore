@@ -34,3 +34,5 @@ sandbox/
 uv.lock
 memo.md
 tmp/
+demo/results/
+build/

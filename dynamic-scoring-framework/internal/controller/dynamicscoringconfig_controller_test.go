@@ -17,68 +17,83 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
+	"open-cluster-management.io/dynamic-scoring/pkg/common"
 )
 
-var _ = Describe("DynamicScoringConfig Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+var _ = Describe("DynamicScoringConfig helpers", func() {
+	Context("mask helpers", func() {
+		It("builds and checks mask map", func() {
+			maskMap := buildMaskMap([]common.Mask{{ClusterName: "cluster-a", ScoreName: "latency"}})
+			Expect(isMasked(maskMap, "cluster-a", "latency")).To(BeTrue())
+			Expect(isMasked(maskMap, "cluster-a", "power")).To(BeFalse())
+		})
+	})
 
-		ctx := context.Background()
+	Context("URL helpers", func() {
+		It("validates URLs", func() {
+			Expect(isValidURL("http://example.com/path")).To(BeTrue())
+			Expect(isValidURL("://bad-url")).To(BeFalse())
+		})
+	})
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		dynamicscoringconfig := &dynamicscoringv1alpha1.DynamicScoringConfig{}
+	Context("manifest work builder", func() {
+		It("embeds summaries in ConfigMap", func() {
+			summaries := []common.ScorerSummary{{Name: "scorer-a", ScoreName: "latency"}}
+			manifest := buildConfigManifestWork("cluster-a", summaries)
+			Expect(manifest.Name).To(Equal(common.ManifestWorkConfigMapName))
+			Expect(manifest.Namespace).To(Equal("cluster-a"))
+			Expect(manifest.Spec.Workload.Manifests).To(HaveLen(1))
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind DynamicScoringConfig")
-			err := k8sClient.Get(ctx, typeNamespacedName, dynamicscoringconfig)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &dynamicscoringv1alpha1.DynamicScoringConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+			cm, ok := manifest.Spec.Workload.Manifests[0].RawExtension.Object.(*corev1.ConfigMap)
+			Expect(ok).To(BeTrue())
+			Expect(cm.Name).To(Equal(common.DynamicScoringConfigName))
+			Expect(cm.Namespace).To(Equal(common.DynamicScoringNamespace))
+			Expect(cm.Data).To(HaveKey("summaries"))
+		})
+	})
+
+	Context("endpoint helpers", func() {
+		It("builds source endpoint from config URL", func() {
+			scorer := dynamicscoringv1alpha1.DynamicScorer{
+				Spec: dynamicscoringv1alpha1.DynamicScorerSpec{
+					ConfigURL: "http://config.example.com/config",
+					Source: dynamicscoringv1alpha1.SourceConfigWithAuth{
+						Path: "/api/v1/query_range",
 					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+				},
 			}
+			endpoint, err := getValidSourceFullEndpoint(scorer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(endpoint).To(Equal("http://config.example.com/api/v1/query_range"))
 		})
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &dynamicscoringv1alpha1.DynamicScoringConfig{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance DynamicScoringConfig")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &DynamicScoringConfigReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+		It("builds scoring endpoint from scoring host", func() {
+			scorer := dynamicscoringv1alpha1.DynamicScorer{
+				Spec: dynamicscoringv1alpha1.DynamicScorerSpec{
+					ConfigURL: "http://config.example.com/config",
+					Scoring: dynamicscoringv1alpha1.ScoringConfigWithAuth{
+						Host: "http://score.example.com",
+						Path: "/api/v1/score",
+					},
+				},
 			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
+			endpoint, err := getValidScoringFullEndpoint(scorer)
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Expect(endpoint).To(Equal("http://score.example.com/api/v1/score"))
+		})
+	})
+
+	Context("dimension format helper", func() {
+		It("defaults when format is empty", func() {
+			scorer := dynamicscoringv1alpha1.DynamicScorer{}
+			format, err := getValidScoreDimentionFormat(scorer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(format).To(Equal("${scoreName}"))
 		})
 	})
 })

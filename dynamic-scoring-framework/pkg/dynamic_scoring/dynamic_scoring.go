@@ -16,7 +16,7 @@ import (
 
 const (
 	DefaultDynamicScoringAddonImage = "quay.io/open-cluster-management/dynamic-scoring-addon:latest"
-	AddonName                       = "dynamic-scoring"
+	AddonName                       = "dynamic-scoring-framework"
 	InstallationNamespace           = "dynamic-scoring"
 )
 

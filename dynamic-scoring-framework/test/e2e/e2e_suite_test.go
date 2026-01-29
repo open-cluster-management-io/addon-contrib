@@ -34,12 +34,14 @@ var (
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
+	// RUN_E2E=true enables full deployment-based e2e coverage.
+	runFullE2E = os.Getenv("RUN_E2E") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
 	// projectImage is the name of the image which will be build and loaded
 	// with the code source changes to be tested.
-	projectImage = "example.com/ocm-dynamic-scoring:v0.0.1"
+	projectImage = "example.com/dynamic-scoring-framework:v0.0.1"
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -48,13 +50,17 @@ var (
 // CertManager.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting ocm-dynamic-scoring integration test suite\n")
+	_, _ = fmt.Fprintf(GinkgoWriter, "Starting dynamic-scoring-framework integration test suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
 var _ = BeforeSuite(func() {
+	if !runFullE2E {
+		_, _ = fmt.Fprintf(GinkgoWriter, "RUN_E2E is not set; running smoke-only checks.\n")
+		return
+	}
 	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+	cmd := exec.Command("make", "docker-build-controller", fmt.Sprintf("IMG=%s", projectImage))
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
@@ -81,6 +87,9 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	if !runFullE2E {
+		return
+	}
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")

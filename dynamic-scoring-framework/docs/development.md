@@ -142,7 +142,7 @@ The controller manages the lifecycle of DynamicScorer resources and synchronizes
 Build the controller image:
 
 ```bash
-make docker-build IMG_CONTROLLER=quay.io/open-cluster-management/dynamic-scoring-controller:latest
+make docker-build-controller IMG_CONTROLLER=quay.io/open-cluster-management/dynamic-scoring-controller:latest
 ```
 
 Load the image into the hub cluster and deploy:

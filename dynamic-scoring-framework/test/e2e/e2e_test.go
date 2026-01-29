@@ -31,16 +31,16 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "ocm-dynamic-scoring-system"
+const namespace = "open-cluster-management"
 
 // serviceAccountName created for the project
-const serviceAccountName = "ocm-dynamic-scoring-controller-manager"
+const serviceAccountName = "dynamic-scoring-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "ocm-dynamic-scoring-controller-manager-metrics-service"
+const metricsServiceName = "dynamic-scoring-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "ocm-dynamic-scoring-metrics-binding"
+const metricsRoleBindingName = "dynamic-scoring-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -173,7 +173,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=ocm-dynamic-scoring-metrics-reader",
+				"--clusterrole=dynamic-scoring-framework-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
@@ -266,6 +266,15 @@ var _ = Describe("Manager", Ordered, func() {
 		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
 		//    strings.ToLower(<Kind>),
 		// ))
+	})
+})
+
+var _ = Describe("Smoke", func() {
+	It("can reach the Kubernetes API", func() {
+		cmd := exec.Command("kubectl", "get", "nodes", "-o", "name")
+		output, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to query nodes")
+		Expect(output).NotTo(BeEmpty())
 	})
 })
 
