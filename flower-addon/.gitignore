@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# TLS Certificates (generated, not tracked)
+certificates/
+
+# Flower state
+state/
+.flwr/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Claude
+.claude/
+
+# Binaries
+bin/
+CLAUDE.md
+
+# Proposals (local only)
+docs/proposal-flower-ocm-integration.md
