@@ -34,8 +34,6 @@ var (
 	// These variables are useful if CertManager is already installed, avoiding
 	// re-installation and conflicts.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
-	// RUN_E2E=true enables full deployment-based e2e coverage.
-	runFullE2E = os.Getenv("RUN_E2E") == "true"
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
@@ -55,10 +53,6 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	if !runFullE2E {
-		_, _ = fmt.Fprintf(GinkgoWriter, "RUN_E2E is not set; running smoke-only checks.\n")
-		return
-	}
 	By("building the manager(Operator) image")
 	cmd := exec.Command("make", "docker-build-controller", fmt.Sprintf("IMG=%s", projectImage))
 	_, err := utils.Run(cmd)
@@ -87,9 +81,6 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	if !runFullE2E {
-		return
-	}
 	// Teardown CertManager after the suite if not skipped and if it was not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
