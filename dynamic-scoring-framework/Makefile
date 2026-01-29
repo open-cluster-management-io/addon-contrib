@@ -33,7 +33,12 @@ endif
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
-CONTAINER_TOOL ?= podman
+CONTAINER_TOOL ?= docker
+KIND_PROVIDER ?= docker
+ifeq ($(CONTAINER_TOOL),podman)
+KIND_PROVIDER := podman
+endif
+KIND_ENV = KIND_EXPERIMENTAL_PROVIDER=$(KIND_PROVIDER)
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
@@ -99,22 +104,22 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
-	@if $(KIND) get clusters | grep -qx "$(KIND_CLUSTER)"; then \
+	@if $(KIND_ENV) $(KIND) get clusters | grep -qx "$(KIND_CLUSTER)"; then \
 		echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping create."; \
 	else \
-		$(KIND) create cluster --name $(KIND_CLUSTER); \
+		$(KIND_ENV) $(KIND) create cluster --name $(KIND_CLUSTER); \
 	fi
 	$(CONTAINER_TOOL) build -t $(E2E_CONTROLLER_IMAGE) -f Dockerfile .
-	$(KIND) load docker-image $(E2E_CONTROLLER_IMAGE) --name $(KIND_CLUSTER)
+	$(KIND_ENV) $(KIND) load docker-image $(E2E_CONTROLLER_IMAGE) --name $(KIND_CLUSTER)
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
+	$(KIND_ENV) KIND_CLUSTER=$(KIND_CLUSTER) go test ./test/e2e/ -v -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+	@$(KIND_ENV) $(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
