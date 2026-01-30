@@ -5,24 +5,24 @@ metadata:
 spec:
   addOnMeta:
     displayName: dynamic-scoring-framework
-    description: "dynamic-scoring-framework addon for Open Cluster Management"
+    description: "Centralized scoring logic management and distribution agent for Open Cluster Management multi-cluster environments"
   supportedConfigs:
-  - group: addon.open-cluster-management.io
-    resource: addondeploymentconfigs
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
   installStrategy:
     type: Placements
     placements:
-      - name: global
-        namespace: open-cluster-management
+      - name: dynamic-scoring-placement
+        namespace: {{ .Values.hubSetting.namespace }}
         configs:
           - group: addon.open-cluster-management.io
             resource: addondeploymentconfigs
             name: dynamic-scoring-addon-config
-            namespace: open-cluster-management
-      - name: global-aarch64
-        namespace: open-cluster-management
+            namespace: {{ .Values.hubSetting.namespace }}
+      - name: dynamic-scoring-placement-aarch64
+        namespace: {{ .Values.hubSetting.namespace }}
         configs:
           - group: addon.open-cluster-management.io
             resource: addondeploymentconfigs
             name: dynamic-scoring-addon-config-aarch64
-            namespace: open-cluster-management
+            namespace: {{ .Values.hubSetting.namespace }}

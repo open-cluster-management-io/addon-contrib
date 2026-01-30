@@ -16,7 +16,7 @@ HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .sp
 podman login -u ai-ran-admin -p $(oc whoami -t) $HOST
 # build and push controller image
 IMG_CONTROLLER=$HOST/dynamic-scoring/dynamic-scoring-controller:latest
-make docker-build IMG_CONTROLLER=$IMG_CONTROLLER
+make docker-build-controller IMG_CONTROLLER=$IMG_CONTROLLER
 podman push $IMG_CONTROLLER
 # build and push addon image
 IMG_ADDON=$HOST/open-cluster-management/dynamic-scoring-addon:latest
@@ -26,21 +26,31 @@ podman push $IMG_ADDON
 
 ### (Optional) build and push arm64 images from external cluster
 
-```
+If your environment requires arm64 images, you can build and push them from an external cluster using the following steps.
+(As future work, it planned to support multi-arch builds. this step may not be needed then.)
+
+```bash
 oc create sa dynamic-scoring-image-pusher -n open-cluster-management
 oc policy add-role-to-user system:image-pusher -z dynamic-scoring-image-pusher -n open-cluster-management
-oc get secret dynamic-scoring-image-pusher-dockercfg-xxxxx -n open-cluster-management -o jsonpath='{.data.\.dockercfg}' | base64 -d > hub-dockerconfig.json
-
+TOKEN=$(oc create token dynamic-scoring-image-pusher -n open-cluster-management)
+REGISTRY=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+AUTH=$(echo -n "serviceaccount:$TOKEN" | base64 -w0)
+cat <<EOF > ./secrets/pull-dockerconfig.json
+{
+	"auths": {
+		"$REGISTRY": {
+			"auth": "$AUTH"
+		}
+	}
+}
+EOF
 ```
 
 ```bash
-oc create secret generic hub-push-secret \
-  --from-file=.dockercfg=./hub-dockerconfig.json \
-  --type=kubernetes.io/dockercfg
-```
-
-```
 # before running these commands, make sure you have push secret build-push-secret in managed cluster
+oc create secret generic hub-push-secret \
+  --from-file=.dockerconfigjson=./secrets/pull-dockerconfig.json \
+  --type=kubernetes.io/dockerconfigjson
 oc apply -f hack/image-build/buildconfig-addon-aarch64.yaml
 oc start-build addon-aarch64-build --from-dir=. --follow
 ```
@@ -57,27 +67,32 @@ make deploy-addon IMG_ADDON=$IMG_ADDON
 
 If you push the addon image to the hub cluster's internal registry (e.g. `$HOST/open-cluster-management/dynamic-scoring-addon:latest`), the managed clusters also need credentials to pull it.
 
-This addon supports overriding the agent image and imagePullSecrets via `AddOnDeploymentConfig`.
+As default, this framework copy pull secret named `dynamic-scoring-addon-pull-secret` from namespace `open-cluster-management` on hub cluster to `hub-registry-secret` the agent install namespace (e.g. `dynamic-scoring`).
 
-### 1) Create a pull secret on each managed cluster
+### 1) Create pull secret on Hub cluster
 
-Create a `kubernetes.io/dockerconfigjson` secret in the agent install namespace (default: `dynamic-scoring`) on each managed cluster.
-
-Example (run on the managed cluster):
+Following are the steps to create the pull secret on hub cluster.
 
 ```bash
-NAMESPACE=open-cluster-management
-SECRET_NAME=dynamic-scoring-addon-pull-secret
-HOST=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
+oc create sa dynamic-scoring-image-puller -n open-cluster-management
+oc policy add-role-to-user system:image-puller -z dynamic-scoring-image-puller -n open-cluster-management
+TOKEN=$(oc create token dynamic-scoring-image-puller -n open-cluster-management)
+REGISTRY=default-route-openshift-image-registry.apps.hubdev01.airan.localdomain
+AUTH=$(echo -n "serviceaccount:$TOKEN" | base64 -w0)
 
-# Login once on your workstation (hub), then create the secret on managed clusters.
-podman login -u ai-ran-admin -p $(oc whoami -t) $HOST
+cat <<EOF > ./secrets/pull-dockerconfig.json
+{
+  "auths": {
+    "$REGISTRY": {
+      "auth": "$AUTH"
+    }
+  }
+}
+EOF
 
-# Create secret using the same credentials
-oc -n $NAMESPACE create secret docker-registry $SECRET_NAME \
-	--docker-server=$HOST \
-	--docker-username=ai-ran-admin \
-	--docker-password=$(oc whoami -t)
+oc create secret generic dynamic-scoring-addon-pull-secret \
+  --from-file=.dockerconfigjson=./secrets/pull-dockerconfig.json \
+  --type=kubernetes.io/dockerconfigjson -n open-cluster-management
 ```
 
 ### 2) Update `AddOnDeploymentConfig` to use the secret
@@ -95,7 +110,7 @@ spec:
 	customizedVariables:
 		# override agent image
 		- name: Image
-			value: your-image-registry/open-cluster-management/dynamic-scoring-addon:latest
+			value: default-route-openshift-image-registry.apps.hubdev01.airan.localdomain/open-cluster-management/dynamic-scoring-addon:latest
 
 		# set imagePullSecrets for managed cluster agent
 		- name: ImagePullSecrets

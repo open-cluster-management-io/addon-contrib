@@ -1,5 +1,4 @@
 namespace: open-cluster-management
-# namespace: dynamic-scoring
 
 resources:
 - resources/cluster_role.yaml

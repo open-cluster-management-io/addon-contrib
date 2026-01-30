@@ -2,6 +2,7 @@ kind: Deployment
 apiVersion: apps/v1
 metadata:
   name: dynamic-scoring-addon-controller
+  namespace: {{ .Values.hubSetting.namespace }}
   labels:
     app: dynamic-scoring-addon-controller
 spec:
@@ -17,8 +18,14 @@ spec:
       serviceAccountName: dynamic-scoring-addon-sa
       containers:
       - name: dynamic-scoring-addon-controller
-        image: quay.io/open-cluster-management/dynamic-scoring-addon
-        imagePullPolicy: IfNotPresent
+        image: "{{ .Values.hubSetting.addonController.image.name }}:{{ .Values.hubSetting.addonController.image.tag }}"
+        imagePullPolicy: {{ .Values.hubSetting.addonController.image.pullPolicy }}
         args:
           - "/dynamic-scoring-addon"
           - "controller"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dynamic-scoring-addon-sa
+  namespace: {{ .Values.hubSetting.namespace }}

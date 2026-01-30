@@ -18,67 +18,110 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	dynamicscoringv1alpha1 "open-cluster-management.io/dynamic-scoring/api/v1alpha1"
+	"open-cluster-management.io/dynamic-scoring/pkg/common"
 )
 
-var _ = Describe("DynamicScorer Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		dynamicscorer := &dynamicscoringv1alpha1.DynamicScorer{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind DynamicScorer")
-			err := k8sClient.Get(ctx, typeNamespacedName, dynamicscorer)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &dynamicscoringv1alpha1.DynamicScorer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
+var _ = Describe("DynamicScorer helpers", func() {
+	Context("syncScoringHealthz", func() {
+		It("marks scorer active on 200", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/healthz" {
+					w.WriteHeader(http.StatusOK)
+					return
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &dynamicscoringv1alpha1.DynamicScorer{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance DynamicScorer")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &DynamicScorerReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+			scorer := &dynamicscoringv1alpha1.DynamicScorer{
+				Spec: dynamicscoringv1alpha1.DynamicScorerSpec{
+					ConfigURL: server.URL + "/config",
+				},
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
+			err := syncScoringHealthz(context.Background(), scorer)
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Expect(scorer.Status.HealthStatus).To(Equal(common.ScorerHealthStatusActive))
+		})
+
+		It("marks scorer inactive on non-200", func() {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/healthz" {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			scorer := &dynamicscoringv1alpha1.DynamicScorer{
+				Spec: dynamicscoringv1alpha1.DynamicScorerSpec{
+					ConfigURL: server.URL + "/config",
+				},
+			}
+
+			err := syncScoringHealthz(context.Background(), scorer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(scorer.Status.HealthStatus).To(Equal(common.ScorerHealthStatusInactive))
+		})
+	})
+
+	Context("syncScoringConfig", func() {
+		It("updates LastSyncedConfig from endpoint", func() {
+			expected := common.Config{
+				Name:        "sample-score",
+				Description: "sample",
+				Source: common.SourceConfig{
+					Type: common.SourceTypePrometheus,
+					Host: "http://prometheus.example.com",
+					Path: "/api/v1/query_range",
+					Params: common.SourceParams{
+						Query: "up",
+						Range: 60,
+						Step:  5,
+					},
+				},
+				Scoring: common.ScoringConfig{
+					Host: "http://scoring.example.com",
+					Path: "/api/v1/score",
+					Params: common.ScoringParams{
+						Name:     "sample-score",
+						Interval: 30,
+					},
+				},
+			}
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/config" {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				if err := json.NewEncoder(w).Encode(expected); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer server.Close()
+
+			scorer := &dynamicscoringv1alpha1.DynamicScorer{
+				Spec: dynamicscoringv1alpha1.DynamicScorerSpec{
+					ConfigURL: server.URL + "/config",
+				},
+			}
+
+			err := syncScoringConfig(context.Background(), scorer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(scorer.Status.HealthStatus).To(Equal(common.ScorerHealthStatusActive))
+			Expect(scorer.Status.LastSyncedConfig).NotTo(BeNil())
+			Expect(*scorer.Status.LastSyncedConfig).To(Equal(expected))
 		})
 	})
 })

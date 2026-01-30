@@ -1,0 +1,63 @@
+{{- if not .Values.hubSetting.skipClusterSetBinding }}
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: {{ .Values.hubSetting.namespace }}
+spec:
+  clusterSet: global
+{{- end }}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: dynamic-scoring-placement
+  namespace: {{ .Values.hubSetting.namespace }}
+spec:
+  clusterSets:
+    - global
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Equal
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Equal
+  predicates:
+  # - requiredClusterSelector:
+  #     labelSelector:
+  #       matchExpressions:
+  #         - key: local-cluster
+  #           operator: DoesNotExist
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+          - key: cluster-arch
+            operator: NotIn
+            values:
+              - aarch64
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: dynamic-scoring-placement-aarch64
+  namespace: {{ .Values.hubSetting.namespace }}
+spec:
+  clusterSets:
+    - global
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Equal
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Equal
+  predicates:
+  # - requiredClusterSelector:
+  #     labelSelector:
+  #       matchExpressions:
+  #         - key: local-cluster
+  #           operator: DoesNotExist
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+          - key: cluster-arch
+            operator: In
+            values:
+              - aarch64

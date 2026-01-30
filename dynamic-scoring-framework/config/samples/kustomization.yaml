@@ -1,5 +1,7 @@
 ## Append samples of your project ##
 resources:
+- dynamic-scoring_v1_dynamicscorer.yaml
+- dynamic-scoring_v1_dynamicscoringconfig.yaml
 - dynamic-scoring_v1alpha1_dynamicscorer.yaml
 - dynamic-scoring_v1alpha1_dynamicscoringconfig.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

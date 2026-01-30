@@ -1,0 +1,21 @@
+hubSetting:
+  namespace: open-cluster-management
+  skipClusterSetBinding: false
+  resourceController:
+    image:
+      name: quay.io/open-cluster-management/dynamic-scoring-controller
+      tag: latest
+      pullPolicy: IfNotPresent
+  addonController:
+    image:
+      name: quay.io/open-cluster-management/dynamic-scoring-addon
+      tag: latest
+      pullPolicy: IfNotPresent
+
+spokeSetting:
+  namespace: dynamic-scoring
+  agent:
+    image:
+      name: quay.io/open-cluster-management/dynamic-scoring-addon
+      tag: latest
+      pullPolicy: IfNotPresent

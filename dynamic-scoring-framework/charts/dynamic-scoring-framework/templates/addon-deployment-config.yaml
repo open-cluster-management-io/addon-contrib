@@ -1,0 +1,25 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: dynamic-scoring-addon-config
+  namespace: {{ .Values.hubSetting.namespace }}
+spec:
+  agentInstallNamespace: {{ .Values.spokeSetting.namespace }}
+  customizedVariables:
+    - name: Image
+      value: "{{ .Values.spokeSetting.agent.image.name }}:{{ .Values.spokeSetting.agent.image.tag }}"
+    - name: ImagePullSecrets
+      value: '["hub-registry-secret"]'
+---
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: dynamic-scoring-addon-config-aarch64
+  namespace: {{ .Values.hubSetting.namespace }}
+spec:
+  agentInstallNamespace: {{ .Values.spokeSetting.namespace }}
+  customizedVariables:
+    - name: Image
+      value: "{{ .Values.spokeSetting.agent.image.name }}:{{ .Values.spokeSetting.agent.image.tag }}-aarch64"
+    - name: ImagePullSecrets
+      value: '["hub-registry-secret"]'

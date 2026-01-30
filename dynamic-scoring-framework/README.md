@@ -1,6 +1,6 @@
-# ocm-dynamic-scoring
+# Dynamic Scoring Framework
 
-DynamicScoring Framework is a framework for automating resource scoring in multi-cluster environments using Prometheus metrics.  
+Dynamic Scoring Framework is a framework for automating resource scoring in multi-cluster environments using Prometheus metrics.  
 It calculates dynamic scores for each cluster and provides foundational information for resource optimization and automated control.
 
 ---
