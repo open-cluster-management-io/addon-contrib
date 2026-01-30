@@ -1,0 +1,30 @@
+# SuperExec-ServerApp deployment for hub cluster
+# Executes ServerApp in process isolation mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superexec-serverapp
+  namespace: flower-system
+  labels:
+    app.kubernetes.io/name: flower-addon
+    app.kubernetes.io/component: superexec-serverapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flower-addon
+      app.kubernetes.io/component: superexec-serverapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flower-addon
+        app.kubernetes.io/component: superexec-serverapp
+    spec:
+      containers:
+        - name: superexec
+          image: flower-app:1.0.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--insecure"
+            - "--appio-api-address=superlink:9091"
+            - "--plugin-type=serverapp"

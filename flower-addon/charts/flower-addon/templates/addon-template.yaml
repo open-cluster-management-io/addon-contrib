@@ -1,0 +1,90 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: {{ .Values.addon.name }}
+spec:
+  addonName: {{ .Values.addon.name }}
+  agentSpec:
+    workload:
+      manifests:
+        # Namespace for flower addon
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: flower-addon
+            labels:
+              app.kubernetes.io/name: flower-addon
+              app.kubernetes.io/managed-by: open-cluster-management
+
+        # SuperNode Deployment
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: flower-supernode
+            namespace: flower-addon
+            labels:
+              app.kubernetes.io/name: flower-addon
+              app.kubernetes.io/component: supernode
+            annotations:
+              cluster-name: "{{`{{CLUSTER_NAME}}`}}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: flower-addon
+                app.kubernetes.io/component: supernode
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: flower-addon
+                  app.kubernetes.io/component: supernode
+                annotations:
+                  cluster-name: "{{`{{CLUSTER_NAME}}`}}"
+              spec:
+                containers:
+                  - name: supernode
+                    image: "{{`{{IMAGE}}`}}"
+                    imagePullPolicy: {{ .Values.supernode.image.pullPolicy }}
+                    args:
+                      - "--insecure"
+                      - "--superlink={{`{{SUPERLINK_ADDRESS}}`}}:{{`{{SUPERLINK_PORT}}`}}"
+                      - "--node-config"
+                      - 'cluster-name="{{`{{CLUSTER_NAME}}`}}" num-partitions={{`{{NUM_PARTITIONS}}`}}'
+                      - "--isolation=process"
+                      - "--clientappio-api-address=0.0.0.0:9094"
+                    ports:
+                      - name: clientappio
+                        containerPort: 9094
+                        protocol: TCP
+                    resources:
+                      {{- toYaml .Values.supernode.resources | nindent 22 }}
+                    livenessProbe:
+                      tcpSocket:
+                        port: 9094
+                      initialDelaySeconds: 30
+                      periodSeconds: 10
+                    readinessProbe:
+                      tcpSocket:
+                        port: 9094
+                      initialDelaySeconds: 5
+                      periodSeconds: 5
+
+        # SuperNode Service
+        - apiVersion: v1
+          kind: Service
+          metadata:
+            name: flower-supernode
+            namespace: flower-addon
+            labels:
+              app.kubernetes.io/name: flower-addon
+              app.kubernetes.io/component: supernode
+          spec:
+            type: ClusterIP
+            selector:
+              app.kubernetes.io/name: flower-addon
+              app.kubernetes.io/component: supernode
+            ports:
+              - name: clientappio
+                port: 9094
+                targetPort: 9094
+                protocol: TCP

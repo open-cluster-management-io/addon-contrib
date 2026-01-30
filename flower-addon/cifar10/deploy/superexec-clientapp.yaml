@@ -1,0 +1,66 @@
+# ManifestWorkReplicaSet to deploy SuperExec-ClientApp via Placement
+# Requires a Placement resource to determine target clusters
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: flower-superexec-clientapp
+  namespace: flower-system
+  labels:
+    app.kubernetes.io/name: flower-addon
+    app.kubernetes.io/component: superexec-clientapp
+spec:
+  placementRefs:
+    - name: flower-clientapp-placement
+  manifestWorkTemplate:
+    workload:
+      manifests:
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: superexec-clientapp
+            namespace: flower-addon
+            labels:
+              app.kubernetes.io/name: flower-addon
+              app.kubernetes.io/component: superexec-clientapp
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: flower-addon
+                app.kubernetes.io/component: superexec-clientapp
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: flower-addon
+                  app.kubernetes.io/component: superexec-clientapp
+              spec:
+                containers:
+                  - name: superexec
+                    image: flower-app:1.0.0
+                    imagePullPolicy: IfNotPresent
+                    args:
+                      - "--insecure"
+                      - "--appio-api-address=flower-supernode:9094"
+                      - "--plugin-type=clientapp"
+---
+# Placement to select clusters with flower-addon enabled
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: flower-clientapp-placement
+  namespace: flower-system
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            feature.open-cluster-management.io/addon-flower-addon: available
+---
+# ManagedClusterSetBinding to allow Placement to select clusters
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: flower-system
+spec:
+  clusterSet: global
