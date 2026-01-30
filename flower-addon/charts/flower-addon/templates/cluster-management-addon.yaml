@@ -1,0 +1,44 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: {{ .Values.addon.name }}
+spec:
+  addOnMeta:
+    displayName: {{ .Values.addon.displayName }}
+    description: {{ .Values.addon.description | quote }}
+  supportedConfigs:
+    # Reference to AddOnTemplate (cluster-scoped, no namespace needed)
+    - group: addon.open-cluster-management.io
+      resource: addontemplates
+      defaultConfig:
+        name: {{ .Values.addon.name }}
+    # Reference to AddOnDeploymentConfig for custom variables
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
+      defaultConfig:
+        name: {{ .Values.deploymentConfig.name }}
+        namespace: {{ .Values.addon.namespace }}
+  installStrategy:
+    type: {{ .Values.addon.installStrategy }}
+    {{- if eq .Values.addon.installStrategy "Placements" }}
+    placements:
+      {{- if .Values.placement.gpu.enabled }}
+      # GPU clusters placement with GPU-specific config
+      - name: {{ .Values.placement.gpu.name }}
+        namespace: {{ .Values.addon.namespace }}
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: {{ .Values.placement.gpu.config.name }}
+            namespace: {{ .Values.addon.namespace }}
+      {{- else if .Values.placement.all.enabled }}
+      # All clusters placement with default config
+      - name: {{ .Values.placement.all.name }}
+        namespace: {{ .Values.addon.namespace }}
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: {{ .Values.placement.all.config.name }}
+            namespace: {{ .Values.addon.namespace }}
+      {{- end }}
+    {{- end }}

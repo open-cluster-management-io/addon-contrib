@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cifar10"
+version = "1.0.0"
+description = "CIFAR-10 Image Classification with Federated Learning (FedAvg + CNN)"
+license = "Apache-2.0"
+dependencies = [
+  "flwr>=1.25.0",
+  "flwr-datasets[vision]>=0.5.0",
+  "torch==2.10.0",
+  "torchvision==0.25.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["cifar10"]
+
+[tool.flwr.app]
+publisher = "local"
+
+[tool.flwr.app.components]
+serverapp = "cifar10.server_app:app"
+clientapp = "cifar10.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 3
+fraction-evaluate = 0.5
+local-epochs = 1
+learning-rate = 0.1
+batch-size = 32
+
+[tool.flwr.federations]
+default = "local-deployment"
+
+[tool.flwr.federations.local-deployment]
+address = "127.0.0.1:9093"
+insecure = true
+
+[tool.flwr.federations.ocm-deployment]
+address = "127.0.0.1:30093"
+insecure = true

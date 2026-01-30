@@ -1,0 +1,81 @@
+# Flower Addon Helm Chart Values
+
+# SuperLink configuration (deployed on hub cluster)
+superlink:
+  enabled: true
+  namespace: flower-system
+  image:
+    repository: flwr/superlink
+    tag: "1.25.0-py3.13-ubuntu24.04"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  nodePort:
+    exec: 30091
+    fleet: 30092
+    control: 30093
+  args:
+    - "--insecure"
+    - "--isolation=process"
+
+# SuperNode configuration (deployed on managed clusters via OCM addon)
+supernode:
+  image:
+    repository: flwr/supernode
+    tag: "1.25.0-py3.13-ubuntu24.04"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  # Number of data partitions (partition-id is derived from cluster-name)
+  numPartitions: "2"
+
+# OCM Addon configuration
+addon:
+  name: flower-addon
+  namespace: open-cluster-management
+  displayName: Flower Federated Learning
+  description: |
+    Flower Federated Learning addon enables distributed machine learning across
+    managed clusters using the Flower framework. It deploys SuperNode agents on
+    managed clusters that connect to a central SuperLink server on the hub.
+  installStrategy: Manual
+
+# AddOnDeploymentConfig
+deploymentConfig:
+  enabled: true
+  name: flower-addon-config
+  # SuperLink address (set to hub node IP during deployment)
+  superlinkAddress: "<HUB_NODE_IP>"
+  superlinkPort: "30092"
+
+# Placement-based auto-install (optional, mutually exclusive)
+# Only one placement should be enabled at a time
+placement:
+  # GPU clusters placement
+  gpu:
+    enabled: false
+    name: flower-addon-gpu-placement
+    clusterSet: default
+    # Config specific to GPU clusters
+    config:
+      name: flower-addon-gpu-config
+      nodeType: gpu
+  # All clusters placement
+  all:
+    enabled: false
+    name: flower-addon-all-placement
+    clusterSet: global
+    # Config specific to all clusters
+    config:
+      name: flower-addon-all-config
+      nodeType: cpu

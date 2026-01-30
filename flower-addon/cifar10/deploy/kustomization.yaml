@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - superexec-serverapp.yaml
+  - superexec-clientapp.yaml
+
+# Application image configuration
+images:
+  - name: flower-app
+    newName: flower-app
+    newTag: "1.0.0"
+
+# Configuration via ConfigMapGenerator (optional override)
+# configMapGenerator:
+#   - name: flower-app-config
+#     literals:
+#       - EXECUTOR_API_ADDRESS=superlink:9091
+#       - CLIENTAPPIO_API_ADDRESS=flower-supernode:9094
+
+patches:
+  # SuperExec-ServerApp configuration
+  - target:
+      kind: Deployment
+      name: superexec-serverapp
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: flower-app:1.0.0
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value:
+          - "--insecure"
+          - "--appio-api-address=superlink:9091"
+          - "--plugin-type=serverapp"
+
+  # SuperExec-ClientApp configuration (inside ManifestWorkReplicaSet)
+  - target:
+      kind: ManifestWorkReplicaSet
+      name: flower-superexec-clientapp
+    patch: |-
+      - op: replace
+        path: /spec/manifestWorkTemplate/workload/manifests/0/spec/template/spec/containers/0/image
+        value: flower-app:1.0.0
+      - op: replace
+        path: /spec/manifestWorkTemplate/workload/manifests/0/spec/template/spec/containers/0/args
+        value:
+          - "--insecure"
+          - "--appio-api-address=flower-supernode:9094"
+          - "--plugin-type=clientapp"

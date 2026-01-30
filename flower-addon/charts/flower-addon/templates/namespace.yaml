@@ -1,0 +1,9 @@
+{{- if .Values.superlink.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.superlink.namespace }}
+  labels:
+    {{- include "flower-addon.superlinkLabels" . | nindent 4 }}
+    app.kubernetes.io/component: hub
+{{- end }}

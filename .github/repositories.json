@@ -5,6 +5,9 @@
   "federated-learning-controller": {
     "e2e-artifacts": ["federated-learning-controller.tar.gz"]
   },
+  "flower-addon": {
+    "e2e-artifacts": ["flower-addon.tar.gz"]
+  },
   "kueue-addon": {
     "e2e-artifacts": ["kueue-addon.tar.gz"]
   },

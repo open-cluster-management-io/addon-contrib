@@ -1,0 +1,65 @@
+{{- if .Values.deploymentConfig.enabled }}
+# Default AddOnDeploymentConfig (used for manual install strategy)
+{{- if eq .Values.addon.installStrategy "Manual" }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: {{ .Values.deploymentConfig.name }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  agentInstallNamespace: flower-addon
+  customizedVariables:
+    - name: SUPERLINK_ADDRESS
+      value: {{ .Values.deploymentConfig.superlinkAddress | quote }}
+    - name: SUPERLINK_PORT
+      value: {{ .Values.deploymentConfig.superlinkPort | quote }}
+    - name: IMAGE
+      value: {{ include "flower-addon.supernodeImage" . | quote }}
+    - name: NUM_PARTITIONS
+      value: {{ .Values.supernode.numPartitions | quote }}
+{{- end }}
+---
+# GPU Placement AddOnDeploymentConfig
+{{- if .Values.placement.gpu.enabled }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: {{ .Values.placement.gpu.config.name }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  agentInstallNamespace: flower-addon
+  customizedVariables:
+    - name: SUPERLINK_ADDRESS
+      value: {{ .Values.deploymentConfig.superlinkAddress | quote }}
+    - name: SUPERLINK_PORT
+      value: {{ .Values.deploymentConfig.superlinkPort | quote }}
+    - name: IMAGE
+      value: {{ include "flower-addon.supernodeImage" . | quote }}
+    - name: NUM_PARTITIONS
+      value: {{ .Values.supernode.numPartitions | quote }}
+    - name: NODE_TYPE
+      value: {{ .Values.placement.gpu.config.nodeType | quote }}
+{{- end }}
+---
+# All Clusters Placement AddOnDeploymentConfig
+{{- if .Values.placement.all.enabled }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: {{ .Values.placement.all.config.name }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  agentInstallNamespace: flower-addon
+  customizedVariables:
+    - name: SUPERLINK_ADDRESS
+      value: {{ .Values.deploymentConfig.superlinkAddress | quote }}
+    - name: SUPERLINK_PORT
+      value: {{ .Values.deploymentConfig.superlinkPort | quote }}
+    - name: IMAGE
+      value: {{ include "flower-addon.supernodeImage" . | quote }}
+    - name: NUM_PARTITIONS
+      value: {{ .Values.supernode.numPartitions | quote }}
+    - name: NODE_TYPE
+      value: {{ .Values.placement.all.config.nodeType | quote }}
+{{- end }}
+{{- end }}
