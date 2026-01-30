@@ -18,6 +18,7 @@ This repository contains the following OCM addons:
 - **argocd-agent-addon**: Integrates Argo CD Agent for highly scalable application deployment across managed clusters
 - **clusternet-addon**: Provides Clusternet integration for enhanced cluster networking capabilities
 - **device-addon**: Enables device management functionality within the OCM ecosystem
+- **dynamic-scoring-framework**: A framework for distributed evaluation across multiclusters and centralized aggregation
 - **federated-learning-controller**: Implements federated learning capabilities across distributed clusters
 - **fluid-addon**: Integrates Fluid for data orchestration and management in multicluster environments
 - **hellospoke-addon**: A simple example addon demonstrating basic OCM addon development patterns
