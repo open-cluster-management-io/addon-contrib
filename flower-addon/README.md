@@ -1,4 +1,11 @@
-# Flower Addon for Open Cluster Management
+# Flower Addon for Federated AI
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/open-cluster-management-io/ocm)](https://goreportcard.com/report/github.com/open-cluster-management-io/ocm)
+
+<p align="center">
+  <img src="docs/images/flower-ocm.png" alt="Flower + OCM" width="400">
+</p>
 
 Integrate [Flower Federated Learning](https://flower.ai) with [Open Cluster Management (OCM)](https://open-cluster-management.io) to enable automated distribution and orchestration of federated learning workloads across multi-cloud environments.
 
@@ -30,28 +37,27 @@ Flower Addon leverages OCM's multi-cluster management to address these challenge
 ┌─────────────────────────────────────────────────────────────┐
 │                        Hub Cluster                          │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │  SuperLink (Federated Learning Coordinator)            │ │
+│  │  SuperLink + ServerApp                                 │ │
 │  └────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────┐ │
-│  │  OCM Addon                                             │ │
+│  │  OCM Addon Manager                                     │ │
 │  └────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┴───────────────┐
               ▼                               ▼
 ┌─────────────────────────────┐ ┌─────────────────────────────┐
-│   Managed Cluster 1         │ │   Managed Cluster 2         │
-│   SuperNode (auto-deployed) │ │   SuperNode (auto-deployed) │
+│      Managed Cluster 1      │ │      Managed Cluster 2      │
+│   SuperNode + ClientApp     │ │   SuperNode + ClientApp     │
 └─────────────────────────────┘ └─────────────────────────────┘
 ```
 
-## Progress
+## Roadmap
 
 - [x] [Install Flower Addon](docs/install-flower-addon.md) - Deploy SuperLink and SuperNodes via OCM Addon ([demo](https://asciinema.org/a/776744))
 - [x] [Auto-Install with Placement](docs/auto-install-by-placement.md) - Schedule SuperNodes across clusters via OCM Placement ([demo](https://asciinema.org/a/776746))
 - [x] [Run Federated Learning Applications](docs/run-federated-app.md) - Run federated learning applications on the Flower Addon environment ([demo](https://asciinema.org/a/776749))
-- [ ] Process isolation mode on OCM (ServerApp/ClientApp via Docker)
-- [ ] Automatic ClientApp distribution via ManifestWorkReplicaSet
+- [x] Automatic ClientApp distribution via ManifestWorkReplicaSet
 - [ ] TLS-secured SuperNode-SuperLink connections via Addon auto-registration
 
 ## Related Projects
