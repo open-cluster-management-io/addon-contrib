@@ -95,6 +95,7 @@ install_kueue() {
       kubectl apply --server-side -f "$kueue_manifest" --context "$ctx"
       echo "waiting for kueue-system pods to be ready"
       kubectl wait --for=condition=Ready pods --all -n kueue-system --timeout=300s --context "$ctx"
+      sleep 5s # sleep 5 seconds for the kueue-webhook-service ready
       kubectl apply --server-side -f "$jobset_manifest" --context "$ctx"
   done
 
