@@ -110,11 +110,11 @@ graph TB
 ### Kueue addon controller
 This controller is running on the hub, contains a credential controller and an admission check controller.
 - **Credential Controller**
-    - Create `ClusterPermission` and `ManagedServiceAccount` for each spoke to get credential.
-    - Generates kubeconfig secrets for MultiKueue under `kueue-system` namespace.
+    - Creates `ClusterPermission` and `ManagedServiceAccount` (with ClusterProfile sync label) for each spoke cluster.
+    - Watches `ClusterProfile` and sync ManagedServiceAccount token to generate `MultiKueueCluster` resources that reference ClusterProfile objects for authentication.
 - **Admission Check Controller**
-    - Watches the `Placement` and `PlacementDecision` to generates `MultiKueueConfig` and `MultiKueueCluster` resources dynamically.
-    - Set the `AdmissionCheck` condition `Active` to true when success.
+    - Watches `Placement` and `PlacementDecision` to generate `MultiKueueConfig` and `MultiKueueCluster` resources dynamically.
+    - Sets the `AdmissionCheck` condition `Active` to true when successful.
 
 ### Addon chart
 - **Addon deployment:** Deploy [Kueue addon controllers](#kueue-addon-controller) on the hub.
@@ -126,10 +126,14 @@ This controller is running on the hub, contains a credential controller and an a
 
 - Open Cluster Management (OCM) installed with the following addons:
   - [Cluster Permission Addon](https://github.com/open-cluster-management-io/cluster-permission)
-  - [Managed Service Account Addon](https://github.com/open-cluster-management-io/managed-serviceaccount)
-  - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) (Optional) Enables hub-to-spoke connectivity for enhanced networking.
+  - [Managed Service Account Addon](https://github.com/open-cluster-management-io/managed-serviceaccount) with feature gate `clusterProfileCredSyncer=true` (for ClusterProfile support)
+  - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) with feature gates:
+    - `clusterProfileAccessProvider=true` (for ClusterProfile support)
+    - `userServer.enabled=true` (for ClusterProfile support)
+    - `enableServiceProxy=true` (for ClusterProfile support)
+  - Hub cluster initialized with: `clusteradm init --feature-gates=ClusterProfile=true` (for ClusterProfile support)
 - Kueue installed:
-  - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) installed and MultiKueue enabled.
+  - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) v0.11.0+ installed and MultiKueue enabled with feature gate `MultiKueueClusterProfile=true`
   - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (recommended for OpenShift/OLM environments).
 
 ## Quick Start
@@ -213,12 +217,6 @@ kueueCR:
         frameworks:
         - BatchJob
     managementState: Managed
-
-# Cluster proxy configuration
-clusterProxy:
-  url: "https://<cluster-proxy-url>"
-  impersonation:
-    enabled: true
 
 networkPolicy:
   name: kueue-allow-egress-cluster-proxy-dns
@@ -395,9 +393,54 @@ This automation greatly reduces manual effort and ensures that MultiKueue enviro
 
 ### Workflow
 
-- When kueue-addon is intalled, the credential controller generates kubeconfig secrets of each cluster for MultiKueue under `kueue-system` namespace.
-- User configure the `ClusterQueue` with `AdmissionCheck` and creates the `AdmissionCheck` and `Placement` resources.
-- OCM generates `PlacementDecision` when `Placement` created.
+- OCM automatically creates `ClusterProfile` objects for those managed cluster in managedclusterset bound to `kueue-system` namespace.
+- When kueue-addon is installed, the credential controller creates labeled `ManagedServiceAccount` and `ClusterPermission` resources for each cluster.
+- User configures the `ClusterQueue` with `AdmissionCheck` and creates the `AdmissionCheck` and `Placement` resources.
+- OCM generates `PlacementDecision` when `Placement` is created.
 - The admission check controller watches for `AdmissionCheck` resources referencing OCM `Placement`.
-- The admission check controller watches the `PlacementDecision`, creates or updates `MultiKueueCluster` resources with the kubeconfig details for each cluster, and also update these clusters in the `MultiKueueConfig` resource.
+- The admission check controller watches the `PlacementDecision` updates these clusters in the `MultiKueueConfig` resource.
+- The multikueuecluster controller watches the `ClusterProfile` and creates or updates `MultiKueueCluster` resources with ClusterProfile references for each cluster.
 - Finally, admission check controller updates the `AdmissionCheck` condition to true, indicating successful generation of the `MultiKueueConfig` and `MultiKueueCluster`, readying the [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) environment for job scheduling.
+
+## Troubleshooting
+
+### ClusterProfile Migration Status
+
+To check if your environment is ready for ClusterProfile access provider:
+
+1. **Verify ClusterProfile feature gate is enabled on hub:**
+   ```bash
+   kubectl get clustermanager cluster-manager -o yaml | grep -i ClusterProfile
+   ```
+
+2. **Check ManagedServiceAccount has the sync label:**
+   ```bash
+   kubectl get managedserviceaccount -n <cluster-namespace> multikueue -o yaml | grep sync-to-clusterprofile
+   ```
+   Expected output should show:
+   ```yaml
+   labels:
+     authentication.open-cluster-management.io/sync-to-clusterprofile: "true"
+   ```
+
+3. **Verify ClusterProfile objects are created (when feature is enabled):**
+   ```bash
+   kubectl get clusterprofile -n kueue-system
+   ```
+
+4. **View addon startup logs for prerequisite information:**
+   ```bash
+   kubectl logs -n open-cluster-management-addon deployment/kueue-addon-controller | grep "ClusterProfile"
+   ```
+
+### Common Issues
+
+**MultiKueueCluster cannot connect to spoke clusters:**
+- Verify ClusterProfile objects exist: `kubectl get clusterprofile -n kueue-system`
+- Check ClusterPermission resources: `kubectl get clusterpermission -A`
+- Ensure ManagedServiceAccount resources have the sync label: `kubectl get managedserviceaccount -n <cluster-namespace> multikueue -o yaml | grep sync-to-clusterprofile`
+- Verify that cluster-proxy and managed-serviceaccount addons are configured with required feature gates
+
+**ClusterProfile objects not created:**
+- Ensure the hub cluster was initialized with ClusterProfile feature gate: `clusteradm init --feature-gates=ClusterProfile=true`
+- Check the managed clusters are in a managedclusterset bound to `kueue-system` namespace.

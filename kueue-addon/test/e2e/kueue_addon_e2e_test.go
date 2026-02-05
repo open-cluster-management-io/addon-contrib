@@ -124,6 +124,16 @@ var _ = Describe("MultiKueue Scenarios", func() {
 			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster2")
 			helper.AssertMultiKueueClusterActive(ctx, hubKueueClient, "cluster3")
 
+			By("Verifying ManagedServiceAccounts have ClusterProfile sync label")
+			helper.AssertManagedServiceAccountHasSyncLabel(ctx, hubMsaClient, "cluster1")
+			helper.AssertManagedServiceAccountHasSyncLabel(ctx, hubMsaClient, "cluster2")
+			helper.AssertManagedServiceAccountHasSyncLabel(ctx, hubMsaClient, "cluster3")
+
+			By("Verifying MultiKueueClusters use ClusterProfile for authentication")
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, "cluster1")
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, "cluster2")
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, "cluster3")
+
 			By("Waiting for AdmissionCheck to be active")
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, "multikueue-e2e")
 			helper.AssertAdmissionCheckConditionTrue(ctx, hubKueueClient, "multikueue-config-e2e")

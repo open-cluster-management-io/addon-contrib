@@ -39,23 +39,10 @@ localQueue:
   name: user-queue
   namespace: default
 
-# This is the namespace where the kueue controller is installed, will copy the multikueue secret to this namespace
+# This is the namespace where the kueue controller is installed
 # Default is kueue-system
 kueue:
   namespace: "kueue-system"
-
-# Cluster proxy configuration (optional)
-clusterProxy:
-  # URL for the cluster proxy service, used to access managed clusters through a proxy
-  # When set, the controller will use this URL to connect to managed clusters
-  # Example: "https://cluster-proxy.example.com/clusters/"
-  url: ""
-
-  # Enable impersonation feature for cluster proxy
-  # When enabled, the ClusterRoleBinding subject will be set to the kueue-addon-controller service account
-  # This allows the Kueue hub controller to impersonate requests through the cluster proxy
-  impersonation:
-    enabled: false
 
 # NetworkPolicy configuration (uncomment when installKueueViaOperator enabled)
 # Uncomment when using operator-based installation with network restrictions

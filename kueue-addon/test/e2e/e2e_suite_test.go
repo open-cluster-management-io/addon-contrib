@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
 
@@ -26,6 +27,7 @@ var (
 	hubClient        kubernetes.Interface
 	hubClusterClient clusterv1client.Interface
 	hubKueueClient   kueueclientset.Interface
+	hubMsaClient     msaclientset.Interface
 
 	// test context
 	ctx context.Context
@@ -67,6 +69,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	hubKueueClient, err = kueueclientset.NewForConfig(config)
+	Expect(err).NotTo(HaveOccurred())
+
+	hubMsaClient, err = msaclientset.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Check Kueue System Ready")

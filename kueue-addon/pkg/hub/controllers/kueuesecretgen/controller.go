@@ -96,11 +96,9 @@ func (c *kueueSecretGenController) cleanupClusterResources(ctx context.Context, 
 		return fmt.Errorf("failed to delete ClusterPermission %s in cluster %s: %v", common.MultiKueueResourceName, clusterName, err)
 	}
 
-	if !common.IsImpersonationMode() {
-		err = c.msaClient.AuthenticationV1beta1().ManagedServiceAccounts(clusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{})
-		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to delete ManagedServiceAccount %s in cluster %s: %v", common.MultiKueueResourceName, clusterName, err)
-		}
+	err = c.msaClient.AuthenticationV1beta1().ManagedServiceAccounts(clusterName).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete ManagedServiceAccount %s in cluster %s: %v", common.MultiKueueResourceName, clusterName, err)
 	}
 
 	return nil
@@ -120,14 +118,10 @@ func (c *kueueSecretGenController) applyClusterResources(ctx context.Context, cl
 	}
 	logger.Info("ClusterPermission applied", "namespace", clusterName)
 
-	if !common.IsImpersonationMode() {
-		if err := applyManagedServiceAccount(ctx, c.msaClient, clusterName); err != nil {
-			return fmt.Errorf("failed to apply managed service account: %v", err)
-		}
-		logger.Info("ManagedServiceAccount applied", "name", common.MultiKueueResourceName, "namespace", clusterName)
-	} else {
-		logger.Info("Skipping ManagedServiceAccount creation - impersonation mode enabled", "cluster", clusterName)
+	if err := applyManagedServiceAccount(ctx, c.msaClient, clusterName); err != nil {
+		return fmt.Errorf("failed to apply managed service account: %v", err)
 	}
+	logger.Info("ManagedServiceAccount applied", "name", common.MultiKueueResourceName, "namespace", clusterName)
 
 	return nil
 }

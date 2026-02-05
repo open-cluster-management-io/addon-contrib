@@ -7,7 +7,6 @@ set -euo pipefail
 # Parse command line arguments
 CLEAN=false
 E2E_MODE=false
-IMPERSONATION=false
 KUEUE_VERSION="v0.11.9"
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -19,17 +18,13 @@ while [[ $# -gt 0 ]]; do
       E2E_MODE=true
       shift
       ;;
-    --impersonation)
-      IMPERSONATION=true
-      shift
-      ;;
     --kueue-version)
       KUEUE_VERSION="$2"
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--clean] [--e2e] [--impersonation] [--kueue-version VERSION]"
+      echo "Usage: $0 [--clean] [--e2e] [--kueue-version VERSION]"
       exit 1
       ;;
   esac
@@ -67,16 +62,16 @@ create_clusters() {
   fi
 
   echo "Prepare kind clusters"
-  kind create cluster --name ${hub} --image kindest/node:v1.29.0 --config=config.yaml || true
+  kind create cluster --name ${hub} --image kindest/node:v1.35.0 --config=config.yaml || true
   for cluster in "${spoke_clusters[@]}"; do
-    kind create cluster --name "$cluster" --image kindest/node:v1.29.0 || true
+    kind create cluster --name "$cluster" --image kindest/node:v1.35.0 || true
   done
 }
 
 # Function to setup OCM
 setup_ocm() {
-  echo "Initialize the ocm hub cluster"
-  clusteradm init --wait --context ${hubctx}
+  echo "Initialize the ocm hub cluster with ClusterProfile feature gate"
+  clusteradm init --wait --feature-gates=ClusterProfile=true --context ${hubctx}
   joincmd=$(clusteradm get token --context ${hubctx} | grep clusteradm)
 
   echo "Join clusters to hub"
@@ -112,33 +107,64 @@ install_kueue() {
   done
 }
 
-# Function to install cluster-proxy with impersonation support
-install_cluster_proxy_with_impersonation() {
-  echo "Install cert-manager"
-  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.0/cert-manager.yaml --context ${hubctx}
-  kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s --context ${hubctx}
+# Function to patch kueue-controller-manager with ClusterProfile plugin
+patch_kueue_controller() {
+  # Apply the Kueue manager ConfigMap to add ClusterProfile configuration
+  echo "Applying Kueue manager ConfigMap with ClusterProfile credentials provider"
+  cat << EOF | kubectl -n kueue-system --context "${hubctx}" apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kueue-manager-config
+  namespace: kueue-system
+data:
+  controller_manager_config.yaml: |
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    kind: Configuration
+    featureGates:
+      MultiKueueClusterProfile: true
+    multiKueue:
+      clusterProfile:
+        credentialsProviders:
+        - name: open-cluster-management
+          execConfig:
+            apiVersion: client.authentication.k8s.io/v1
+            command: /plugins/cp-creds
+            args:
+            - --managed-serviceaccount=multikueue
+            provideClusterInfo: true
+            interactiveMode: Never
+EOF
 
-  echo "Setup CA certificate for cluster-proxy"
-  export CA_CRT=$(kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-local-cluster")].cluster.certificate-authority-data}')
-  export CA_KEY=$(docker exec local-cluster-control-plane cat /etc/kubernetes/pki/ca.key | base64 -w 0)
+  # Patch the deployment to add image volume for cp-creds plugin
+  echo "Patching kueue-controller-manager deployment with cp-creds plugin volume"
+  kubectl patch deployment kueue-controller-manager -n kueue-system --context "${hubctx}" --type='json' -p='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/volumes/-",
+      "value": {
+        "name": "cp-creds-plugin",
+        "image": {
+          "reference": "quay.io/open-cluster-management/managed-serviceaccount:latest",
+          "pullPolicy": "IfNotPresent"
+        }
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/volumeMounts/-",
+      "value": {
+        "name": "cp-creds-plugin",
+        "mountPath": "/plugins"
+      }
+    }
+  ]'
 
-  # Apply CA cert resources with substitution
-  envsubst < cluster-proxy-ca-cert.yaml | kubectl apply --context ${hubctx} -f -
+  echo "Waiting for kueue-controller-manager to be ready after patching"
+  kubectl wait --for=condition=Available deployment/kueue-controller-manager \
+    -n kueue-system --timeout=300s --context "${hubctx}"
 
-  echo "Install cluster-proxy with impersonation"
-  GATEWAY_IP=$(docker inspect local-cluster-control-plane --format '{{.NetworkSettings.Networks.kind.IPAddress}}')
-
-  helm upgrade --install \
-    -n open-cluster-management-addon --create-namespace \
-    cluster-proxy ocm/cluster-proxy \
-    --set "proxyServer.entrypointAddress=${GATEWAY_IP}" \
-    --set "proxyServer.port=30091" \
-    --set "enableServiceProxy=true" \
-    --set installByPlacement.placementName=global \
-    --set installByPlacement.placementNamespace=open-cluster-management-addon
-
-  echo "Create proxy entrypoint external service"
-  kubectl apply --context ${hubctx} -f cluster-proxy-service.yaml
+  echo "kueue-controller-manager configured successfully with ClusterProfile plugin"
 }
 
 # Function to install kueue-addon
@@ -152,11 +178,6 @@ install_kueue_addon() {
   else
     CHART_SOURCE="ocm/kueue-addon"
     EXTRA_ARGS=""
-  fi
-
-  # Add impersonation settings if enabled
-  if [[ "$IMPERSONATION" == "true" ]]; then
-    EXTRA_ARGS="$EXTRA_ARGS --set clusterProxy.url=https://cluster-proxy-addon-user.open-cluster-management-addon.svc.cluster.local:9092 --set clusterProxy.impersonation.enabled=true"
   fi
 
   echo "Install kueue-addon from ${CHART_SOURCE} with ${EXTRA_ARGS}"
@@ -175,25 +196,24 @@ install_ocm_addons() {
   helm repo add ocm https://open-cluster-management.io/helm-charts/
   helm repo update
 
-  echo "Install managed-serviceaccount"
+  echo "Install managed-serviceaccount with ClusterProfile support"
   helm upgrade --install \
      -n open-cluster-management-addon --create-namespace \
      managed-serviceaccount ocm/managed-serviceaccount \
      --set featureGates.ephemeralIdentity=true \
+     --set featureGates.clusterProfileCredSyncer=true \
      --set enableAddOnDeploymentConfig=true \
      --set hubDeployMode=AddOnTemplate
 
-  if [[ "$IMPERSONATION" == "true" ]]; then
-    echo "Install cluster-proxy with impersonation mode"
-    install_cluster_proxy_with_impersonation
-  else
-    echo "Install cluster-proxy"
-    helm upgrade --install \
-      -n open-cluster-management-addon --create-namespace \
-      cluster-proxy ocm/cluster-proxy \
-      --set installByPlacement.placementName=global \
-      --set installByPlacement.placementNamespace=open-cluster-management-addon
-  fi
+  echo "Install cluster-proxy with ClusterProfile access provider"
+  helm upgrade --install \
+    -n open-cluster-management-addon --create-namespace \
+    cluster-proxy ocm/cluster-proxy \
+    --set featureGates.clusterProfileAccessProvider=true \
+    --set userServer.enabled=true \
+    --set enableServiceProxy=true \
+    --set installByPlacement.placementName=global \
+    --set installByPlacement.placementNamespace=open-cluster-management-addon
 
   echo "Install cluster-permission"
   helm upgrade --install \
@@ -259,5 +279,6 @@ create_clusters
 setup_ocm
 load_e2e_images
 install_kueue
+patch_kueue_controller
 install_ocm_addons
 setup_fake_gpu

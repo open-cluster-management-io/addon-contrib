@@ -7,14 +7,13 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	"open-cluster-management.io/addon-contrib/kueue-addon/test/helper"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
 )
 
 var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
@@ -67,7 +66,8 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 
 		// Clean up managed clusters
 		for _, clusterName := range managedClusters {
-			helper.RemoveSecret(ctx, hubKubeClient, clusterName, common.MultiKueueResourceName)
+			helper.RemoveClusterProfile(ctx, hubCPClient, clusterName, kueueNamespace)
+			helper.RemoveClusterProfileSecret(ctx, hubKubeClient, clusterName, kueueNamespace)
 			helper.RemoveMultiKueueClusters(ctx, hubKueueClient, clusterName)
 			helper.RemoveManagedCluster(ctx, hubClusterClient, clusterName)
 		}
@@ -174,8 +174,21 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 
 			// Wait for ManagedServiceAccount to be created
 			gomega.Eventually(func() bool {
-				_, err := hubMSAClient.AuthenticationV1beta1().ManagedServiceAccounts(cluster1).Get(ctx, "multikueue", metav1.GetOptions{})
-				return err == nil
+				msa, err := hubMSAClient.AuthenticationV1beta1().ManagedServiceAccounts(cluster1).Get(ctx, "multikueue", metav1.GetOptions{})
+				if err != nil {
+					return false
+				}
+				if msa.Labels == nil {
+					return false
+				}
+				syncLabel, exists := msa.Labels[msacontroller.LabelKeyClusterProfileSync]
+				if !exists {
+					return false
+				}
+				if syncLabel != "true" {
+					return false
+				}
+				return true
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 		})
 
@@ -229,84 +242,160 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 		})
 	})
 
-	ginkgo.Context("Secret/MultiKueueClusters copy/gen integration", func() {
-		ginkgo.It("should copy ServiceAccount secret to kueue namespace as kubeconfig", func() {
-			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
+	ginkgo.Context("ClusterProfile/MultiKueueClusters integration", func() {
+		ginkgo.It("should create MultiKueueCluster using ClusterProfile when ClusterProfile and synced secret exist", func() {
+			// Simulate ClusterProfile creation (this would be done by OCM's ClusterProfile controller)
+			helper.CreateClusterProfile(ctx, hubCPClient, cluster1, kueueNamespace)
 
-			// Simulate create multikueue secret
-			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate synced secret creation (this would be done by the ClusterProfile credential syncer)
+			helper.CreateClusterProfileSecret(ctx, hubKubeClient, cluster1, kueueNamespace)
 
-			// Assert kubeconfig secret is created in kueue namespace
-			gomega.Eventually(func() bool {
-				_, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
-				return err == nil
-			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+			// Assert ManagedServiceAccount has ClusterProfile sync label
+			helper.AssertManagedServiceAccountHasSyncLabel(ctx, hubMSAClient, cluster1)
 
-			// Assert MultiKueueClusters exists with correct names
+			// Assert MultiKueueCluster is created with ClusterProfileRef
 			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{cluster1})
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, cluster1)
 		})
 
-		ginkgo.It("should update kubeconfig secret when source changes", func() {
-			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
+		ginkgo.It("should maintain MultiKueueCluster when ClusterProfile and resources exist", func() {
+			// Simulate ClusterProfile creation
+			helper.CreateClusterProfile(ctx, hubCPClient, cluster1, kueueNamespace)
 
-			// Simulate create multikueue secret
-			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate synced secret creation
+			helper.CreateClusterProfileSecret(ctx, hubKubeClient, cluster1, kueueNamespace)
 
-			// Wait for kubeconfig secret to be created
+			// Wait for MultiKueueCluster to be created
 			gomega.Eventually(func() bool {
-				_, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
 				return err == nil
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 
-			// Update source secret
-			_, err := hubKubeClient.CoreV1().Secrets(cluster1).Update(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: common.MultiKueueResourceName, Namespace: cluster1},
-				Data: map[string][]byte{
-					"token":  []byte("new-token"),
-					"ca.crt": []byte("test-ca-cert"),
-				},
-			}, metav1.UpdateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			// Verify MultiKueueCluster uses ClusterProfile
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, cluster1)
 
-			// Assert kubeconfig secret is updated
-			gomega.Eventually(func() bool {
-				secret, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
+			// Update synced secret (simulating credential rotation)
+			gomega.Eventually(func() error {
+				secret, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, fmt.Sprintf("%s-%s", cluster1, common.MultiKueueResourceName), metav1.GetOptions{})
 				if err != nil {
-					return false
+					return err
 				}
-				return string(secret.Data["kubeconfig"]) != ""
-			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+				secret.Data["token"] = []byte("new-rotated-token")
+				_, err = hubKubeClient.CoreV1().Secrets(kueueNamespace).Update(ctx, secret, metav1.UpdateOptions{})
+				return err
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.Succeed())
 
-			// Assert MultiKueueClusters exists with correct names
+			// Assert MultiKueueCluster still exists and uses ClusterProfile
 			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{cluster1})
+			helper.AssertMultiKueueClusterUsesClusterProfile(ctx, hubKueueClient, cluster1)
 		})
 
-		ginkgo.It("should delete kubeconfig secret when source is deleted", func() {
-			kubeconfigSecretName := fmt.Sprintf("multikueue-%s", cluster1)
+		ginkgo.It("should delete MultiKueueCluster when ClusterProfile is deleted", func() {
+			// Simulate ClusterProfile creation
+			helper.CreateClusterProfile(ctx, hubCPClient, cluster1, kueueNamespace)
 
-			// Simulate create multikueue secret
-			helper.CreateMsaSecret(ctx, hubKubeClient, cluster1)
+			// Simulate synced secret creation
+			helper.CreateClusterProfileSecret(ctx, hubKubeClient, cluster1, kueueNamespace)
 
-			// Wait for kubeconfig secret to be created
+			// Wait for MultiKueueCluster to be created
 			gomega.Eventually(func() bool {
-				_, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
 				return err == nil
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 
-			// Assert MultiKueueClusters exists with correct names
+			// Assert MultiKueueCluster exists
 			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{cluster1})
 
-			// Delete source secret
-			err := hubKubeClient.CoreV1().Secrets(cluster1).Delete(ctx, common.MultiKueueResourceName, metav1.DeleteOptions{})
+			// Delete ClusterProfile
+			err := hubCPClient.ApisV1alpha1().ClusterProfiles(kueueNamespace).Delete(ctx, cluster1, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-			// Assert kubeconfig secret is deleted
+			// Assert MultiKueueCluster is deleted
 			gomega.Eventually(func() bool {
-				_, err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Get(ctx, kubeconfigSecretName, metav1.GetOptions{})
-				return err != nil
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				return errors.IsNotFound(err)
 			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
 
-			// Assert MultiKueueClusters is deleted
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{})
+		})
+
+		ginkgo.It("should delete MultiKueueCluster when ClusterPermission is deleted", func() {
+			// Simulate ClusterProfile creation
+			helper.CreateClusterProfile(ctx, hubCPClient, cluster1, kueueNamespace)
+
+			// Simulate synced secret creation
+			helper.CreateClusterProfileSecret(ctx, hubKubeClient, cluster1, kueueNamespace)
+
+			// Wait for MultiKueueCluster to be created
+			gomega.Eventually(func() bool {
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				return err == nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
+			// Add a finalizer to prevent immediate deletion
+			gomega.Eventually(func() error {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				cluster.Finalizers = append(cluster.Finalizers, "test-finalizer")
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(ctx, cluster, metav1.UpdateOptions{})
+				return err
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.Succeed())
+
+			// Delete the ManagedCluster to set deletion timestamp
+			helper.RemoveManagedCluster(ctx, hubClusterClient, cluster1)
+
+			// The controller should clean up resources when cluster has deletion timestamp
+			gomega.Eventually(func() bool {
+				_, err := hubPermissionClient.ApiV1alpha1().ClusterPermissions(cluster1).Get(ctx, "multikueue", metav1.GetOptions{})
+				return errors.IsNotFound(err) // Resource should be cleaned up
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
+			// Assert MultiKueueCluster is deleted
+			gomega.Eventually(func() bool {
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				return errors.IsNotFound(err)
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
+			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{})
+
+			// Remove the finalizer to allow cluster to be fully deleted
+			gomega.Eventually(func() error {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				cluster.Finalizers = []string{}
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(ctx, cluster, metav1.UpdateOptions{})
+				return err
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.Succeed())
+		})
+
+		ginkgo.It("should delete MultiKueueCluster when synced secret is deleted", func() {
+			// Simulate ClusterProfile creation
+			helper.CreateClusterProfile(ctx, hubCPClient, cluster1, kueueNamespace)
+
+			// Simulate synced secret creation
+			helper.CreateClusterProfileSecret(ctx, hubKubeClient, cluster1, kueueNamespace)
+
+			// Wait for MultiKueueCluster to be created
+			gomega.Eventually(func() bool {
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				return err == nil
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
+			// Delete synced secret
+			secretName := fmt.Sprintf("%s-%s", cluster1, common.MultiKueueResourceName)
+			err := hubKubeClient.CoreV1().Secrets(kueueNamespace).Delete(ctx, secretName, metav1.DeleteOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			// Assert MultiKueueCluster is deleted
+			gomega.Eventually(func() bool {
+				_, err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, cluster1, metav1.GetOptions{})
+				return errors.IsNotFound(err)
+			}, eventuallyTimeout, eventuallyInterval).Should(gomega.BeTrue())
+
 			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{})
 		})
 	})
