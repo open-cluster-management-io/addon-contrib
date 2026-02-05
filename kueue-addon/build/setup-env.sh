@@ -8,7 +8,7 @@ set -euo pipefail
 CLEAN=false
 E2E_MODE=false
 IMPERSONATION=false
-KUEUE_VERSION="v0.11.9"
+KUEUE_VERSION="v0.16.0"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --clean)
@@ -53,7 +53,8 @@ all_ctx=(${hubctx} ${spoke_ctx[@]})
 kueue_manifest="https://github.com/kubernetes-sigs/kueue/releases/download/${KUEUE_VERSION}/manifests.yaml"
 jobset_manifest="https://github.com/kubernetes-sigs/jobset/releases/download/v0.7.1/manifests.yaml"
 mpi_operator_manifest="https://raw.githubusercontent.com/kubeflow/mpi-operator/master/deploy/v2beta1/mpi-operator.yaml"
-training_operator_kustomize="github.com/kubeflow/training-operator.git/manifests/overlays/standalone?ref=v1.8.1"
+training_operator_kustomize="github.com/kubeflow/training-operator.git/manifests/overlays/standalone?ref=v1.9.3"
+trainer_controlplane_kustomize="https://github.com/kubeflow/trainer.git/manifests/overlays/manager?ref=v2.1.0"
 ray_operator_crd_manifest="github.com/ray-project/kuberay/ray-operator/config/crd?ref=v1.3.0"
 appwrapper_manifest="https://github.com/project-codeflare/appwrapper/releases/download/v1.1.2/install.yaml"
 
@@ -75,8 +76,8 @@ create_clusters() {
 
 # Function to setup OCM
 setup_ocm() {
-  echo "Initialize the ocm hub cluster"
-  clusteradm init --wait --context ${hubctx}
+    echo "Initialize the ocm hub cluster"
+    clusteradm init --wait --context ${hubctx}
   joincmd=$(clusteradm get token --context ${hubctx} | grep clusteradm)
 
   echo "Join clusters to hub"
@@ -100,6 +101,7 @@ install_kueue() {
       kubectl apply --server-side -f "$kueue_manifest" --context "$ctx"
       echo "waiting for kueue-system pods to be ready"
       kubectl wait --for=condition=Ready pods --all -n kueue-system --timeout=300s --context "$ctx"
+      sleep 5s # sleep 5 seconds for the kueue-webhook-service ready
       kubectl apply --server-side -f "$jobset_manifest" --context "$ctx"
   done
 
@@ -108,6 +110,7 @@ install_kueue() {
       kubectl apply --server-side -f "$mpi_operator_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$appwrapper_manifest" --context "$ctx" || true
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true
+      kubectl apply --server-side -k "$trainer_controlplane_kustomize" --context "$ctx" || true
       kubectl apply --server-side -k "$ray_operator_crd_manifest" --context "$ctx" || true
   done
 }
@@ -172,27 +175,27 @@ install_ocm_addons() {
   kubectl config use-context ${hubctx}
 
   echo "Add ocm helm repo"
-  helm repo add ocm https://open-cluster-management.io/helm-charts/
+  helm repo add ocm https://open-cluster-management.io/helm-charts/ --force-update
   helm repo update
 
-  echo "Install managed-serviceaccount"
-  helm upgrade --install \
-     -n open-cluster-management-addon --create-namespace \
-     managed-serviceaccount ocm/managed-serviceaccount \
-     --set featureGates.ephemeralIdentity=true \
-     --set enableAddOnDeploymentConfig=true \
-     --set hubDeployMode=AddOnTemplate
-
-  if [[ "$IMPERSONATION" == "true" ]]; then
-    echo "Install cluster-proxy with impersonation mode"
-    install_cluster_proxy_with_impersonation
-  else
-    echo "Install cluster-proxy"
+    echo "Install managed-serviceaccount"
     helm upgrade --install \
-      -n open-cluster-management-addon --create-namespace \
-      cluster-proxy ocm/cluster-proxy \
-      --set installByPlacement.placementName=global \
-      --set installByPlacement.placementNamespace=open-cluster-management-addon
+       -n open-cluster-management-addon --create-namespace \
+       managed-serviceaccount ocm/managed-serviceaccount \
+       --set featureGates.ephemeralIdentity=true \
+       --set enableAddOnDeploymentConfig=true \
+       --set hubDeployMode=AddOnTemplate
+
+    if [[ "$IMPERSONATION" == "true" ]]; then
+      echo "Install cluster-proxy with impersonation mode"
+      install_cluster_proxy_with_impersonation
+    else
+      echo "Install cluster-proxy"
+      helm upgrade --install \
+        -n open-cluster-management-addon --create-namespace \
+        cluster-proxy ocm/cluster-proxy \
+        --set installByPlacement.placementName=global \
+        --set installByPlacement.placementNamespace=open-cluster-management-addon
   fi
 
   echo "Install cluster-permission"

@@ -304,7 +304,7 @@ Example OCM AdmissionCheck CR:
 # OCM implements an admissioncheck controller to automate the MultiKueue setup process.
 # Leverages OCM's placement mechanism to select clusters based on specific criteria. 
 # MultiKueueConfigs and MultiKueueClusters are generated dynamically based on OCM placement decisions.
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-config-demo2
@@ -322,7 +322,7 @@ spec:
 Admins manually create both `MultiKueueConfig` (listing clusters) and a `MultiKueueCluster` (with kubeconfig secret) for each cluster.
 
 ```yaml
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueConfig
 metadata:
   name: multikueue-config-demo1
@@ -331,23 +331,25 @@ spec:
   - multikueue-config-demo1-cluster1
   - multikueue-config-demo1-cluster2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueCluster
 metadata:
   name: multikueue-config-demo1-cluster1
 spec:
-  kubeConfig:
-    locationType: Secret
-    location: multikueue-cluster1
+  clusterSource:
+    kubeConfig:
+      locationType: Secret
+      location: multikueue-cluster1
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueCluster
 metadata:
   name: multikueue-config-demo1-cluster2
 spec:
-  kubeConfig:
-    locationType: Secret
-    location: multikueue-cluster2
+  clusterSource:
+    kubeConfig:
+      locationType: Secret
+      location: multikueue-cluster2
 ```
 
 **After:**
@@ -355,17 +357,18 @@ spec:
 Admins only need to add `AdmissionChecks` to the `ClusterQueue`. The controller automates `MultiKueueConfig` and `MultiKueueCluster` creation based on `Placement` decisions.
 
 ```yaml
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: ClusterQueue
 metadata:
   name: "cluster-queue"
 spec:
 ...
-  admissionChecks:
-  - multikueue-demo2
-  - multikueue-config-demo2
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: multikueue-demo2
+    - name: multikueue-config-demo2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-demo2
@@ -376,7 +379,7 @@ spec:
     kind: MultiKueueConfig
     name: multikueue-config-demo2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-config-demo2

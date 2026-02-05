@@ -50,6 +50,34 @@ rules:
         print(f"YAML content: {yaml_content}")
         return None
 
+def merge_rules(existing_rules, new_rules):
+    """Merge new rules with existing rules, avoiding duplicates."""
+    # Create a set to track unique rules
+    rules_dict = {}
+
+    # Add existing rules first (to preserve custom rules)
+    for rule in existing_rules:
+        key = (
+            tuple(sorted(rule.get('apiGroups', []))),
+            tuple(sorted(rule.get('resources', []))),
+            tuple(sorted(rule.get('verbs', [])))
+        )
+        rules_dict[key] = rule
+
+    # Add/update with new rules from Kueue
+    for rule in new_rules:
+        key = (
+            tuple(sorted(rule.get('apiGroups', []))),
+            tuple(sorted(rule.get('resources', []))),
+            tuple(sorted(rule.get('verbs', [])))
+        )
+        # Only add if it's a new rule (preserves custom rules)
+        if key not in rules_dict:
+            rules_dict[key] = rule
+
+    # Convert back to list
+    return list(rules_dict.values())
+
 def update_cluster_permission_file(file_path, new_rules):
     """Update the cluster-permission.yaml file with new rules."""
     try:
@@ -58,14 +86,18 @@ def update_cluster_permission_file(file_path, new_rules):
     except (yaml.YAMLError, FileNotFoundError) as e:
         print(f"Error reading cluster-permission.yaml: {e}")
         return False
-    
+
     # Update the rules section
     if 'spec' in content and 'clusterRole' in content['spec']:
-        content['spec']['clusterRole']['rules'] = new_rules['rules']
+        existing_rules = content['spec']['clusterRole']['rules']
+        merged_rules = merge_rules(existing_rules, new_rules['rules'])
+        content['spec']['clusterRole']['rules'] = merged_rules
+        print(f"Merged {len(new_rules['rules'])} Kueue rules with {len(existing_rules)} existing rules")
+        print(f"Total unique rules: {len(merged_rules)}")
     else:
         print("Invalid cluster-permission.yaml structure")
         return False
-    
+
     # Write back to file
     try:
         with open(file_path, 'w') as f:

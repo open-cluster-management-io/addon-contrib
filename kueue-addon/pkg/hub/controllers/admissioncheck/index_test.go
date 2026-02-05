@@ -6,7 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueuefake "sigs.k8s.io/kueue/client-go/clientset/versioned/fake"
 	kueueinformers "sigs.k8s.io/kueue/client-go/informers/externalversions"
 
@@ -23,10 +23,10 @@ func TestIndexAdmissionCheckByPlacement(t *testing.T) {
 	}{
 		{
 			name: "valid admission check",
-			obj: &kueuev1beta1.AdmissionCheck{
-				Spec: kueuev1beta1.AdmissionCheckSpec{
+			obj: &kueuev1beta2.AdmissionCheck{
+				Spec: kueuev1beta2.AdmissionCheckSpec{
 					ControllerName: common.AdmissionCheckControllerName,
-					Parameters: &kueuev1beta1.AdmissionCheckParametersReference{
+					Parameters: &kueuev1beta2.AdmissionCheckParametersReference{
 						Name: "placement1",
 					},
 				},
@@ -40,8 +40,8 @@ func TestIndexAdmissionCheckByPlacement(t *testing.T) {
 		},
 		{
 			name: "wrong controller name",
-			obj: &kueuev1beta1.AdmissionCheck{
-				Spec: kueuev1beta1.AdmissionCheckSpec{
+			obj: &kueuev1beta2.AdmissionCheck{
+				Spec: kueuev1beta2.AdmissionCheckSpec{
 					ControllerName: "wrong-controller",
 				},
 			},
@@ -68,9 +68,9 @@ func TestIndexAdmissionCheckByPlacement(t *testing.T) {
 }
 
 func TestAdmissionCheckByPlacementQueueKey(t *testing.T) {
-	kueueClient := kueuefake.NewSimpleClientset()
+	kueueClient := kueuefake.NewClientset()
 	kueueInformerFactory := kueueinformers.NewSharedInformerFactory(kueueClient, 5*time.Minute)
-	admissionCheckInformer := kueueInformerFactory.Kueue().V1beta1().AdmissionChecks()
+	admissionCheckInformer := kueueInformerFactory.Kueue().V1beta2().AdmissionChecks()
 	if err := admissionCheckInformer.Informer().AddIndexers(cache.Indexers{
 		AdmissionCheckByPlacement: IndexAdmissionCheckByPlacement,
 	}); err != nil {
@@ -95,9 +95,9 @@ func TestAdmissionCheckByPlacementQueueKey(t *testing.T) {
 }
 
 func TestAdmissionCheckByPlacementDecisionQueueKey(t *testing.T) {
-	kueueClient := kueuefake.NewSimpleClientset()
+	kueueClient := kueuefake.NewClientset()
 	kueueInformerFactory := kueueinformers.NewSharedInformerFactory(kueueClient, 5*time.Minute)
-	admissionCheckInformer := kueueInformerFactory.Kueue().V1beta1().AdmissionChecks()
+	admissionCheckInformer := kueueInformerFactory.Kueue().V1beta2().AdmissionChecks()
 	if err := admissionCheckInformer.Informer().AddIndexers(cache.Indexers{
 		AdmissionCheckByPlacement: IndexAdmissionCheckByPlacement,
 	}); err != nil {

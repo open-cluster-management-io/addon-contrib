@@ -29,12 +29,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Setup kind
         uses: engineerd/setup-kind@v0.6.2
         with:
-          version: v0.24.0
+          version: v0.31.0
 
       - name: Setup Kubectl
         uses: azure/setup-kubectl@v3

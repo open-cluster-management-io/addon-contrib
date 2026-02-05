@@ -33,6 +33,38 @@ spec:
       - list
       - watch
     - apiGroups:
+      - apps
+      resources:
+      - statefulsets
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - apps
+      resources:
+      - statefulsets/status
+      verbs:
+      - get
+    - apiGroups:
+      - leaderworkerset.x-k8s.io
+      resources:
+      - leaderworkersets
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - leaderworkerset.x-k8s.io
+      resources:
+      - leaderworkersets/status
+      verbs:
+      - get
+    - apiGroups:
       - jobset.x-k8s.io
       resources:
       - jobsets
@@ -144,6 +176,38 @@ spec:
       - kubeflow.org
       resources:
       - mpijobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - jaxjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - kubeflow.org
+      resources:
+      - jaxjobs/status
+      verbs:
+      - get
+    - apiGroups:
+      - trainer.kubeflow.org
+      resources:
+      - trainjobs
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - trainer.kubeflow.org
+      resources:
+      - trainjobs/status
       verbs:
       - get
     - apiGroups:
