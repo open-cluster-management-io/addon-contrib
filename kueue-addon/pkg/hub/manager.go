@@ -90,7 +90,7 @@ func RunControllerManagerWithInformers(
 	msaInformers msainformer.SharedInformerFactory,
 	kueueInformers kueueinformers.SharedInformerFactory,
 ) error {
-	err := kueueInformers.Kueue().V1beta1().AdmissionChecks().Informer().AddIndexers(
+	err := kueueInformers.Kueue().V1beta2().AdmissionChecks().Informer().AddIndexers(
 		cache.Indexers{
 			admissioncheck.AdmissionCheckByPlacement: admissioncheck.IndexAdmissionCheckByPlacement,
 		})
@@ -104,7 +104,7 @@ func RunControllerManagerWithInformers(
 		kueueClient,
 		clusterInformers.Cluster().V1beta1().Placements(),
 		clusterInformers.Cluster().V1beta1().PlacementDecisions(),
-		kueueInformers.Kueue().V1beta1().AdmissionChecks(),
+		kueueInformers.Kueue().V1beta2().AdmissionChecks(),
 		controllerContext.EventRecorder,
 	)
 
@@ -114,7 +114,7 @@ func RunControllerManagerWithInformers(
 		secretInformers.Core().V1().Secrets(),
 		clusterInformers.Cluster().V1().ManagedClusters(),
 		permissionInformers.Api().V1alpha1().ClusterPermissions(),
-		kueueInformers.Kueue().V1beta1().MultiKueueClusters(),
+		kueueInformers.Kueue().V1beta2().MultiKueueClusters(),
 		controllerContext.EventRecorder,
 	)
 

@@ -120,12 +120,12 @@ func cleanupTestResources() {
 
 	// Delete workloads
 	for _, job := range jobs.Items {
-		workloads, err := hubKueueClient.KueueV1beta1().Workloads("default").List(ctx, metav1.ListOptions{
+		workloads, err := hubKueueClient.KueueV1beta2().Workloads("default").List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", job.UID),
 		})
 		if err == nil {
 			for _, workload := range workloads.Items {
-				err := hubKueueClient.KueueV1beta1().Workloads("default").Delete(ctx, workload.Name, metav1.DeleteOptions{})
+				err := hubKueueClient.KueueV1beta2().Workloads("default").Delete(ctx, workload.Name, metav1.DeleteOptions{})
 				if err != nil {
 					fmt.Printf("Error deleting workload %s: %v\n", workload.Name, err)
 				}
@@ -134,12 +134,12 @@ func cleanupTestResources() {
 	}
 
 	// Delete ResourceFlavors
-	flavors, err := hubKueueClient.KueueV1beta1().ResourceFlavors().List(ctx, metav1.ListOptions{
+	flavors, err := hubKueueClient.KueueV1beta2().ResourceFlavors().List(ctx, metav1.ListOptions{
 		LabelSelector: "test-scenario",
 	})
 	if err == nil {
 		for _, flavor := range flavors.Items {
-			err := hubKueueClient.KueueV1beta1().ResourceFlavors().Delete(ctx, flavor.Name, metav1.DeleteOptions{})
+			err := hubKueueClient.KueueV1beta2().ResourceFlavors().Delete(ctx, flavor.Name, metav1.DeleteOptions{})
 			if err != nil {
 				fmt.Printf("Error deleting resource flavor %s: %v\n", flavor.Name, err)
 			}
@@ -147,12 +147,12 @@ func cleanupTestResources() {
 	}
 
 	// Delete ClusterQueues
-	queues, err := hubKueueClient.KueueV1beta1().ClusterQueues().List(ctx, metav1.ListOptions{
+	queues, err := hubKueueClient.KueueV1beta2().ClusterQueues().List(ctx, metav1.ListOptions{
 		LabelSelector: "test-scenario",
 	})
 	if err == nil {
 		for _, queue := range queues.Items {
-			err := hubKueueClient.KueueV1beta1().ClusterQueues().Delete(ctx, queue.Name, metav1.DeleteOptions{})
+			err := hubKueueClient.KueueV1beta2().ClusterQueues().Delete(ctx, queue.Name, metav1.DeleteOptions{})
 			if err != nil {
 				fmt.Printf("Error deleting cluster queue %s: %v\n", queue.Name, err)
 			}
@@ -160,12 +160,12 @@ func cleanupTestResources() {
 	}
 
 	// Delete LocalQueues
-	localQueues, err := hubKueueClient.KueueV1beta1().LocalQueues("default").List(ctx, metav1.ListOptions{
+	localQueues, err := hubKueueClient.KueueV1beta2().LocalQueues("default").List(ctx, metav1.ListOptions{
 		LabelSelector: "test-scenario",
 	})
 	if err == nil {
 		for _, queue := range localQueues.Items {
-			err := hubKueueClient.KueueV1beta1().LocalQueues("default").Delete(ctx, queue.Name, metav1.DeleteOptions{})
+			err := hubKueueClient.KueueV1beta2().LocalQueues("default").Delete(ctx, queue.Name, metav1.DeleteOptions{})
 			if err != nil {
 				fmt.Printf("Error deleting local queue %s: %v\n", queue.Name, err)
 			}
@@ -173,12 +173,12 @@ func cleanupTestResources() {
 	}
 
 	// Delete AdmissionChecks
-	checks, err := hubKueueClient.KueueV1beta1().AdmissionChecks().List(ctx, metav1.ListOptions{
+	checks, err := hubKueueClient.KueueV1beta2().AdmissionChecks().List(ctx, metav1.ListOptions{
 		LabelSelector: "test-scenario",
 	})
 	if err == nil {
 		for _, check := range checks.Items {
-			err := hubKueueClient.KueueV1beta1().AdmissionChecks().Delete(ctx, check.Name, metav1.DeleteOptions{})
+			err := hubKueueClient.KueueV1beta2().AdmissionChecks().Delete(ctx, check.Name, metav1.DeleteOptions{})
 			if err != nil {
 				fmt.Printf("Error deleting admission check %s: %v\n", check.Name, err)
 			}

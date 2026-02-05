@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueuefake "sigs.k8s.io/kueue/client-go/clientset/versioned/fake"
 	kueueinformers "sigs.k8s.io/kueue/client-go/informers/externalversions"
 
@@ -70,17 +70,17 @@ func newPlacementDecision(name, namespace, placementName string, clusterNames ..
 	}
 }
 
-func newAdmissionCheck(name, placementName string) *kueuev1beta1.AdmissionCheck {
-	return &kueuev1beta1.AdmissionCheck{
+func newAdmissionCheck(name, placementName string) *kueuev1beta2.AdmissionCheck {
+	return &kueuev1beta2.AdmissionCheck{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Finalizers: []string{
 				admissionCheckFinalizerName,
 			},
 		},
-		Spec: kueuev1beta1.AdmissionCheckSpec{
+		Spec: kueuev1beta2.AdmissionCheckSpec{
 			ControllerName: common.AdmissionCheckControllerName,
-			Parameters: &kueuev1beta1.AdmissionCheckParametersReference{
+			Parameters: &kueuev1beta2.AdmissionCheckParametersReference{
 				APIGroup: "cluster.open-cluster-management.io",
 				Kind:     "Placement",
 				Name:     placementName,
@@ -134,9 +134,9 @@ func TestSync(t *testing.T) {
 			},
 			kueueObjects: []runtime.Object{
 				newAdmissionCheck("ac1", "placement1"),
-				&kueuev1beta1.MultiKueueConfig{
+				&kueuev1beta2.MultiKueueConfig{
 					ObjectMeta: metav1.ObjectMeta{Name: "placement1"},
-					Spec:       kueuev1beta1.MultiKueueConfigSpec{Clusters: []string{"cluster1", "cluster2"}}, // should be updated to only cluster1
+					Spec:       kueuev1beta2.MultiKueueConfigSpec{Clusters: []string{"cluster1", "cluster2"}}, // should be updated to only cluster1
 				},
 			},
 			expectedMKConfigClusters: 1, // Only cluster1 should remain in config
@@ -147,14 +147,14 @@ func TestSync(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			clusterClient := clusterfake.NewSimpleClientset(c.clusterObjects...)
-			kueueClient := kueuefake.NewSimpleClientset(c.kueueObjects...)
+			kueueClient := kueuefake.NewSimpleClientset(c.kueueObjects...) //nolint:staticcheck // SA1019: deprecated but required for kueue v0.16.0
 
 			clusterInformerFactory := clusterinformers.NewSharedInformerFactory(clusterClient, 5*time.Minute)
 			kueueInformerFactory := kueueinformers.NewSharedInformerFactory(kueueClient, 5*time.Minute)
 
 			placementInformer := clusterInformerFactory.Cluster().V1beta1().Placements()
 			placementDecisionInformer := clusterInformerFactory.Cluster().V1beta1().PlacementDecisions()
-			admissionCheckInformer := kueueInformerFactory.Kueue().V1beta1().AdmissionChecks()
+			admissionCheckInformer := kueueInformerFactory.Kueue().V1beta2().AdmissionChecks()
 			if err := admissionCheckInformer.Informer().AddIndexers(cache.Indexers{
 				AdmissionCheckByPlacement: IndexAdmissionCheckByPlacement,
 			}); err != nil {
@@ -174,7 +174,7 @@ func TestSync(t *testing.T) {
 				}
 			}
 			for _, obj := range c.kueueObjects {
-				if ac, ok := obj.(*kueuev1beta1.AdmissionCheck); ok {
+				if ac, ok := obj.(*kueuev1beta2.AdmissionCheck); ok {
 					if err := admissionCheckInformer.Informer().GetStore().Add(ac); err != nil {
 						t.Fatalf("failed to add admission check to store: %v", err)
 					}
@@ -187,7 +187,7 @@ func TestSync(t *testing.T) {
 				placementLister:         placementInformer.Lister(),
 				placementDecisionGetter: helpers.PlacementDecisionGetter{Client: placementDecisionInformer.Lister()},
 				admissioncheckLister:    admissionCheckInformer.Lister(),
-				admissioncheckPatcher:   patcher.NewPatcher[*kueuev1beta1.AdmissionCheck, kueuev1beta1.AdmissionCheckSpec, kueuev1beta1.AdmissionCheckStatus](kueueClient.KueueV1beta1().AdmissionChecks()),
+				admissioncheckPatcher:   patcher.NewPatcher[*kueuev1beta2.AdmissionCheck, kueuev1beta2.AdmissionCheckSpec, kueuev1beta2.AdmissionCheckStatus](kueueClient.KueueV1beta2().AdmissionChecks()),
 				eventRecorder:           events.NewInMemoryRecorder("test", clock.RealClock{}),
 			}
 
@@ -207,7 +207,7 @@ func TestSync(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			mkconfigs, _ := kueueClient.KueueV1beta1().MultiKueueConfigs().List(context.TODO(), metav1.ListOptions{})
+			mkconfigs, _ := kueueClient.KueueV1beta2().MultiKueueConfigs().List(context.TODO(), metav1.ListOptions{})
 			if len(mkconfigs.Items) > 0 {
 				if len(mkconfigs.Items[0].Spec.Clusters) != c.expectedMKConfigClusters {
 					t.Errorf("expected %d clusters in multikueue config, but got %d", c.expectedMKConfigClusters, len(mkconfigs.Items[0].Spec.Clusters))
@@ -217,7 +217,7 @@ func TestSync(t *testing.T) {
 			}
 
 			if c.expectedStatusCondition {
-				ac, _ := kueueClient.KueueV1beta1().AdmissionChecks().Get(context.TODO(), c.admissionCheckName, metav1.GetOptions{})
+				ac, _ := kueueClient.KueueV1beta2().AdmissionChecks().Get(context.TODO(), c.admissionCheckName, metav1.GetOptions{})
 				if len(ac.Status.Conditions) == 0 {
 					t.Errorf("expected admission check status condition to be updated, but it was not")
 				}

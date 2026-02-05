@@ -8,8 +8,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
-	kueueinformerv1beta1 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
+	kueueinformerv1beta2 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta2"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
@@ -22,7 +22,7 @@ const (
 
 // IndexAdmissionCheckByPlacement indexes admission checks by their associated placement
 func IndexAdmissionCheckByPlacement(obj interface{}) ([]string, error) {
-	ac, ok := obj.(*kueuev1beta1.AdmissionCheck)
+	ac, ok := obj.(*kueuev1beta2.AdmissionCheck)
 	if !ok {
 		return []string{}, fmt.Errorf("obj %T is not a valid ocm admission check", obj)
 	}
@@ -39,7 +39,7 @@ func IndexAdmissionCheckByPlacement(obj interface{}) ([]string, error) {
 // AdmissionCheckByPlacementQueueKey returns a function that generates queue keys for admission checks
 // based on placement changes
 func AdmissionCheckByPlacementQueueKey(
-	aci kueueinformerv1beta1.AdmissionCheckInformer) func(obj runtime.Object) []string {
+	aci kueueinformerv1beta2.AdmissionCheckInformer) func(obj runtime.Object) []string {
 	return func(obj runtime.Object) []string {
 		key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 		if err != nil {
@@ -55,7 +55,7 @@ func AdmissionCheckByPlacementQueueKey(
 
 		keys := make([]string, 0, len(objs))
 		for _, o := range objs {
-			ac := o.(*kueuev1beta1.AdmissionCheck)
+			ac := o.(*kueuev1beta2.AdmissionCheck)
 			klog.V(4).Info("enqueue admission check", "admissionCheck", ac.Name, "placement", key)
 			keys = append(keys, ac.Name)
 		}
@@ -67,7 +67,7 @@ func AdmissionCheckByPlacementQueueKey(
 // AdmissionCheckByPlacementDecisionQueueKey returns a function that generates queue keys for admission checks
 // based on placement decision changes
 func AdmissionCheckByPlacementDecisionQueueKey(
-	aci kueueinformerv1beta1.AdmissionCheckInformer) func(obj runtime.Object) []string {
+	aci kueueinformerv1beta2.AdmissionCheckInformer) func(obj runtime.Object) []string {
 	return func(obj runtime.Object) []string {
 		accessor, _ := meta.Accessor(obj)
 		placementName, ok := accessor.GetLabels()[clusterv1beta1.PlacementLabel]
@@ -84,7 +84,7 @@ func AdmissionCheckByPlacementDecisionQueueKey(
 
 		keys := make([]string, 0, len(objs))
 		for _, o := range objs {
-			ac := o.(*kueuev1beta1.AdmissionCheck)
+			ac := o.(*kueuev1beta2.AdmissionCheck)
 			klog.V(4).Info("enqueue admission check",
 				"admissionCheck", ac.Name,
 				"placementDecision", fmt.Sprintf("%s/%s", accessor.GetNamespace(), accessor.GetName()))

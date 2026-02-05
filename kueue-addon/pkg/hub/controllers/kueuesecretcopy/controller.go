@@ -19,9 +19,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
-	kueueinformerv1beta1 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta1"
+	kueueinformerv1beta2 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta2"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterinformerv1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1"
@@ -48,7 +48,7 @@ func NewKueueSecretCopyController(
 	secretInformer informerv1.SecretInformer,
 	clusterInformer clusterinformerv1.ManagedClusterInformer,
 	permissionInformers permissioninformer.ClusterPermissionInformer,
-	mkclusterInformer kueueinformerv1beta1.MultiKueueClusterInformer,
+	mkclusterInformer kueueinformerv1beta2.MultiKueueClusterInformer,
 	recorder events.Recorder) factory.Controller {
 	c := &kueueSecretCopyController{
 		kubeClient:       kubeClient,
@@ -158,7 +158,7 @@ func (c *kueueSecretCopyController) cleanupResources(ctx context.Context, cluste
 		logger.Info("Deleted kubeconfig secret", "secret", kubeconfigSecretName, "namespace", common.KueueNamespace)
 	}
 
-	err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
+	err = c.kueueClient.KueueV1beta2().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete MultiKueueCluster %s: %v", clusterName, err)
 	}
@@ -337,26 +337,28 @@ users:
 }
 
 func (c *kueueSecretCopyController) createOrUpdateMultiKueueCluster(ctx context.Context, clusterName string) error {
-	mkCluster := &kueuev1beta1.MultiKueueCluster{
+	mkCluster := &kueuev1beta2.MultiKueueCluster{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterName},
-		Spec: kueuev1beta1.MultiKueueClusterSpec{
-			KubeConfig: kueuev1beta1.KubeConfig{
-				LocationType: kueuev1beta1.SecretLocationType,
-				Location:     common.GetMultiKueueSecretName(clusterName),
+		Spec: kueuev1beta2.MultiKueueClusterSpec{
+			ClusterSource: kueuev1beta2.ClusterSource{
+				KubeConfig: &kueuev1beta2.KubeConfig{
+					LocationType: kueuev1beta2.SecretLocationType,
+					Location:     common.GetMultiKueueSecretName(clusterName),
+				},
 			},
 		},
 	}
 
-	oldmkcluster, err := c.kueueClient.KueueV1beta1().MultiKueueClusters().Get(ctx, mkCluster.Name, metav1.GetOptions{})
+	oldmkcluster, err := c.kueueClient.KueueV1beta2().MultiKueueClusters().Get(ctx, mkCluster.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		_, err = c.kueueClient.KueueV1beta1().MultiKueueClusters().Create(ctx, mkCluster, metav1.CreateOptions{})
+		_, err = c.kueueClient.KueueV1beta2().MultiKueueClusters().Create(ctx, mkCluster, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
 		return err
 	}
 
-	mkclusterPatcher := patcher.NewPatcher[*kueuev1beta1.MultiKueueCluster, kueuev1beta1.MultiKueueClusterSpec, kueuev1beta1.MultiKueueClusterStatus](c.kueueClient.KueueV1beta1().MultiKueueClusters())
+	mkclusterPatcher := patcher.NewPatcher[*kueuev1beta2.MultiKueueCluster, kueuev1beta2.MultiKueueClusterSpec, kueuev1beta2.MultiKueueClusterStatus](c.kueueClient.KueueV1beta2().MultiKueueClusters())
 	_, err = mkclusterPatcher.PatchSpec(ctx, mkCluster, mkCluster.Spec, oldmkcluster.Spec)
 	return err
 }

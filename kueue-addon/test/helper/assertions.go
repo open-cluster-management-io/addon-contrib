@@ -17,7 +17,7 @@ import (
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
 
@@ -31,7 +31,7 @@ const (
 func AssertMultiKueueConfigClusters(ctx context.Context, client kueueclientset.Interface, configName string, expectedClusters []string) {
 	ginkgo.By(fmt.Sprintf("Asserting MultiKueueConfig %s has clusters %v", configName, expectedClusters))
 	gomega.Eventually(func() error {
-		config, err := client.KueueV1beta1().MultiKueueConfigs().Get(ctx, configName, metav1.GetOptions{})
+		config, err := client.KueueV1beta2().MultiKueueConfigs().Get(ctx, configName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get MultiKueueConfig %s: %v", configName, err)
 		}
@@ -53,7 +53,7 @@ func AssertMultiKueueConfigClusters(ctx context.Context, client kueueclientset.I
 func AssertMultiKueueConfigNotExists(ctx context.Context, client kueueclientset.Interface, configName string) {
 	ginkgo.By(fmt.Sprintf("Asserting MultiKueueConfig %s does not exist", configName))
 	gomega.Eventually(func() bool {
-		_, err := client.KueueV1beta1().MultiKueueConfigs().Get(ctx, configName, metav1.GetOptions{})
+		_, err := client.KueueV1beta2().MultiKueueConfigs().Get(ctx, configName, metav1.GetOptions{})
 		return errors.IsNotFound(err)
 	}, DefaultTimeout, DefaultInterval).Should(gomega.BeTrue())
 }
@@ -62,7 +62,7 @@ func AssertMultiKueueConfigNotExists(ctx context.Context, client kueueclientset.
 func AssertMultiKueueClustersExists(ctx context.Context, client kueueclientset.Interface, expectedClusters []string) {
 	ginkgo.By(fmt.Sprintf("Asserting MultiKueueClusters exist with clusters %v", expectedClusters))
 	gomega.Eventually(func() error {
-		mkclusters, err := client.KueueV1beta1().MultiKueueClusters().List(ctx, metav1.ListOptions{})
+		mkclusters, err := client.KueueV1beta2().MultiKueueClusters().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to list MultiKueueClusters: %v", err)
 		}
@@ -90,7 +90,7 @@ func AssertMultiKueueClustersExists(ctx context.Context, client kueueclientset.I
 func AssertMultiKueueClusterActive(ctx context.Context, client kueueclientset.Interface, clusterName string) {
 	ginkgo.By(fmt.Sprintf("Asserting MultiKueueCluster %s is Active", clusterName))
 	gomega.Eventually(func() bool {
-		cluster, err := client.KueueV1beta1().MultiKueueClusters().Get(ctx, clusterName, metav1.GetOptions{})
+		cluster, err := client.KueueV1beta2().MultiKueueClusters().Get(ctx, clusterName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -107,7 +107,7 @@ func AssertMultiKueueClusterActive(ctx context.Context, client kueueclientset.In
 func AssertAdmissionCheckConditionStatus(ctx context.Context, client kueueclientset.Interface, acName string, status metav1.ConditionStatus) {
 	ginkgo.By(fmt.Sprintf("Asserting AdmissionCheck %s has condition Active=%s", acName, status))
 	gomega.Eventually(func() error {
-		ac, err := client.KueueV1beta1().AdmissionChecks().Get(ctx, acName, metav1.GetOptions{})
+		ac, err := client.KueueV1beta2().AdmissionChecks().Get(ctx, acName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get AdmissionCheck %s: %v", acName, err)
 		}
@@ -138,7 +138,7 @@ func AssertAdmissionCheckConditionFalse(ctx context.Context, client kueueclients
 func AssertClusterQueueReady(ctx context.Context, client kueueclientset.Interface, queueName string) {
 	ginkgo.By(fmt.Sprintf("Asserting ClusterQueue %s is Ready", queueName))
 	gomega.Eventually(func() bool {
-		queue, err := client.KueueV1beta1().ClusterQueues().Get(ctx, queueName, metav1.GetOptions{})
+		queue, err := client.KueueV1beta2().ClusterQueues().Get(ctx, queueName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -155,7 +155,7 @@ func AssertClusterQueueReady(ctx context.Context, client kueueclientset.Interfac
 func AssertWorkloadAdmitted(ctx context.Context, client kueueclientset.Interface, jobUID types.UID, expectedCluster string) {
 	ginkgo.By(fmt.Sprintf("Asserting workload for job %s is admitted on cluster %s", jobUID, expectedCluster))
 	gomega.Eventually(func() bool {
-		workloads, err := client.KueueV1beta1().Workloads("default").List(ctx, metav1.ListOptions{
+		workloads, err := client.KueueV1beta2().Workloads("default").List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", jobUID),
 		})
 		if err != nil {
@@ -301,13 +301,13 @@ func RemovePlacementWithDecision(ctx context.Context, hubClusterClient clusterv1
 // Helper function to create admission check
 func CreateAdmissionCheck(ctx context.Context, hubKueueClient kueueclientset.Interface, acName, placementName string) {
 	ginkgo.By(fmt.Sprintf("Creating admission check %s for placement %s", acName, placementName))
-	_, err := hubKueueClient.KueueV1beta1().AdmissionChecks().Create(ctx, &kueuev1beta1.AdmissionCheck{
+	_, err := hubKueueClient.KueueV1beta2().AdmissionChecks().Create(ctx, &kueuev1beta2.AdmissionCheck{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: acName,
 		},
-		Spec: kueuev1beta1.AdmissionCheckSpec{
+		Spec: kueuev1beta2.AdmissionCheckSpec{
 			ControllerName: "open-cluster-management.io/placement",
-			Parameters: &kueuev1beta1.AdmissionCheckParametersReference{
+			Parameters: &kueuev1beta2.AdmissionCheckParametersReference{
 				APIGroup: "cluster.open-cluster-management.io",
 				Kind:     "Placement",
 				Name:     placementName,
@@ -320,7 +320,7 @@ func CreateAdmissionCheck(ctx context.Context, hubKueueClient kueueclientset.Int
 // Helper function to remove admission check
 func RemoveAdmissionCheck(ctx context.Context, hubKueueClient kueueclientset.Interface, acName string) {
 	ginkgo.By(fmt.Sprintf("Deleting admission check %s", acName))
-	err := hubKueueClient.KueueV1beta1().AdmissionChecks().Delete(ctx, acName, metav1.DeleteOptions{})
+	err := hubKueueClient.KueueV1beta2().AdmissionChecks().Delete(ctx, acName, metav1.DeleteOptions{})
 	if err != nil {
 		ginkgo.GinkgoWriter.Printf("Failed to delete AdmissionCheck %s: %v\n", acName, err)
 	}
@@ -329,7 +329,7 @@ func RemoveAdmissionCheck(ctx context.Context, hubKueueClient kueueclientset.Int
 // Helper function to remove MultiKueueClusters
 func RemoveMultiKueueClusters(ctx context.Context, hubKueueClient kueueclientset.Interface, clusterName string) {
 	ginkgo.By(fmt.Sprintf("Deleting MultiKueueClusters %s", clusterName))
-	err := hubKueueClient.KueueV1beta1().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
+	err := hubKueueClient.KueueV1beta2().MultiKueueClusters().Delete(ctx, clusterName, metav1.DeleteOptions{})
 	if err != nil {
 		ginkgo.GinkgoWriter.Printf("Failed to delete MultiKueueCluster %s: %v\n", clusterName, err)
 	}

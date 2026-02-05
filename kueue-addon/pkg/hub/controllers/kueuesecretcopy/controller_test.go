@@ -14,7 +14,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueuefake "sigs.k8s.io/kueue/client-go/clientset/versioned/fake"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
@@ -186,7 +186,7 @@ func TestSync(t *testing.T) {
 			clusterObjects:    []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
 			permissionObjects: []runtime.Object{newClusterPermission("cluster1", true)},
 			kueueObjects: []runtime.Object{
-				&kueuev1beta1.MultiKueueCluster{
+				&kueuev1beta2.MultiKueueCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
 				},
 			},
@@ -220,7 +220,7 @@ func TestSync(t *testing.T) {
 			clusterObjects:    []runtime.Object{newManagedCluster("cluster1", "https://test-server")},
 			permissionObjects: []runtime.Object{},
 			kueueObjects: []runtime.Object{
-				&kueuev1beta1.MultiKueueCluster{
+				&kueuev1beta2.MultiKueueCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
 				},
 			},
@@ -332,12 +332,14 @@ func TestSync(t *testing.T) {
 				},
 			},
 			kueueObjects: []runtime.Object{
-				&kueuev1beta1.MultiKueueCluster{
+				&kueuev1beta2.MultiKueueCluster{
 					ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
-					Spec: kueuev1beta1.MultiKueueClusterSpec{
-						KubeConfig: kueuev1beta1.KubeConfig{
-							LocationType: kueuev1beta1.SecretLocationType,
-							Location:     "cluster1",
+					Spec: kueuev1beta2.MultiKueueClusterSpec{
+						ClusterSource: kueuev1beta2.ClusterSource{
+							KubeConfig: &kueuev1beta2.KubeConfig{
+								LocationType: kueuev1beta2.SecretLocationType,
+								Location:     "cluster1",
+							},
 						},
 					},
 				},
@@ -362,9 +364,9 @@ func TestSync(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			kubeClient := fake.NewSimpleClientset(c.kubeObjects...)
+			kubeClient := fake.NewClientset(c.kubeObjects...)
 			clusterClient := clusterfake.NewSimpleClientset(c.clusterObjects...)
-			kueueClient := kueuefake.NewSimpleClientset(c.kueueObjects...)
+			kueueClient := kueuefake.NewSimpleClientset(c.kueueObjects...) //nolint:staticcheck // SA1019: deprecated but required for kueue v0.16.0
 			permissionClient := permissionfake.NewSimpleClientset(c.permissionObjects...)
 
 			secretInformer := corev1informers.NewSecretInformer(kubeClient, metav1.NamespaceAll, 5*time.Minute, nil)
