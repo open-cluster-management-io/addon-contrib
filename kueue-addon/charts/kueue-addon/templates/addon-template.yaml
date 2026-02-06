@@ -43,11 +43,11 @@ spec:
           - kind: ServiceAccount
             name: klusterlet-work-sa
             namespace: open-cluster-management-agent
-        - apiVersion: kueue.x-k8s.io/v1beta1
+        - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ResourceFlavor
           metadata:
             name: {{ .Values.resourceFlavor.name}}
-        - apiVersion: kueue.x-k8s.io/v1beta1
+        - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ClusterQueue
           metadata:
             name: {{ .Values.clusterQueue.name}}
@@ -55,7 +55,7 @@ spec:
             namespaceSelector: {{ .Values.clusterQueue.namespaceSelector  }}
             resourceGroups: 
             {{- toYaml .Values.clusterQueue.resourceGroups | nindent 12 }}
-        - apiVersion: kueue.x-k8s.io/v1beta1
+        - apiVersion: kueue.x-k8s.io/v1beta2
           kind: LocalQueue
           metadata:
             namespace: {{ .Values.localQueue.namespace}}

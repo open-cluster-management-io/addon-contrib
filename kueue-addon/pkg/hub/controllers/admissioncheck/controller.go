@@ -10,10 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
-	kueueinformerv1beta1 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta1"
-	kueuelisterv1beta1 "sigs.k8s.io/kueue/client-go/listers/kueue/v1beta1"
+	kueueinformerv1beta2 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta2"
+	kueuelisterv1beta2 "sigs.k8s.io/kueue/client-go/listers/kueue/v1beta2"
 
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
@@ -37,8 +37,8 @@ type admissioncheckController struct {
 	kueueClient             kueueclient.Interface
 	placementLister         clusterlisterv1beta1.PlacementLister
 	placementDecisionGetter commonhelpers.PlacementDecisionGetter
-	admissioncheckLister    kueuelisterv1beta1.AdmissionCheckLister
-	admissioncheckPatcher   patcher.Patcher[*kueuev1beta1.AdmissionCheck, kueuev1beta1.AdmissionCheckSpec, kueuev1beta1.AdmissionCheckStatus]
+	admissioncheckLister    kueuelisterv1beta2.AdmissionCheckLister
+	admissioncheckPatcher   patcher.Patcher[*kueuev1beta2.AdmissionCheck, kueuev1beta2.AdmissionCheckSpec, kueuev1beta2.AdmissionCheckStatus]
 	eventRecorder           events.Recorder
 }
 
@@ -50,7 +50,7 @@ func NewAdmissionCheckController(
 	kueueClient kueueclient.Interface,
 	placementInformer clusterinformerv1beta1.PlacementInformer,
 	placementDecisionInformer clusterinformerv1beta1.PlacementDecisionInformer,
-	admissionCheckInformer kueueinformerv1beta1.AdmissionCheckInformer,
+	admissionCheckInformer kueueinformerv1beta2.AdmissionCheckInformer,
 	recorder events.Recorder,
 ) factory.Controller {
 	c := &admissioncheckController{
@@ -59,7 +59,7 @@ func NewAdmissionCheckController(
 		placementLister:         placementInformer.Lister(),
 		placementDecisionGetter: commonhelpers.PlacementDecisionGetter{Client: placementDecisionInformer.Lister()},
 		admissioncheckLister:    admissionCheckInformer.Lister(),
-		admissioncheckPatcher:   patcher.NewPatcher[*kueuev1beta1.AdmissionCheck, kueuev1beta1.AdmissionCheckSpec, kueuev1beta1.AdmissionCheckStatus](kueueClient.KueueV1beta1().AdmissionChecks()),
+		admissioncheckPatcher:   patcher.NewPatcher[*kueuev1beta2.AdmissionCheck, kueuev1beta2.AdmissionCheckSpec, kueuev1beta2.AdmissionCheckStatus](kueueClient.KueueV1beta2().AdmissionChecks()),
 		eventRecorder:           recorder.WithComponentSuffix("admission-check-controller"),
 	}
 
@@ -68,7 +68,7 @@ func NewAdmissionCheckController(
 			queue.QueueKeyByMetaName,
 			func(obj interface{}) bool {
 				accessor, _ := meta.Accessor(obj)
-				admissionCheck, _ := accessor.(*kueuev1beta1.AdmissionCheck)
+				admissionCheck, _ := accessor.(*kueuev1beta2.AdmissionCheck)
 				// Filter OCM admission check controller
 				return admissionCheck.Spec.ControllerName == common.AdmissionCheckControllerName
 			},
@@ -116,7 +116,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 		// Placement not found, set condition to False
 		newadmissioncheck := admissionCheck.DeepCopy()
 		meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-			Type:    kueuev1beta1.MultiKueueClusterActive,
+			Type:    kueuev1beta2.MultiKueueClusterActive,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PlacementNotFound",
 			Message: fmt.Sprintf("Placement %s not found", placementName),
@@ -128,7 +128,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 		// Error getting placement, set condition to False
 		newadmissioncheck := admissionCheck.DeepCopy()
 		meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-			Type:    kueuev1beta1.MultiKueueClusterActive,
+			Type:    kueuev1beta2.MultiKueueClusterActive,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PlacementError",
 			Message: fmt.Sprintf("Failed to get placement %s: %v", placementName, err),
@@ -145,7 +145,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 		// Error refreshing placement decision tracker, set condition to False
 		newadmissioncheck := admissionCheck.DeepCopy()
 		meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-			Type:    kueuev1beta1.MultiKueueClusterActive,
+			Type:    kueuev1beta2.MultiKueueClusterActive,
 			Status:  metav1.ConditionFalse,
 			Reason:  "PlacementDecisionError",
 			Message: fmt.Sprintf("Failed to refresh placement decision tracker: %v", err),
@@ -157,9 +157,9 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 
 	// Build desired MultiKueueConfig and MultiKueueCluster set
 	multiKueueConfigName := placementName
-	mkconfig := &kueuev1beta1.MultiKueueConfig{
+	mkconfig := &kueuev1beta2.MultiKueueConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: multiKueueConfigName},
-		Spec: kueuev1beta1.MultiKueueConfigSpec{
+		Spec: kueuev1beta2.MultiKueueConfigSpec{
 			Clusters: []string{},
 		},
 	}
@@ -175,7 +175,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 			// Error creating/updating MultiKueueConfig, set condition to False
 			newadmissioncheck := admissionCheck.DeepCopy()
 			meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-				Type:    kueuev1beta1.MultiKueueClusterActive,
+				Type:    kueuev1beta2.MultiKueueClusterActive,
 				Status:  metav1.ConditionFalse,
 				Reason:  "MultiKueueConfigError",
 				Message: fmt.Sprintf("Failed to create/update multi kueue config %s: %v", mkconfig.Name, err),
@@ -189,7 +189,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 			// Error deleting MultiKueueConfig, set condition to False
 			newadmissioncheck := admissionCheck.DeepCopy()
 			meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-				Type:    kueuev1beta1.MultiKueueClusterActive,
+				Type:    kueuev1beta2.MultiKueueClusterActive,
 				Status:  metav1.ConditionFalse,
 				Reason:  "MultiKueueConfigDeleteError",
 				Message: fmt.Sprintf("Failed to delete multi kueue config %s: %v", multiKueueConfigName, err),
@@ -201,7 +201,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 		// No clusters available, set condition to False
 		newadmissioncheck := admissionCheck.DeepCopy()
 		meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-			Type:    kueuev1beta1.MultiKueueClusterActive,
+			Type:    kueuev1beta2.MultiKueueClusterActive,
 			Status:  metav1.ConditionFalse,
 			Reason:  "NoClustersAvailable",
 			Message: fmt.Sprintf("No clusters available for placement %s", placementName),
@@ -213,7 +213,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 	// Update AdmissionCheck status
 	newadmissioncheck := admissionCheck.DeepCopy()
 	meta.SetStatusCondition(&newadmissioncheck.Status.Conditions, metav1.Condition{
-		Type:    kueuev1beta1.MultiKueueClusterActive,
+		Type:    kueuev1beta2.MultiKueueClusterActive,
 		Status:  metav1.ConditionTrue,
 		Reason:  "Active",
 		Message: fmt.Sprintf("MultiKueueConfig %s is generated successfully", placementName),
@@ -224,7 +224,7 @@ func (c *admissioncheckController) sync(ctx context.Context, syncCtx factory.Syn
 
 // cleanupAdmissionCheckResources cleans up MultiKueueConfig resources
 // associated with the given AdmissionCheck when it's being deleted.
-func (c *admissioncheckController) cleanupAdmissionCheckResources(ctx context.Context, admissionCheck *kueuev1beta1.AdmissionCheck) error {
+func (c *admissioncheckController) cleanupAdmissionCheckResources(ctx context.Context, admissionCheck *kueuev1beta2.AdmissionCheck) error {
 	placementName := admissionCheck.Spec.Parameters.Name
 	logger := klog.FromContext(ctx)
 
@@ -246,24 +246,24 @@ func (c *admissioncheckController) cleanupAdmissionCheckResources(ctx context.Co
 }
 
 // CreateOrUpdateMultiKueueConfig creates or updates the MultiKueueConfig resource to match the desired cluster list.
-func (c *admissioncheckController) createOrUpdateMultiKueueConfig(ctx context.Context, mkconfig *kueuev1beta1.MultiKueueConfig) error {
-	oldmkconfig, err := c.kueueClient.KueueV1beta1().MultiKueueConfigs().Get(ctx, mkconfig.Name, metav1.GetOptions{})
+func (c *admissioncheckController) createOrUpdateMultiKueueConfig(ctx context.Context, mkconfig *kueuev1beta2.MultiKueueConfig) error {
+	oldmkconfig, err := c.kueueClient.KueueV1beta2().MultiKueueConfigs().Get(ctx, mkconfig.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		_, err = c.kueueClient.KueueV1beta1().MultiKueueConfigs().Create(ctx, mkconfig, metav1.CreateOptions{})
+		_, err = c.kueueClient.KueueV1beta2().MultiKueueConfigs().Create(ctx, mkconfig, metav1.CreateOptions{})
 		return err
 	}
 	if err != nil {
 		return err
 	}
 
-	mkconfigPatcher := patcher.NewPatcher[*kueuev1beta1.MultiKueueConfig, kueuev1beta1.MultiKueueConfigSpec, struct{}](c.kueueClient.KueueV1beta1().MultiKueueConfigs())
+	mkconfigPatcher := patcher.NewPatcher[*kueuev1beta2.MultiKueueConfig, kueuev1beta2.MultiKueueConfigSpec, struct{}](c.kueueClient.KueueV1beta2().MultiKueueConfigs())
 	_, err = mkconfigPatcher.PatchSpec(ctx, mkconfig, mkconfig.Spec, oldmkconfig.Spec)
 	return err
 }
 
 // DeleteMultiKueueConfig deletes the MultiKueueConfig resource if it exists.
 func (c *admissioncheckController) deleteMultiKueueConfig(ctx context.Context, configName string) error {
-	err := c.kueueClient.KueueV1beta1().MultiKueueConfigs().Delete(ctx, configName, metav1.DeleteOptions{})
+	err := c.kueueClient.KueueV1beta2().MultiKueueConfigs().Delete(ctx, configName, metav1.DeleteOptions{})
 	if errors.IsNotFound(err) {
 		return nil // Already deleted
 	}

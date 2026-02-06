@@ -3,7 +3,7 @@ name: kueue-addon
 description: A Helm chart for Open Cluster Management Kueue Addon
 type: application
 version: 0.1.4
-appVersion: "0.11.9"
+appVersion: "0.16.0"
 maintainers:
   - name: haoqing0110
     email: qhao@redhat.com

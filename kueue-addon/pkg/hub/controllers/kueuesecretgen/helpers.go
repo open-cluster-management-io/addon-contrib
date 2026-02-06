@@ -3,7 +3,6 @@ package kueuesecretgen
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -17,6 +16,7 @@ import (
 	permissionrv1alpha1 "open-cluster-management.io/cluster-permission/api/v1alpha1"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msav1beta1 "open-cluster-management.io/managed-serviceaccount/apis/authentication/v1beta1"
+	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
 	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
 	"open-cluster-management.io/sdk-go/pkg/patcher"
 )
@@ -94,6 +94,9 @@ func applyManagedServiceAccount(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.MultiKueueResourceName,
 			Namespace: clusterName,
+			Labels: map[string]string{
+				msacontroller.LabelKeyClusterProfileSync: "true",
+			},
 		},
 		Spec: msav1beta1.ManagedServiceAccountSpec{
 			Rotation: msav1beta1.ManagedServiceAccountRotation{
@@ -125,39 +128,11 @@ func applyManagedServiceAccount(
 	return err
 }
 
-// getPodServiceAccountInfo returns the service account name and namespace from environment variables
-func getPodServiceAccountInfo() (name, namespace string, err error) {
-	saName := os.Getenv("SERVICE_ACCOUNT_NAME")
-	if saName == "" {
-		return "", "", fmt.Errorf("SERVICE_ACCOUNT_NAME environment variable is not set")
-	}
-
-	saNamespace := os.Getenv("POD_NAMESPACE")
-	if saNamespace == "" {
-		return "", "", fmt.Errorf("POD_NAMESPACE environment variable is not set")
-	}
-
-	return saName, saNamespace, nil
-}
-
-// setClusterRoleBindingSubject sets the subject based on impersonation mode
+// setClusterRoleBindingSubject sets the subject to bind cluster permission to managed cluster service account
 func setClusterRoleBindingSubject(subject *rbacv1.Subject) error {
-	if os.Getenv(common.ClusterProxyImpersonationEnv) == "true" {
-		// Impersonation mode: bind cluster permission to hub kueue-addon-controller  service account.
-		saName, saNamespace, err := getPodServiceAccountInfo()
-		if err != nil {
-			return fmt.Errorf("failed to get pod service account info for impersonation: %v", err)
-		}
-		subject.APIGroup = "rbac.authorization.k8s.io"
-		subject.Kind = "User"
-		subject.Name = fmt.Sprintf("cluster:hub:system:serviceaccount:%s:%s", saNamespace, saName)
-		subject.Namespace = ""
-	} else {
-		// Standard mode: bind cluster permission to managed cluster service account.
-		subject.APIGroup = ""
-		subject.Kind = "ServiceAccount"
-		subject.Name = common.MultiKueueResourceName
-		subject.Namespace = "open-cluster-management-agent-addon"
-	}
+	subject.APIGroup = ""
+	subject.Kind = "ServiceAccount"
+	subject.Name = common.MultiKueueResourceName
+	subject.Namespace = "open-cluster-management-agent-addon"
 	return nil
 }
