@@ -41,7 +41,7 @@ echo "Waiting for skupper sites to be created... done. Proceeding to connect sku
 
 kubectl apply -f ./deploy/skupper/token-request.yaml -n $NAMESPACE --context $HUB_CONTEXT
 sleep 5
-kubectl get secret -o yaml skupper-connection-secret -n $NAMESPACE > ./secrets/token-$NAMESPACE.yaml
+kubectl get secret -o yaml skupper-connection-secret -n $NAMESPACE --context $HUB_CONTEXT > ./secrets/token-$NAMESPACE.yaml
 
 kubectl apply -f ./secrets/token-$NAMESPACE.yaml -n $NAMESPACE --context $CLUSTER1_CONTEXT
 

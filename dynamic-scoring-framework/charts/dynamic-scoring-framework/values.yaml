@@ -1,11 +1,16 @@
 hubSetting:
+  # Namespace where the hub components (e.g. controllers) will be deployed
   namespace: open-cluster-management
+  # Whether to skip creating ClusterSetBinding
+  # When set to false, ClusterSetBinding for "global" ClusterSet will be created
   skipClusterSetBinding: false
+  # The setting for Custom Resource Controller 
   resourceController:
     image:
       name: quay.io/open-cluster-management/dynamic-scoring-controller
       tag: latest
       pullPolicy: IfNotPresent
+  # The setting for Addon Controller
   addonController:
     image:
       name: quay.io/open-cluster-management/dynamic-scoring-addon
@@ -13,7 +18,9 @@ hubSetting:
       pullPolicy: IfNotPresent
 
 spokeSetting:
+  # Namespace where the spoke components (e.g. agents) will be deployed
   namespace: dynamic-scoring
+  # The setting for Addon Agent
   agent:
     image:
       name: quay.io/open-cluster-management/dynamic-scoring-addon
