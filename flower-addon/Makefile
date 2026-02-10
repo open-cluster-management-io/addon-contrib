@@ -6,8 +6,8 @@ RELEASE_NAME ?= flower-addon
 CHART_PATH ?= charts/flower-addon
 
 # Image configuration (default: official Flower images)
-SUPERLINK_IMAGE ?= flwr/superlink:1.25.0-py3.13-ubuntu24.04
-SUPERNODE_IMAGE ?= flwr/supernode:1.25.0-py3.13-ubuntu24.04
+SUPERLINK_IMAGE ?= flwr/superlink:1.26.1-py3.13-ubuntu24.04
+SUPERNODE_IMAGE ?= flwr/supernode:1.26.1-py3.13-ubuntu24.04
 APP_IMAGE ?= flower-app:1.0.0
 
 .PHONY: all

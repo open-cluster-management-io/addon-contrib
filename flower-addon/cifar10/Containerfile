@@ -1,4 +1,4 @@
-FROM flwr/superexec:1.25.0-py3.13-ubuntu24.04
+FROM flwr/superexec:1.26.1-py3.13-ubuntu24.04
 
 WORKDIR /app
 COPY pyproject.toml .
