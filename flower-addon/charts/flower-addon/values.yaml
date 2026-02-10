@@ -6,7 +6,7 @@ superlink:
   namespace: flower-system
   image:
     repository: flwr/superlink
-    tag: "1.25.0-py3.13-ubuntu24.04"
+    tag: "1.26.1-py3.13-ubuntu24.04"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -27,7 +27,7 @@ superlink:
 supernode:
   image:
     repository: flwr/supernode
-    tag: "1.25.0-py3.13-ubuntu24.04"
+    tag: "1.26.1-py3.13-ubuntu24.04"
     pullPolicy: IfNotPresent
   resources:
     requests:
