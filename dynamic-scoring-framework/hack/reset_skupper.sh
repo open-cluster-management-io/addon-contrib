@@ -8,6 +8,9 @@ CLUSTER1_CONTEXT=kind-worker01
 CLUSTER2_NAME=worker02
 CLUSTER2_CONTEXT=kind-worker02
 
+# Create secrets directory if it doesn't exist
+mkdir -p ./secrets
+
 
 # delete skupper sites and secrets
 kubectl delete -f ./deploy/skupper/skupper-site-hub.yaml -n $NAMESPACE --context $HUB_CONTEXT

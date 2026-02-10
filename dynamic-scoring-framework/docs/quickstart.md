@@ -2,6 +2,22 @@
 
 Dynamic Scoring Framework is a framework for automating resource scoring in multi-cluster environments. It calculates dynamic scores for each cluster and provides foundational information for resource optimization and automated control.
 
+## Prerequisites
+
+- Following tools are required on your local machine:
+  - ```kubectl``` CLI tool installed and configured to access the hub and managed clusters.
+  - ```helm``` CLI tool installed for installing the Dynamic Scoring Framework.
+  - ```clusteradm``` CLI tool installed for setting up Open Cluster Management (OCM).
+  - (Optional) ```podman``` or ```docker``` and ```kind``` if using local clusters for development.
+  - (Optional) ```skupper``` CLI tool installed if using Skupper v1 for cross-cluster communication.
+- A hub cluster and one or more managed clusters set up with Open Cluster Management (OCM).
+- Following cluster components are required based on your use case:
+  - (Optional) Prometheus set up in each managed cluster if using Prometheus as a source for scoring data.
+    - Furthermore, if you want to use centralized scoring results collection via Prometheus in the hub cluster, Remote write receiver needs to be set up in the hub cluster as well (e.g. VictoriaMetrics, Thanos).
+  - (Optional) Skupper set up between the hub cluster and managed clusters if the Scoring API is deployed in a different cluster and needs to be accessed from other clusters.
+
+For more details, please refer to the each sections below.
+
 ## Prepare the Hub Cluster and Managed Clusters
 
 For setting up the hub cluster and managed clusters, please refer to the [Open Cluster Management (OCM) documentation](https://open-cluster-management.io/docs/getting-started/quick-start/).
@@ -108,7 +124,7 @@ Apply the Sample Scoring API and DynamicScorer manifest to the hub cluster:
 # if you are using Local kind clusters, load the sample scorer image into the kind cluster
 kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name worker01
 # deploy the sample scorer and register DynamicScorer
-CLUSTER_NAME=worker01 envsubst < samples/sample-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub01
+CLUSTER_NAME=worker01 envsubst < samples/sample-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub01
 ```
 
 The manifestwork deploys the Sample Scoring API in the managed cluster (worker01).

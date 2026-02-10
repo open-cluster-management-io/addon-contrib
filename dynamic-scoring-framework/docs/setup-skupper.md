@@ -2,6 +2,14 @@
 
 Skupper is a tool that enables secure communication between multiple Kubernetes clusters. It is particularly useful in scenarios where services need to communicate across cluster boundaries, such as when the Scoring API is deployed in one cluster and needs to be accessed from other clusters.
 
+## Prerequisites
+
+Before setting up Skupper, ensure you have the following command-line tools installed:
+
+- ```kubectl```
+- ```skupper``` **NOTE:** In this setup, we use Skupper v1, not Skupper v2.
+- ```podman``` or ```docker```, and ```kind``` if using local clusters.
+
 ## Setup Podman Network for Kind Clusters
 
 When using Kind clusters with Podman, each Kind cluster runs in its own isolated network. To enable communication between these clusters using Skupper, you need to create a shared Podman network and connect each Kind cluster's control plane container to this network.
