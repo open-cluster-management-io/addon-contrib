@@ -57,6 +57,12 @@ clusterProxy:
   impersonation:
     enabled: false
 
+# ClusterProfile feature gate configuration
+# When enabled (true), uses ClusterProfile API for MultiKueueCluster management
+# When disabled (false, default), uses legacy secret-copy approach with ManagedServiceAccount
+clusterProfile:
+  enabled: false
+
 # NetworkPolicy configuration (uncomment when installKueueViaOperator enabled)
 # Uncomment when using operator-based installation with network restrictions
 # networkPolicy:

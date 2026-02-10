@@ -163,25 +163,63 @@ test-unit:
 	go test $(GO_TEST_FLAGS) $(GO_TEST_PACKAGES)
 .PHONY: test-unit
 
-test-integration: ensure-kubebuilder-tools
-	@echo "Running integration tests..."
-	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
-	./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+test-integration: ensure-kubebuilder-tools test-integration-legacy test-integration-clusterprofile
+	@echo ""
+	@echo "=========================================="
+	@echo "All integration tests passed!"
+	@echo "=========================================="
 .PHONY: test-integration
 
-test-e2e-setup:
-	@echo "Setting up e2e test environment..."
+test-integration-legacy: ensure-kubebuilder-tools
+	@echo "=========================================="
+	@echo "Running integration tests in Legacy mode"
+	@echo "=========================================="
+	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
+	ENABLE_CLUSTERPROFILE=false ./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+.PHONY: test-integration-legacy
+
+test-integration-clusterprofile: ensure-kubebuilder-tools
+	@echo ""
+	@echo "==============================================="
+	@echo "Running integration tests in ClusterProfile mode"
+	@echo "==============================================="
+	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
+	ENABLE_CLUSTERPROFILE=true ./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+.PHONY: test-integration-clusterprofile
+
+test-e2e: test-e2e-legacy test-e2e-clusterprofile
+	@echo ""
+	@echo "=========================================="
+	@echo "All e2e tests passed!"
+	@echo "=========================================="
+.PHONY: test-e2e
+
+test-e2e-legacy:
+	@echo "=========================================="
+	@echo "Running e2e tests in Legacy mode"
+	@echo "=========================================="
+	@echo "Building Docker image..."
 	IMAGE_TAG=e2e make image
 	@echo "Cleaning Docker build cache..."
 	@docker builder prune -af || true
 	@build/setup-env.sh --e2e --clean --kueue-version $(KUEUE_VERSION)
-.PHONY: test-e2e-setup
-
-test-e2e: test-e2e-setup
-	@echo "Running e2e tests..."
 	go test -c -ldflags="-s -w" ./test/e2e -o kueue-addon-e2e.test
 	./kueue-addon-e2e.test -test.v -ginkgo.v --ginkgo.timeout=2h
-.PHONY: test-e2e
+.PHONY: test-e2e-legacy
+
+test-e2e-clusterprofile:
+	@echo ""
+	@echo "=================================================="
+	@echo "Running e2e tests in ClusterProfile mode"
+	@echo "=================================================="
+	@echo "Building Docker image..."
+	IMAGE_TAG=e2e make image
+	@echo "Cleaning Docker build cache..."
+	@docker builder prune -af || true
+	@build/setup-env.sh --e2e --clean --clusterprofile --kueue-version $(KUEUE_VERSION)
+	go test -c -ldflags="-s -w" ./test/e2e -o kueue-addon-e2e.test
+	./kueue-addon-e2e.test -test.v -ginkgo.v --ginkgo.timeout=2h
+.PHONY: test-e2e-clusterprofile
 
 test-chart:
 	@echo "TODO: Implement test-chart"

@@ -13,10 +13,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
+	clientcmdv1 "k8s.io/client-go/tools/clientcmd/api/v1"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	v1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
+	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
+	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
+	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
+	cpcontroller "open-cluster-management.io/ocm/pkg/registration/hub/clusterprofile"
+	cpv1alpha1 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha1"
+	cpclientset "sigs.k8s.io/cluster-inventory-api/client/clientset/versioned"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
@@ -333,4 +341,143 @@ func RemoveMultiKueueClusters(ctx context.Context, hubKueueClient kueueclientset
 	if err != nil {
 		ginkgo.GinkgoWriter.Printf("Failed to delete MultiKueueCluster %s: %v\n", clusterName, err)
 	}
+}
+
+// AssertManagedServiceAccountHasSyncLabel asserts that ManagedServiceAccount has ClusterProfile sync label
+func AssertManagedServiceAccountHasSyncLabel(ctx context.Context, msaClient msaclientset.Interface, clusterName string) {
+	ginkgo.By(fmt.Sprintf("Asserting ManagedServiceAccount in cluster %s has ClusterProfile sync label", clusterName))
+	gomega.Eventually(func() error {
+		msa, err := msaClient.AuthenticationV1beta1().ManagedServiceAccounts(clusterName).Get(ctx, common.MultiKueueResourceName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get ManagedServiceAccount %s/%s: %v", clusterName, common.MultiKueueResourceName, err)
+		}
+
+		if msa.Labels == nil {
+			return fmt.Errorf("ManagedServiceAccount has no labels")
+		}
+
+		syncLabel, exists := msa.Labels[msacontroller.LabelKeyClusterProfileSync]
+		if !exists {
+			return fmt.Errorf("ManagedServiceAccount missing ClusterProfile sync label")
+		}
+
+		if syncLabel != "true" {
+			return fmt.Errorf("expected ClusterProfile sync label value 'true', got '%s'", syncLabel)
+		}
+
+		return nil
+	}, DefaultTimeout, DefaultInterval).Should(gomega.Succeed())
+}
+
+// AssertMultiKueueClusterUsesClusterProfile asserts that MultiKueueCluster uses ClusterProfile for authentication
+func AssertMultiKueueClusterUsesClusterProfile(ctx context.Context, client kueueclientset.Interface, clusterName string) {
+	ginkgo.By(fmt.Sprintf("Asserting MultiKueueCluster %s uses ClusterProfile", clusterName))
+	gomega.Eventually(func() error {
+		mkCluster, err := client.KueueV1beta2().MultiKueueClusters().Get(ctx, clusterName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get MultiKueueCluster %s: %v", clusterName, err)
+		}
+
+		if mkCluster.Spec.ClusterSource.ClusterProfileRef == nil {
+			return fmt.Errorf("expected ClusterProfileRef to be set, but it is nil")
+		}
+
+		if mkCluster.Spec.ClusterSource.ClusterProfileRef.Name != clusterName {
+			return fmt.Errorf("expected ClusterProfileRef.Name '%s', got '%s'", clusterName, mkCluster.Spec.ClusterSource.ClusterProfileRef.Name)
+		}
+
+		return nil
+	}, DefaultTimeout, DefaultInterval).Should(gomega.Succeed())
+}
+
+// CreateClusterProfile creates a ClusterProfile for testing
+func CreateClusterProfile(ctx context.Context, cpClient cpclientset.Interface, clusterName, namespace string) {
+	cp := &cpv1alpha1.ClusterProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
+				v1.ClusterNameLabelKey:            clusterName,
+			},
+		},
+		Spec: cpv1alpha1.ClusterProfileSpec{
+			DisplayName: clusterName,
+			ClusterManager: cpv1alpha1.ClusterManager{
+				Name: cpcontroller.ClusterProfileManagerName,
+			},
+		},
+	}
+
+	createdCp, err := cpClient.ApisV1alpha1().ClusterProfiles(namespace).Create(ctx, cp, metav1.CreateOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+	if createdCp.Status.AccessProviders == nil {
+		createdCp.Status.AccessProviders = []cpv1alpha1.AccessProvider{}
+	}
+
+	accessProvider := cpv1alpha1.AccessProvider{
+		Name: cpcontroller.ClusterProfileManagerName,
+		Cluster: clientcmdv1.Cluster{
+			Server:                   "https://test-cluster:6443",
+			CertificateAuthorityData: []byte("test-ca-data"),
+		},
+	}
+
+	createdCp.Status.AccessProviders = append(createdCp.Status.AccessProviders, accessProvider)
+	_, err = cpClient.ApisV1alpha1().ClusterProfiles(namespace).UpdateStatus(ctx, createdCp, metav1.UpdateOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+}
+
+// CreateClusterProfileSecret creates a synced secret for ClusterProfile
+func CreateClusterProfileSecret(ctx context.Context, hubKubeClient kubernetes.Interface, clusterName, namespace string) {
+	secretName := fmt.Sprintf("%s-%s", clusterName, common.MultiKueueResourceName)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				msacontroller.LabelKeySyncedFrom: secretName,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: cpv1alpha1.GroupVersion.String(),
+					Kind:       cpv1alpha1.Kind,
+					Name:       clusterName,
+					UID:        types.UID("fake-uid"),
+				},
+			},
+		},
+		Data: map[string][]byte{
+			"token": []byte("fake-token"),
+		},
+	}
+
+	_, err := hubKubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+}
+
+// RemoveClusterProfile removes a ClusterProfile
+func RemoveClusterProfile(ctx context.Context, cpClient cpclientset.Interface, clusterName, namespace string) {
+	err := cpClient.ApisV1alpha1().ClusterProfiles(namespace).Delete(ctx, clusterName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		ginkgo.GinkgoWriter.Printf("Failed to delete ClusterProfile %s: %v", clusterName, err)
+	}
+}
+
+// RemoveClusterProfileSecret removes a ClusterProfile synced secret
+func RemoveClusterProfileSecret(ctx context.Context, hubKubeClient kubernetes.Interface, clusterName, namespace string) {
+	secretName := fmt.Sprintf("%s-%s", clusterName, common.MultiKueueResourceName)
+	err := hubKubeClient.CoreV1().Secrets(namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		ginkgo.GinkgoWriter.Printf("Failed to delete ClusterProfile secret %s: %v", secretName, err)
+	}
+}
+
+// WaitForClusterPermissionCreation waits for ClusterPermission to be created
+func WaitForClusterPermissionCreation(ctx context.Context, hubPermissionClient permissionclientset.Interface, clusterName string) {
+	gomega.Eventually(func() bool {
+		_, err := hubPermissionClient.ApiV1alpha1().ClusterPermissions(clusterName).Get(ctx, common.MultiKueueResourceName, metav1.GetOptions{})
+		return err == nil
+	}, DefaultTimeout, DefaultInterval).Should(gomega.BeTrue(), fmt.Sprintf("ClusterPermission in %s should be created", clusterName))
 }

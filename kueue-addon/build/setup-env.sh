@@ -8,6 +8,7 @@ set -euo pipefail
 CLEAN=false
 E2E_MODE=false
 IMPERSONATION=false
+CLUSTERPROFILE=false
 KUEUE_VERSION="v0.16.0"
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -23,13 +24,17 @@ while [[ $# -gt 0 ]]; do
       IMPERSONATION=true
       shift
       ;;
+    --clusterprofile)
+      CLUSTERPROFILE=true
+      shift
+      ;;
     --kueue-version)
       KUEUE_VERSION="$2"
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--clean] [--e2e] [--impersonation] [--kueue-version VERSION]"
+      echo "Usage: $0 [--clean] [--e2e] [--impersonation] [--clusterprofile] [--kueue-version VERSION]"
       exit 1
       ;;
   esac
@@ -68,16 +73,21 @@ create_clusters() {
   fi
 
   echo "Prepare kind clusters"
-  kind create cluster --name ${hub} --image kindest/node:v1.29.0 --config=config.yaml || true
+  kind create cluster --name ${hub} --image kindest/node:v1.35.0 --config=config.yaml || true
   for cluster in "${spoke_clusters[@]}"; do
-    kind create cluster --name "$cluster" --image kindest/node:v1.29.0 || true
+    kind create cluster --name "$cluster" --image kindest/node:v1.35.0 || true
   done
 }
 
 # Function to setup OCM
 setup_ocm() {
+  if [[ "$CLUSTERPROFILE" == "true" ]]; then
+    echo "Initialize the ocm hub cluster with ClusterProfile feature gate"
+    clusteradm init --wait --feature-gates=ClusterProfile=true --context ${hubctx}
+  else
     echo "Initialize the ocm hub cluster"
     clusteradm init --wait --context ${hubctx}
+  fi
   joincmd=$(clusteradm get token --context ${hubctx} | grep clusteradm)
 
   echo "Join clusters to hub"
@@ -144,6 +154,104 @@ install_cluster_proxy_with_impersonation() {
   kubectl apply --context ${hubctx} -f cluster-proxy-service.yaml
 }
 
+# Function to patch kueue-controller-manager with ClusterProfile plugin
+patch_kueue_controller() {
+  # Patch the Kueue manager ConfigMap to add ClusterProfile configuration
+  echo "Patching Kueue manager ConfigMap with ClusterProfile credentials provider"
+
+  # Get existing config or create empty structure if it doesn't exist
+  local existing_config=$(kubectl get configmap kueue-manager-config -n kueue-system --context "${hubctx}" -o jsonpath='{.data.controller_manager_config\.yaml}' 2>/dev/null || echo "")
+
+  if [ -z "$existing_config" ]; then
+    echo "ConfigMap doesn't exist or is empty, creating new one"
+    cat << EOF | kubectl -n kueue-system --context "${hubctx}" apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kueue-manager-config
+  namespace: kueue-system
+data:
+  controller_manager_config.yaml: |
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    kind: Configuration
+    featureGates:
+      MultiKueueClusterProfile: true
+    multiKueue:
+      clusterProfile:
+        credentialsProviders:
+        - name: open-cluster-management
+          execConfig:
+            apiVersion: client.authentication.k8s.io/v1
+            command: /plugins/cp-creds
+            args:
+            - --managed-serviceaccount=multikueue
+            provideClusterInfo: true
+            interactiveMode: Never
+EOF
+  else
+    echo "Appending to existing ConfigMap"
+    local temp_file=$(mktemp)
+
+    # Write existing config
+    echo "$existing_config" > "$temp_file"
+
+    # Append ClusterProfile configuration
+    cat >> "$temp_file" << 'EOF'
+featureGates:
+  MultiKueueClusterProfile: true
+multiKueue:
+  clusterProfile:
+    credentialsProviders:
+    - name: open-cluster-management
+      execConfig:
+        apiVersion: client.authentication.k8s.io/v1
+        command: /plugins/cp-creds
+        args:
+        - --managed-serviceaccount=multikueue
+        provideClusterInfo: true
+        interactiveMode: Never
+EOF
+
+    # Apply the updated configuration
+    kubectl create configmap kueue-manager-config \
+      --from-file=controller_manager_config.yaml="$temp_file" \
+      -n kueue-system --context "${hubctx}" \
+      --dry-run=client -o yaml | kubectl apply --context "${hubctx}" -f -
+
+    rm -f "$temp_file"
+  fi
+
+  # Patch the deployment to add image volume for cp-creds plugin
+  echo "Patching kueue-controller-manager deployment with cp-creds plugin volume"
+  kubectl patch deployment kueue-controller-manager -n kueue-system --context "${hubctx}" --type='json' -p='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/volumes/-",
+      "value": {
+        "name": "cp-creds-plugin",
+        "image": {
+          "reference": "quay.io/open-cluster-management/managed-serviceaccount:latest",
+          "pullPolicy": "IfNotPresent"
+        }
+      }
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/containers/0/volumeMounts/-",
+      "value": {
+        "name": "cp-creds-plugin",
+        "mountPath": "/plugins"
+      }
+    }
+  ]'
+
+  echo "Waiting for kueue-controller-manager to be ready after patching"
+  kubectl wait --for=condition=Available deployment/kueue-controller-manager \
+    -n kueue-system --timeout=300s --context "${hubctx}"
+
+  echo "kueue-controller-manager configured successfully with ClusterProfile plugin"
+}
+
 # Function to install kueue-addon
 install_kueue_addon() {
   echo "Install kueue-addon"
@@ -157,9 +265,14 @@ install_kueue_addon() {
     EXTRA_ARGS=""
   fi
 
-  # Add impersonation settings if enabled
+  # Add impersonation settings if enabled (legacy mode with impersonation)
   if [[ "$IMPERSONATION" == "true" ]]; then
     EXTRA_ARGS="$EXTRA_ARGS --set clusterProxy.url=https://cluster-proxy-addon-user.open-cluster-management-addon.svc.cluster.local:9092 --set clusterProxy.impersonation.enabled=true"
+  fi
+
+  # Enable ClusterProfile mode if specified
+  if [[ "$CLUSTERPROFILE" == "true" ]]; then
+    EXTRA_ARGS="$EXTRA_ARGS --set clusterProfile.enabled=true"
   fi
 
   echo "Install kueue-addon from ${CHART_SOURCE} with ${EXTRA_ARGS}"
@@ -175,9 +288,29 @@ install_ocm_addons() {
   kubectl config use-context ${hubctx}
 
   echo "Add ocm helm repo"
-  helm repo add ocm https://open-cluster-management.io/helm-charts/ --force-update
+  helm repo add ocm https://open-cluster-management.io/helm-charts/
   helm repo update
 
+  if [[ "$CLUSTERPROFILE" == "true" ]]; then
+    echo "Install managed-serviceaccount with ClusterProfile support"
+    helm upgrade --install \
+       -n open-cluster-management-addon --create-namespace \
+       managed-serviceaccount ocm/managed-serviceaccount \
+       --set featureGates.ephemeralIdentity=true \
+       --set featureGates.clusterProfileCredSyncer=true \
+       --set enableAddOnDeploymentConfig=true \
+       --set hubDeployMode=AddOnTemplate
+
+    echo "Install cluster-proxy with ClusterProfile access provider"
+    helm upgrade --install \
+      -n open-cluster-management-addon --create-namespace \
+      cluster-proxy ocm/cluster-proxy \
+      --set featureGates.clusterProfileAccessProvider=true \
+      --set userServer.enabled=true \
+      --set enableServiceProxy=true \
+      --set installByPlacement.placementName=global \
+      --set installByPlacement.placementNamespace=open-cluster-management-addon
+  else
     echo "Install managed-serviceaccount"
     helm upgrade --install \
        -n open-cluster-management-addon --create-namespace \
@@ -196,6 +329,7 @@ install_ocm_addons() {
         cluster-proxy ocm/cluster-proxy \
         --set installByPlacement.placementName=global \
         --set installByPlacement.placementNamespace=open-cluster-management-addon
+    fi
   fi
 
   echo "Install cluster-permission"
@@ -262,5 +396,8 @@ create_clusters
 setup_ocm
 load_e2e_images
 install_kueue
+if [[ "$CLUSTERPROFILE" == "true" ]]; then
+  patch_kueue_controller
+fi
 install_ocm_addons
 setup_fake_gpu
