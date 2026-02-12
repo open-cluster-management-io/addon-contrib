@@ -35,6 +35,7 @@ jobs:
         uses: engineerd/setup-kind@v0.6.2
         with:
           version: v0.31.0
+          skipClusterLogsExport: "true"
 
       - name: Setup Kubectl
         uses: azure/setup-kubectl@v3
@@ -74,9 +75,9 @@ jobs:
       - name: Upload Artifacts
         if: |
           (success() || failure()) && inputs.artifacts != ''
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@v4
         with:
-          name: e2e-artifacts
+          name: e2e-artifacts-${{ inputs.repo }}
           path: ${{ inputs.artifacts }}
           if-no-files-found: ignore
           retention-days: 7
