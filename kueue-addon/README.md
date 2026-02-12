@@ -147,8 +147,14 @@ This controller is running on the hub, contains credential controllers and an ad
 ### Mode-Specific Prerequisites
 
 #### Legacy Mode (Default)
-- No additional prerequisites
-- Optional: For impersonation support, configure cluster-proxy with impersonation settings
+
+The addon requirement in Legacy Mode depends on the user's needs.
+
+| Hub to Spoke Connection                 | Required Addons                                                   | Best For                                                                 |
+|----------------------------------------|-------------------------------------------------------------------|--------------------------------------------------------------------------|
+| **Cluster proxy (Recommended)**       | Cluster Permission + Managed Service Account + Cluster Proxy     | Only requires managed clusters to reach the Hub API server.             |
+| **Cluster proxy with impersonation**  | Cluster Permission + Cluster Proxy                                | Similar to the cluster proxy approach, but uses the caller's identity for actions on spokes. |
+| **Direct connection**                 | Cluster Permission + Managed Service Account                     | Requires both the Hub and Managed clusters to reach each other's API server
 
 #### ClusterProfile Mode
 - Hub cluster initialized with: `clusteradm init --feature-gates=ClusterProfile=true`
