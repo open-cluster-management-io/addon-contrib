@@ -2,7 +2,6 @@ apiVersion: dynamic-scoring.open-cluster-management.io/v1alpha1
 kind: DynamicScoringConfig
 metadata:
   name: dynamic-scoring-config
-  namespace: dynamic-scoring
 spec:
   masks:
     - clusterName: "worker02"

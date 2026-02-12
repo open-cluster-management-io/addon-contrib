@@ -27,7 +27,7 @@ spec:
             spec:
               containers:
                 - name: sample-scorer
-                  image: quay.io/dynamic-scoring/sample-scorer:latest
+                  image: ${SAMPLE_SCORER_IMAGE_NAME}
                   imagePullPolicy: Never
                   ports:
                     - containerPort: 8000
