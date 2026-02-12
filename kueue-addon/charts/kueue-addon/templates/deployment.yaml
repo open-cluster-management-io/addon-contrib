@@ -40,6 +40,8 @@ spec:
             - name: CLUSTER_PROXY_IMPERSONATION_ENABLED
               value: "true"
             {{- end }}
+            - name: ENABLE_CLUSTERPROFILE
+              value: {{ .Values.clusterProfile.enabled | quote }}
 
 ---
 

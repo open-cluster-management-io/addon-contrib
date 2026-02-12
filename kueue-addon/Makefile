@@ -127,32 +127,21 @@ $(KUSTOMIZE):
 
 # test
 TEST_TMP :=/tmp
-export KUBEBUILDER_ASSETS ?=$(TEST_TMP)/kubebuilder/bin
-
-K8S_VERSION ?=1.30.0
-GOHOSTOS ?=$(shell go env GOHOSTOS)
-GOHOSTARCH ?=$(shell go env GOHOSTARCH)
-KB_TOOLS_ARCHIVE_NAME :=kubebuilder-tools-$(K8S_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
-KB_TOOLS_ARCHIVE_PATH := $(TEST_TMP)/$(KB_TOOLS_ARCHIVE_NAME)
 GO_TEST_PACKAGES :=./pkg/...
 GO_TEST_FLAGS := -race -coverprofile=coverage.out
+ENVTEST_BIN_DIR ?= $(TEST_TMP)/envtest-bins
+SETUP_ENVTEST ?= $(TEST_TMP)/setup-envtest
+ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 
-# download the kubebuilder-tools to get kube-apiserver binaries from it
-ensure-kubebuilder-tools:
-ifeq "" "$(wildcard $(KUBEBUILDER_ASSETS))"
-	@echo "Downloading kube-apiserver into '$(KUBEBUILDER_ASSETS)'"
-	mkdir -p '$(KUBEBUILDER_ASSETS)'
-	curl -s -f -L https://storage.googleapis.com/kubebuilder-tools/$(KB_TOOLS_ARCHIVE_NAME) -o '$(KB_TOOLS_ARCHIVE_PATH)'
-	tar -C '$(KUBEBUILDER_ASSETS)' --strip-components=2 -zvxf '$(KB_TOOLS_ARCHIVE_PATH)'
-else
-	@echo "Using existing kube-apiserver from '$(KUBEBUILDER_ASSETS)'"
-endif
-.PHONY: ensure-kubebuilder-tools
+$(SETUP_ENVTEST):
+	@mkdir -p $(TEST_TMP)
+	GOBIN=$(TEST_TMP) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
 
 clean-integration-test:
 	@echo "Cleaning integration test artifacts..."
-	$(RM) '$(KB_TOOLS_ARCHIVE_PATH)'
-	rm -rf $(TEST_TMP)/kubebuilder
+	$(RM) -r '$(ENVTEST_BIN_DIR)'
+	$(RM) '$(SETUP_ENVTEST)'
 	$(RM) ./*integration.test
 .PHONY: clean-integration-test
 
@@ -163,25 +152,65 @@ test-unit:
 	go test $(GO_TEST_FLAGS) $(GO_TEST_PACKAGES)
 .PHONY: test-unit
 
-test-integration: ensure-kubebuilder-tools
-	@echo "Running integration tests..."
-	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
-	./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+test-integration: test-integration-legacy test-integration-clusterprofile
+	@echo ""
+	@echo "=========================================="
+	@echo "All integration tests passed!"
+	@echo "=========================================="
 .PHONY: test-integration
 
-test-e2e-setup:
-	@echo "Setting up e2e test environment..."
+test-integration-legacy: $(SETUP_ENVTEST)
+	@echo "=========================================="
+	@echo "Running integration tests in Legacy mode"
+	@echo "=========================================="
+	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
+	KUBEBUILDER_ASSETS="$$( $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path )" \
+	ENABLE_CLUSTERPROFILE=false ./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+.PHONY: test-integration-legacy
+
+test-integration-clusterprofile: $(SETUP_ENVTEST)
+	@echo ""
+	@echo "==============================================="
+	@echo "Running integration tests in ClusterProfile mode"
+	@echo "==============================================="
+	go test -c -ldflags="-s -w" ./test/integration -o ./kueue-integration.test -tags=integration
+	KUBEBUILDER_ASSETS="$$( $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_BIN_DIR) -p path )" \
+	ENABLE_CLUSTERPROFILE=true ./kueue-integration.test -ginkgo.slow-spec-threshold=15s -ginkgo.v -ginkgo.fail-fast ${ARGS}
+.PHONY: test-integration-clusterprofile
+
+test-e2e: test-e2e-legacy test-e2e-clusterprofile
+	@echo ""
+	@echo "=========================================="
+	@echo "All e2e tests passed!"
+	@echo "=========================================="
+.PHONY: test-e2e
+
+test-e2e-legacy:
+	@echo "=========================================="
+	@echo "Running e2e tests in Legacy mode"
+	@echo "=========================================="
+	@echo "Building Docker image..."
 	IMAGE_TAG=e2e make image
 	@echo "Cleaning Docker build cache..."
 	@docker builder prune -af || true
 	@build/setup-env.sh --e2e --clean --kueue-version $(KUEUE_VERSION)
-.PHONY: test-e2e-setup
-
-test-e2e: test-e2e-setup
-	@echo "Running e2e tests..."
 	go test -c -ldflags="-s -w" ./test/e2e -o kueue-addon-e2e.test
 	./kueue-addon-e2e.test -test.v -ginkgo.v --ginkgo.timeout=2h
-.PHONY: test-e2e
+.PHONY: test-e2e-legacy
+
+test-e2e-clusterprofile:
+	@echo ""
+	@echo "=================================================="
+	@echo "Running e2e tests in ClusterProfile mode"
+	@echo "=================================================="
+	@echo "Building Docker image..."
+	IMAGE_TAG=e2e make image
+	@echo "Cleaning Docker build cache..."
+	@docker builder prune -af || true
+	@build/setup-env.sh --e2e --clean --clusterprofile --kueue-version $(KUEUE_VERSION)
+	go test -c -ldflags="-s -w" ./test/e2e -o kueue-addon-e2e.test
+	./kueue-addon-e2e.test -test.v -ginkgo.v --ginkgo.timeout=2h
+.PHONY: test-e2e-clusterprofile
 
 test-chart:
 	@echo "TODO: Implement test-chart"

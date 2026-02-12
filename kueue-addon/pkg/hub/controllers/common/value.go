@@ -12,6 +12,8 @@ const (
 	KueueNamespaceEnv = "KUEUE_NAMESPACE"
 	// ClusterProxyImpersonationEnv is the environment variable for enabling cluster proxy impersonation
 	ClusterProxyImpersonationEnv = "CLUSTER_PROXY_IMPERSONATION_ENABLED"
+	// EnableClusterProfileEnv is the environment variable for enabling ClusterProfile mode
+	EnableClusterProfileEnv = "ENABLE_CLUSTERPROFILE"
 )
 
 var (
@@ -40,4 +42,9 @@ func GetMultiKueueSecretName(clusterName string) string {
 
 func IsImpersonationMode() bool {
 	return os.Getenv(ClusterProxyImpersonationEnv) == "true"
+}
+
+// IsClusterProfileEnabled returns true if ClusterProfile mode is enabled
+func IsClusterProfileEnabled() bool {
+	return os.Getenv(EnableClusterProfileEnv) == "true"
 }

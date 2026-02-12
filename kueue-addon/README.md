@@ -29,6 +29,10 @@ The Kueue addon offers below benefits:
 
 This repository contains the kueue addon controller and addon chart to deploy resources to hub and spoke clusters.
 
+The addon supports two operational modes:
+- **Legacy Mode (Default)**: Uses secret-based authentication with ManagedServiceAccount tokens, with optional cluster-proxy impersonation support
+- **ClusterProfile Mode**: Uses the ClusterProfile API for credential management (requires Kueue v0.16.0+ with `MultiKueueClusterProfile` feature gate)
+
 ### Architecture Overview
 
 ```mermaid
@@ -108,13 +112,20 @@ graph TB
 ```
 
 ### Kueue addon controller
-This controller is running on the hub, contains a credential controller and an admission check controller.
-- **Credential Controller**
-    - Create `ClusterPermission` and `ManagedServiceAccount` for each spoke to get credential.
-    - Generates kubeconfig secrets for MultiKueue under `kueue-system` namespace.
-- **Admission Check Controller**
-    - Watches the `Placement` and `PlacementDecision` to generates `MultiKueueConfig` and `MultiKueueCluster` resources dynamically.
-    - Set the `AdmissionCheck` condition `Active` to true when success.
+This controller is running on the hub, contains credential controllers and an admission check controller.
+
+**Controllers (mode-dependent):**
+- **Secret Generation Controller** (both modes)
+    - Creates `ClusterPermission` and `ManagedServiceAccount` for each spoke cluster
+    - In ClusterProfile mode, adds sync label to ManagedServiceAccount for ClusterProfile synchronization
+- **Secret Copy Controller** (Legacy mode only)
+    - Watches ManagedServiceAccount secrets and copies them to the kueue namespace
+    - Generates `MultiKueueCluster` resources that reference kubeconfig secrets
+- **MultiKueueCluster Controller** (ClusterProfile mode only)
+    - Watches `ClusterProfile` objects and generates `MultiKueueCluster` resources that reference ClusterProfile for authentication
+- **Admission Check Controller** (both modes)
+    - Watches `Placement` and `PlacementDecision` to generate `MultiKueueConfig` and `MultiKueueCluster` resources dynamically
+    - Sets the `AdmissionCheck` condition `Active` to true when successful
 
 ### Addon chart
 - **Addon deployment:** Deploy [Kueue addon controllers](#kueue-addon-controller) on the hub.
@@ -124,20 +135,48 @@ This controller is running on the hub, contains a credential controller and an a
 
 ## Prerequisites
 
-- Open Cluster Management (OCM) installed with the following addons:
+### Common Prerequisites (All Modes)
+- Open Cluster Management (OCM) installed with:
   - [Cluster Permission Addon](https://github.com/open-cluster-management-io/cluster-permission)
   - [Managed Service Account Addon](https://github.com/open-cluster-management-io/managed-serviceaccount)
-  - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) (Optional) Enables hub-to-spoke connectivity for enhanced networking.
+  - [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy)
 - Kueue installed:
-  - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) installed and MultiKueue enabled.
-  - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (recommended for OpenShift/OLM environments).
+  - Hub Cluster with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) installed and MultiKueue enabled
+  - Spoke Clusters with [Kueue](https://kueue.sigs.k8s.io/docs/installation/) pre-installed, or let this addon install Kueue via [operator](https://github.com/openshift/kueue-operator) (recommended for OpenShift/OLM environments)
+
+### Mode-Specific Prerequisites
+
+#### Legacy Mode (Default)
+
+The addon requirement in Legacy Mode depends on the user's needs.
+
+| Hub to Spoke Connection                 | Required Addons                                                   | Best For                                                                 |
+|----------------------------------------|-------------------------------------------------------------------|--------------------------------------------------------------------------|
+| **Cluster proxy (Recommended)**       | Cluster Permission + Managed Service Account + Cluster Proxy     | Only requires managed clusters to reach the Hub API server.             |
+| **Cluster proxy with impersonation**  | Cluster Permission + Cluster Proxy                                | Similar to the cluster proxy approach, but uses the caller's identity for actions on spokes. |
+| **Direct connection**                 | Cluster Permission + Managed Service Account                     | Requires both the Hub and Managed clusters to reach each other's API server
+
+#### ClusterProfile Mode
+- Hub cluster initialized with: `clusteradm init --feature-gates=ClusterProfile=true`
+- [Managed Service Account Addon](https://github.com/open-cluster-management-io/managed-serviceaccount) with feature gate `clusterProfileCredSyncer=true`
+- [Cluster Proxy Addon](https://github.com/open-cluster-management-io/cluster-proxy) with feature gates:
+  - `clusterProfileAccessProvider=true`
+  - `userServer.enabled=true`
+  - `enableServiceProxy=true`
+- Kueue v0.16.0+ with feature gate `MultiKueueClusterProfile=true`
+
+> **Note:** ClusterProfile mode requires Kueue v0.16.0 or above. The [OpenShift Kueue Operator](https://github.com/openshift/kueue-operator) currently does not support Kueue v0.16.0+, therefore **operator-based installation is not compatible with ClusterProfile mode**. For ClusterProfile mode, you must install Kueue manually on both hub and spoke clusters.
 
 ## Quick Start
 
 For a complete setup including all prerequisites on Kind:
 
 ```bash
+# Legacy mode (default)
 ./build/setup-env.sh
+
+# ClusterProfile mode (requires Kueue v0.16.0+, manually installed)
+./build/setup-env.sh --clusterprofile
 ```
 
 ## Installation
@@ -158,6 +197,7 @@ ocm/kueue-addon <chart-version> <app-version>           A Helm chart for Open Cl
 
 For environments where Kueue is already installed:
 
+**Legacy Mode (Default):**
 ```bash
 $ helm install \
     -n open-cluster-management-addon --create-namespace \
@@ -166,9 +206,19 @@ $ helm install \
     # --set skipClusterSetBinding=true
 ```
 
+**ClusterProfile Mode:**
+```bash
+$ helm install \
+    -n open-cluster-management-addon --create-namespace \
+    kueue-addon ocm/kueue-addon \
+    --set clusterProfile.enabled=true
+```
+
 #### Option B: Operator-based Installation (OpenShift/OLM)
 
 In operator-based environments (for example, OpenShift with OLM), the addon can install the [Kueue operator](https://github.com/openshift/kueue-operator) for you.
+
+> **Note:** Operator-based installation currently only supports **Legacy Mode**. The OpenShift Kueue Operator does not yet support Kueue v0.16.0+, which is required for ClusterProfile mode. For ClusterProfile mode, you must manually install Kueue v0.16.0+ instead of using the operator.
 
 Prepare a values.operator.yaml with below content:
 
@@ -304,7 +354,7 @@ Example OCM AdmissionCheck CR:
 # OCM implements an admissioncheck controller to automate the MultiKueue setup process.
 # Leverages OCM's placement mechanism to select clusters based on specific criteria. 
 # MultiKueueConfigs and MultiKueueClusters are generated dynamically based on OCM placement decisions.
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-config-demo2
@@ -319,10 +369,11 @@ spec:
 
 **Before:**
 
-Admins manually create both `MultiKueueConfig` (listing clusters) and a `MultiKueueCluster` (with kubeconfig secret) for each cluster.
+Admins manually create both `MultiKueueConfig` (listing clusters) and a `MultiKueueCluster` for each cluster.
 
+**Legacy Mode (using kubeconfig secret):**
 ```yaml
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueConfig
 metadata:
   name: multikueue-config-demo1
@@ -331,23 +382,55 @@ spec:
   - multikueue-config-demo1-cluster1
   - multikueue-config-demo1-cluster2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueCluster
 metadata:
   name: multikueue-config-demo1-cluster1
 spec:
-  kubeConfig:
-    locationType: Secret
-    location: multikueue-cluster1
+  clusterSource:
+    kubeConfig:
+      locationType: Secret
+      location: multikueue-cluster1
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: MultiKueueCluster
 metadata:
   name: multikueue-config-demo1-cluster2
 spec:
-  kubeConfig:
-    locationType: Secret
-    location: multikueue-cluster2
+  clusterSource:
+    kubeConfig:
+      locationType: Secret
+      location: multikueue-cluster2
+```
+
+**ClusterProfile Mode (using ClusterProfile reference):**
+```yaml
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: MultiKueueConfig
+metadata:
+  name: multikueue-config-demo1
+spec:
+  clusters:
+  - multikueue-config-demo1-cluster1
+  - multikueue-config-demo1-cluster2
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: MultiKueueCluster
+metadata:
+  name: multikueue-config-demo1-cluster1
+spec:
+  clusterSource:
+    clusterProfileRef:
+      name: cluster1
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: MultiKueueCluster
+metadata:
+  name: multikueue-config-demo1-cluster2
+spec:
+  clusterSource:
+    clusterProfileRef:
+      name: cluster2
 ```
 
 **After:**
@@ -355,17 +438,18 @@ spec:
 Admins only need to add `AdmissionChecks` to the `ClusterQueue`. The controller automates `MultiKueueConfig` and `MultiKueueCluster` creation based on `Placement` decisions.
 
 ```yaml
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: ClusterQueue
 metadata:
   name: "cluster-queue"
 spec:
 ...
-  admissionChecks:
-  - multikueue-demo2
-  - multikueue-config-demo2
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: multikueue-demo2
+    - name: multikueue-config-demo2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-demo2
@@ -376,7 +460,7 @@ spec:
     kind: MultiKueueConfig
     name: multikueue-config-demo2
 ---
-apiVersion: kueue.x-k8s.io/v1beta1
+apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck
 metadata:
   name: multikueue-config-demo2
@@ -392,9 +476,23 @@ This automation greatly reduces manual effort and ensures that MultiKueue enviro
 
 ### Workflow
 
-- When kueue-addon is intalled, the credential controller generates kubeconfig secrets of each cluster for MultiKueue under `kueue-system` namespace.
-- User configure the `ClusterQueue` with `AdmissionCheck` and creates the `AdmissionCheck` and `Placement` resources.
-- OCM generates `PlacementDecision` when `Placement` created.
-- The admission check controller watches for `AdmissionCheck` resources referencing OCM `Placement`.
-- The admission check controller watches the `PlacementDecision`, creates or updates `MultiKueueCluster` resources with the kubeconfig details for each cluster, and also update these clusters in the `MultiKueueConfig` resource.
-- Finally, admission check controller updates the `AdmissionCheck` condition to true, indicating successful generation of the `MultiKueueConfig` and `MultiKueueCluster`, readying the [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) environment for job scheduling.
+#### Legacy Mode Workflow
+1. When kueue-addon is installed, the secret generation controller creates `ManagedServiceAccount` and `ClusterPermission` resources for each cluster
+2. ManagedServiceAccount generates service account tokens on spoke clusters
+3. The secret copy controller watches for these tokens and copies them to secrets in the kueue namespace
+4. User configures the `ClusterQueue` with `AdmissionCheck` and creates the `AdmissionCheck` and `Placement` resources
+5. OCM generates `PlacementDecision` when `Placement` is created
+6. The admission check controller watches for `AdmissionCheck` resources referencing OCM `Placement`
+7. The admission check controller watches the `PlacementDecision` and updates these clusters in the `MultiKueueConfig` resource
+8. The secret copy controller creates or updates `MultiKueueCluster` resources referencing the kubeconfig secrets
+9. Finally, admission check controller updates the `AdmissionCheck` condition to true, readying the [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) environment for job scheduling
+
+#### ClusterProfile Mode Workflow
+1. OCM automatically creates `ClusterProfile` objects for managed clusters in managedclusterset bound to `kueue-system` namespace
+2. When kueue-addon is installed, the secret generation controller creates labeled `ManagedServiceAccount` and `ClusterPermission` resources for each cluster
+3. User configures the `ClusterQueue` with `AdmissionCheck` and creates the `AdmissionCheck` and `Placement` resources
+4. OCM generates `PlacementDecision` when `Placement` is created
+5. The admission check controller watches for `AdmissionCheck` resources referencing OCM `Placement`
+6. The admission check controller watches the `PlacementDecision` and updates these clusters in the `MultiKueueConfig` resource
+7. The multikueuecluster controller watches the `ClusterProfile` and creates or updates `MultiKueueCluster` resources with ClusterProfile references for each cluster
+8. Finally, admission check controller updates the `AdmissionCheck` condition to true, readying the [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/) environment for job scheduling

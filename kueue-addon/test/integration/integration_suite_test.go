@@ -15,6 +15,7 @@ import (
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
+	cpclientset "sigs.k8s.io/cluster-inventory-api/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/envtest" // Kubernetes envtest
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
@@ -30,6 +31,7 @@ var (
 	hubKubeClient       kubernetes.Interface
 	hubPermissionClient permissionclientset.Interface
 	hubMSAClient        msaclientset.Interface
+	hubCPClient         cpclientset.Interface
 )
 
 var testEnv *envtest.Environment
@@ -42,6 +44,7 @@ var CRDPaths = []string{
 	"./test/integration/testdeps/kueue/crd.yaml",
 	"./test/integration/testdeps/managed-serviceaccount/crd.yaml",
 	"./test/integration/testdeps/cluster-permission/crd.yaml",
+	"./test/integration/testdeps/clusterprofile/crd.yaml",
 }
 
 func TestIntegration(t *testing.T) {
@@ -74,6 +77,8 @@ var _ = ginkgo.BeforeSuite(func() {
 	hubPermissionClient, err = permissionclientset.NewForConfig(cfg)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	hubMSAClient, err = msaclientset.NewForConfig(cfg)
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	hubCPClient, err = cpclientset.NewForConfig(cfg)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 	// Start the kueue-addon controllers

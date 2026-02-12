@@ -36,6 +36,9 @@ rules:
   - apiGroups: ["kueue.x-k8s.io"]
     resources: ["admissionchecks/status"]
     verbs: ["update", "patch"]
+  - apiGroups: ["multicluster.x-k8s.io"]
+    resources: ["clusterprofiles"]
+    verbs: ["get", "list", "watch"]
 
 ---
 

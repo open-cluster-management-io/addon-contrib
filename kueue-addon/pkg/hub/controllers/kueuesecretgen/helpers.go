@@ -17,6 +17,7 @@ import (
 	permissionrv1alpha1 "open-cluster-management.io/cluster-permission/api/v1alpha1"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msav1beta1 "open-cluster-management.io/managed-serviceaccount/apis/authentication/v1beta1"
+	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
 	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
 	"open-cluster-management.io/sdk-go/pkg/patcher"
 )
@@ -94,6 +95,9 @@ func applyManagedServiceAccount(
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.MultiKueueResourceName,
 			Namespace: clusterName,
+			Labels: map[string]string{
+				msacontroller.LabelKeyClusterProfileSync: "true",
+			},
 		},
 		Spec: msav1beta1.ManagedServiceAccountSpec{
 			Rotation: msav1beta1.ManagedServiceAccountRotation{

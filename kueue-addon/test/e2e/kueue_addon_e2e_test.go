@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
-	kueuev1beta1 "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 )
 
 var _ = Describe("MultiKueue Scenarios", func() {
@@ -30,84 +30,89 @@ var _ = Describe("MultiKueue Scenarios", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating 2 AdmissionChecks for MultiKueue")
-			mkAdmissionCheck := &kueuev1beta1.AdmissionCheck{
+			mkAdmissionCheck := &kueuev1beta2.AdmissionCheck{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "multikueue-e2e",
 					Labels: map[string]string{"test-scenario": "e2e"},
 				},
-				Spec: kueuev1beta1.AdmissionCheckSpec{
+				Spec: kueuev1beta2.AdmissionCheckSpec{
 					ControllerName: "kueue.x-k8s.io/multikueue",
-					Parameters: &kueuev1beta1.AdmissionCheckParametersReference{
+					Parameters: &kueuev1beta2.AdmissionCheckParametersReference{
 						APIGroup: "kueue.x-k8s.io",
 						Kind:     "MultiKueueConfig",
 						Name:     "multikueue-config-e2e",
 					},
 				},
 			}
-			_, err = hubKueueClient.KueueV1beta1().AdmissionChecks().Create(ctx, mkAdmissionCheck, metav1.CreateOptions{})
+			_, err = hubKueueClient.KueueV1beta2().AdmissionChecks().Create(ctx, mkAdmissionCheck, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
-			placementAdmissionCheck := &kueuev1beta1.AdmissionCheck{
+			placementAdmissionCheck := &kueuev1beta2.AdmissionCheck{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "multikueue-config-e2e",
 					Labels: map[string]string{"test-scenario": "e2e"},
 				},
-				Spec: kueuev1beta1.AdmissionCheckSpec{
+				Spec: kueuev1beta2.AdmissionCheckSpec{
 					ControllerName: "open-cluster-management.io/placement",
-					Parameters: &kueuev1beta1.AdmissionCheckParametersReference{
+					Parameters: &kueuev1beta2.AdmissionCheckParametersReference{
 						APIGroup: "cluster.open-cluster-management.io",
 						Kind:     "Placement",
 						Name:     "multikueue-config-e2e",
 					},
 				},
 			}
-			_, err = hubKueueClient.KueueV1beta1().AdmissionChecks().Create(ctx, placementAdmissionCheck, metav1.CreateOptions{})
+			_, err = hubKueueClient.KueueV1beta2().AdmissionChecks().Create(ctx, placementAdmissionCheck, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating ResourceFlavor on the hub cluster")
-			resourceFlavor := &kueuev1beta1.ResourceFlavor{
+			resourceFlavor := &kueuev1beta2.ResourceFlavor{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "default-flavor",
 					Labels: map[string]string{"test-scenario": "e2e"},
 				},
 			}
-			_, err = hubKueueClient.KueueV1beta1().ResourceFlavors().Create(ctx, resourceFlavor, metav1.CreateOptions{})
+			_, err = hubKueueClient.KueueV1beta2().ResourceFlavors().Create(ctx, resourceFlavor, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating ClusterQueue on the hub cluster")
-			clusterQueue := &kueuev1beta1.ClusterQueue{
+			clusterQueue := &kueuev1beta2.ClusterQueue{
 				ObjectMeta: metav1.ObjectMeta{Name: "cluster-queue", Labels: map[string]string{"test-scenario": "e2e"}},
-				Spec: kueuev1beta1.ClusterQueueSpec{
+				Spec: kueuev1beta2.ClusterQueueSpec{
 					NamespaceSelector: &metav1.LabelSelector{},
-					ResourceGroups: []kueuev1beta1.ResourceGroup{{
+					ResourceGroups: []kueuev1beta2.ResourceGroup{{
 						CoveredResources: []corev1.ResourceName{"cpu", "memory", "nvidia.com/gpu"},
-						Flavors: []kueuev1beta1.FlavorQuotas{{
+						Flavors: []kueuev1beta2.FlavorQuotas{{
 							Name: "default-flavor",
-							Resources: []kueuev1beta1.ResourceQuota{
+							Resources: []kueuev1beta2.ResourceQuota{
 								{Name: "cpu", NominalQuota: resource.MustParse("9")},
 								{Name: "memory", NominalQuota: resource.MustParse("36Gi")},
 								{Name: "nvidia.com/gpu", NominalQuota: resource.MustParse("6")},
 							},
 						}},
 					}},
-					AdmissionChecks: []string{"multikueue-e2e", "multikueue-config-e2e"},
+					AdmissionChecksStrategy: &kueuev1beta2.AdmissionChecksStrategy{
+						AdmissionChecks: []kueuev1beta2.AdmissionCheckStrategyRule{
+							{Name: "multikueue-e2e"},
+							{Name: "multikueue-config-e2e"},
+						},
+					},
 				},
 			}
-			_, err = hubKueueClient.KueueV1beta1().ClusterQueues().Create(ctx, clusterQueue, metav1.CreateOptions{})
+			_, err = hubKueueClient.KueueV1beta2().ClusterQueues().Create(ctx, clusterQueue, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating LocalQueue on the hub cluster")
-			localQueue := &kueuev1beta1.LocalQueue{
+			localQueue := &kueuev1beta2.LocalQueue{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "user-queue",
 					Namespace: "default",
 					Labels:    map[string]string{"test-scenario": "e2e"},
 				},
-				Spec: kueuev1beta1.LocalQueueSpec{
+				Spec: kueuev1beta2.LocalQueueSpec{
 					ClusterQueue: "cluster-queue",
 				},
 			}
-			_, err = hubKueueClient.KueueV1beta1().LocalQueues("default").Create(ctx, localQueue, metav1.CreateOptions{})
+			_, err = hubKueueClient.KueueV1beta2().LocalQueues("default").Create(ctx, localQueue, metav1.CreateOptions{})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Waiting for MultiKueueConfig to create")
