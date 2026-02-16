@@ -31,3 +31,17 @@ spec:
                   imagePullPolicy: Never
                   ports:
                     - containerPort: 8000
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: sample-scorer-nodeport
+          namespace: dynamic-scoring
+        spec:
+          type: NodePort # Use NodePort to expose the service on a specific port
+          selector:
+            app: sample-scorer
+          ports:
+            - protocol: TCP
+              port: 8000
+              targetPort: 8000
+              nodePort: 30007

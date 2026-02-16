@@ -4,17 +4,18 @@ metadata:
   name: sample-scorer
 spec:
   description: A sample scorer for time series data
-  configURL: http://sample-scorer.dynamic-scoring.svc:8000/config
+  configURL: http://<NodeIP>:30007/config  # Use this to access via NodePort
+  # configURL: http://sample-scorer.dynamic-scoring.svc:8000/config
   configSyncMode: Full
   location: Internal
   scoreDestination: AddOnPlacementScore
   scoreDimensionFormat: "${node};${namespace};${pod}"
   source:
-    host: http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090
+    host: http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090 # Update this if your Prometheus is deployed differently
     path: /api/v1/query_range
   scoring:
     path: /scoring
-    auth:
-      tokenSecretRef:
-        name: api-auth-secret
-        key: token
+    # auth: # Uncomment this section if your Scoring API requires authentication
+    #   tokenSecretRef:
+    #     name: api-auth-secret
+    #     key: token
