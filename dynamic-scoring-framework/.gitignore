@@ -26,6 +26,9 @@ go.work
 *.swo
 *~
 
+# python
+__pycache__/
+
 vendor/
 secrets/
 samples/simple-prediction-scorer/app/models/*

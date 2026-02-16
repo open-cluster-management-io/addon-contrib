@@ -2,7 +2,7 @@
   "data": [
     {
       "metric": {
-        "__name__": "http_requests_total",
+        "__name__": "my_metric_query_name",
         "instance": "localhost:9090"
       },
       "values": [
@@ -22,7 +22,7 @@
     },
     {
       "metric": {
-        "__name__": "http_requests_total",
+        "__name__": "my_metric_query_name",
         "instance": "other"
       },
       "values": [

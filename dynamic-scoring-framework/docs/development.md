@@ -158,7 +158,7 @@ Verify the controller is running on the hub cluster:
 ```bash
 $ kubectl get pods
 NAME                                                      READY   STATUS    RESTARTS   AGE
-ocm-dynamic-scoring-controller-manager-69f576d9fc-sz55g   1/1     Running   0          33s
+dynamic-scoring-controller-manager-69f576d9fc-sz55g   1/1     Running   0          33s
 ```
 
 The controller is now ready to manage DynamicScorer CRs.
@@ -232,28 +232,6 @@ kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker02
 For kind clusters to communicate via Skupper, create a shared podman network:
 
 ```bash
-podman network create my-kind-net
-podman network connect my-kind-net hub01-control-plane
-podman network connect my-kind-net worker01-control-plane
-podman network connect my-kind-net worker02-control-plane
-```
-
-Verify the network configuration:
-
-```bash
-podman network inspect my-kind-net  # Check connected clusters
-```
-
-### Setup Skupper Sites
-
-Get the hub cluster's IP address on the shared network:
-kubectl create namespace skupper-site-controller --context kind-worker02
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker02
-```
-
-### Configure Podman Network for Kind Clusters
-
-For kind clusters to communicate via Skupper, create a shared podman network:
 podman network create my-kind-net
 podman network connect my-kind-net hub01-control-plane
 podman network connect my-kind-net worker01-control-plane
