@@ -139,8 +139,9 @@ To verify the Sample Scoring API, create a test pod in the hub cluster and exec 
 ```bash
 # Create a test pod in the hub cluster for testing the Scoring API connectivity and response. You can use the provided test-pod.yaml manifest or create your own test pod.
 kubectl apply -f deploy/utils/test-pod.yaml -n dynamic-scoring --context kind-hub01
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' --context kind-worker01)
 # Replace the URL with the actual NodePort IP and run the test command to verify the Scoring API connectivity and response:
-kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://<NODE_IP>:30007/config|jq
+kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://$NODE_IP:30007/config|jq
 ```
 
 You should see the configuration of the Sample Scoring API.
