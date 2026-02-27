@@ -25,7 +25,13 @@ It calculates dynamic scores for each cluster and provides foundational informat
 3. **DynamicScoringAgent**  
    Watches ConfigMaps in each cluster, fetches metrics from Prometheus, calls the scoring API, and exports results as metrics
 
-For more details, refer to the [design document](docs/concept_and_design.md).
+For more details, refer to the [design document](docs/concept-and-design.md).
+
+---
+
+## Quick Start
+
+Please refer to the [quick start guide](docs/quickstart.md) for instructions on deploying the Dynamic Scoring Framework in your environment.
 
 ---
 

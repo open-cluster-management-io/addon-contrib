@@ -1,21 +1,13 @@
 from fastapi import FastAPI, Request
-from pydantic import BaseModel
-from typing import List, Dict
+from schemas.scoring import ScoringPayload, ScoringResponse
+from schemas.config import ConfigResponse
+
 import uvicorn
 
 app = FastAPI()
 
 
-class TimeSeriesSample(BaseModel):
-    metric: Dict[str, str]
-    values: List[List[float]]  # e.g., [[timestamp, value], ...]
-
-
-class ScoringPayload(BaseModel):
-    data: List[TimeSeriesSample]
-
-
-@app.post("/scoring")
+@app.post("/scoring", response_model=ScoringResponse)
 async def scoring_timeseries(payload: ScoringPayload, request: Request):
     print("=== Request Headers ===")
     for k, v in request.headers.items():
@@ -26,6 +18,7 @@ async def scoring_timeseries(payload: ScoringPayload, request: Request):
     for series in data:
         series.metric["meta"] = "my_something_meta_by_sample_scorer"
         values = [float(v[1]) for v in series.values]
+        # Compute a simple average as the score
         average = sum(values) / len(values) if values else 0
         results.append({"metric": series.metric, "score": average})
     return {"results": results}
@@ -36,7 +29,7 @@ async def healthcheck():
     return {"status": "ok"}
 
 
-@app.get("/config")
+@app.get("/config", response_model=ConfigResponse)
 async def get_config():
     config = {
         "name": "sample-scorer",

@@ -16,6 +16,6 @@ spec:
     to:
       kind: DockerImage
       name: >-
-        your-image-registry/open-cluster-management/dynamic-scoring-addon:latest-aarch64
+        default-route-openshift-image-registry.apps.hubdev01.airan.localdomain/open-cluster-management/dynamic-scoring-addon:latest-aarch64
     pushSecret:
       name: hub-push-secret

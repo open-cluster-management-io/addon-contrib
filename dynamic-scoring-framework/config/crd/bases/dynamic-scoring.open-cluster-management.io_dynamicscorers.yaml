@@ -40,40 +40,66 @@ spec:
             description: DynamicScorerSpec defines the desired state of DynamicScorer.
             properties:
               configSyncMode:
-                description: ConfigSyncMode represents the mode of scoring configuration
-                  synchronization.
+                description: |-
+                  ConfigSyncMode determines how the Dynamic Scoring Agent synchronizes its configuration.
+                  Full mode means the agent fetches the complete configuration from the specified ConfigURL,
+                  while None mode indicates that no configuration synchronization is performed.
                 enum:
                 - Full
                 - None
                 type: string
               configURL:
+                description: ConfigURL specifies the URL from which the Dynamic Scoring
+                  Agent fetches its configuration.
                 type: string
               description:
+                description: Description provides a brief explanation of the Dynamic
+                  Scorer's purpose.
                 type: string
               location:
-                description: Location represents the location of the scorer.
+                description: |-
+                  Location indicates whether the Dynamic Scorer is hosted within the cluster (`Internal`)
+                  or outside the cluster (`External`).
                 enum:
                 - Internal
                 - External
                 type: string
               scoreDestination:
-                description: ScoreDestination represents the destination where the
-                  score is sent.
+                description: |-
+                  ScoreDestination specifies where the Dynamic Scoring Agent should send the computed scores.
+                  For example, `AddOnPlacementScore` indicates the scores should be sent to the AddOnPlacementScore API.
                 enum:
                 - AddOnPlacementScore
                 - None
                 type: string
               scoreDimensionFormat:
+                description: |-
+                  ScoreDimensionFormat defines the format of the score dimension used by the Dynamic Scoring Agent.
+                  Score dimensions categorize calculated scores by the AddOnPlacementScore value name.
+                  Some reserved placeholders are available.
+                  Example placeholders: ${cluster}, ${node}, ${device}, ${namespace}, ${app}, ${pod}, ${container}, ${meta}, ${scoreName}
+                  Example format: "resource-usage-${cluster}-${namespace}-${app}"
                 type: string
               scoring:
+                description: Scoring defines the scoring API configuration for the
+                  Dynamic Scoring Agent to obtain scores.
                 properties:
                   auth:
+                    description: |-
+                      Auth specifies the authentication configuration used by the Dynamic Scoring Agent to call the scoring API.
+                      This field is optional and ignored when empty.
                     properties:
                       tokenSecretRef:
+                        description: TokenSecretRef specifies the reference to the
+                          Kubernetes Secret that contains the authentication token.
                         properties:
                           key:
+                            description: The key within the Kubernetes Secret that
+                              contains the authentication token.
                             type: string
                           name:
+                            description: The name of the Kubernetes Secret that contains
+                              the authentication token.
                             type: string
                         required:
                         - key
@@ -83,33 +109,56 @@ spec:
                     - tokenSecretRef
                     type: object
                   host:
+                    description: |-
+                      Host specifies the host used by the Dynamic Scoring Agent to call the scoring API.
+                      For example, if the agent calls the scoring API at https://your-scorer.local/score,
+                      https://your-scorer.local should be specified.
                     type: string
                   params:
+                    description: |-
+                      Params specifies the scoring parameters used by the Dynamic Scoring Agent to call the scoring API.
+                      e.g., interval
                     properties:
                       interval:
                         description: |-
-                          The interval in seconds for scoring
-                          Note: This interval also used for config synchronization interval.
+                          The interval in seconds for scoring.
+                          Note: This interval is also used for config synchronization.
                         type: integer
                       name:
-                        description: The name of the score
+                        description: The name of the score.
                         type: string
                     required:
                     - interval
                     - name
                     type: object
                   path:
+                    description: |-
+                      Path specifies the path used by the Dynamic Scoring Agent to call the scoring API.
+                      For example, if the agent calls the scoring API at https://your-scorer.local/score,
+                      /score should be specified.
+                      If not specified, the default value is `/score`.
                     type: string
                 type: object
               source:
+                description: Source defines the data source configuration for the
+                  Dynamic Scoring Agent to fetch metrics.
                 properties:
                   auth:
+                    description: |-
+                      Auth specifies the authentication configuration used by the Dynamic Scoring Agent to retrieve the data source.
+                      This field is optional and ignored when empty or when `Type` is `None`.
                     properties:
                       tokenSecretRef:
+                        description: TokenSecretRef specifies the reference to the
+                          Kubernetes Secret that contains the authentication token.
                         properties:
                           key:
+                            description: The key within the Kubernetes Secret that
+                              contains the authentication token.
                             type: string
                           name:
+                            description: The name of the Kubernetes Secret that contains
+                              the authentication token.
                             type: string
                         required:
                         - key
@@ -119,13 +168,21 @@ spec:
                     - tokenSecretRef
                     type: object
                   host:
+                    description: |-
+                      Host specifies the host used by the Dynamic Scoring Agent to retrieve data from the source.
+                      For example, if the agent retrieves data from https://your-prometheus.local/api/v1/query_range,
+                      https://your-prometheus.local should be specified.
+                      This field is ignored when `Type` is `None`.
                     type: string
                   params:
+                    description: |-
+                      Params specifies the query parameters used by the Dynamic Scoring Agent to query the data source.
+                      This field is ignored when `Type` is `None`.
                     properties:
                       query:
                         description: |-
                           The Prometheus query string.
-                          If you want to use multiple time series, join them with semicolons.
+                          To query multiple time series, join queries with semicolons.
                         type: string
                       range:
                         description: The time range in seconds for the query.
@@ -139,9 +196,15 @@ spec:
                     - step
                     type: object
                   path:
+                    description: |-
+                      Path specifies the path used by the Dynamic Scoring Agent to retrieve data from the source.
+                      For example, if the agent retrieves data from https://your-prometheus.local/api/v1/query_range,
+                      /api/v1/query_range should be specified.
+                      This field is ignored when `Type` is `None`.
                     type: string
                   type:
-                    description: SourceType represents the type of the source.
+                    description: Type specifies the source type (e.g., Prometheus,
+                      None).
                     enum:
                     - Prometheus
                     - None
@@ -164,6 +227,8 @@ spec:
                 - Unknown
                 type: string
               lastSyncedConfig:
+                description: LastSyncedConfig holds the last configuration successfully
+                  synced by the Dynamic Scoring Agent.
                 properties:
                   description:
                     type: string
@@ -174,17 +239,17 @@ spec:
                       host:
                         description: |-
                           The hostname or IP address of the scoring endpoint.
-                          e.g. "http://scoring-api.scoring.svc.cluster.local:8080"
+                          e.g. `http://scoring-api.scoring.svc.cluster.local:8080`
                         type: string
                       params:
                         properties:
                           interval:
                             description: |-
-                              The interval in seconds for scoring
-                              Note: This interval also used for config synchronization interval.
+                              The interval in seconds for scoring.
+                              Note: This interval is also used for config synchronization.
                             type: integer
                           name:
-                            description: The name of the score
+                            description: The name of the score.
                             type: string
                         required:
                         - interval
@@ -193,7 +258,7 @@ spec:
                       path:
                         description: |-
                           The API path of the scoring endpoint.
-                          e.g. "/api/v1/score"
+                          e.g. `/api/v1/score`
                         type: string
                     required:
                     - params
@@ -202,19 +267,19 @@ spec:
                   source:
                     description: |-
                       SourceConfig represents the source configuration.
-                      If the source type is Prometheus, the host should be the Prometheus server URL.
+                      If the `Type` is `Prometheus`, the `Host` should be the Prometheus server URL.
                     properties:
                       host:
                         description: |-
                           The hostname or IP address of the source.
-                          e.g. "http://prometheus-server.monitoring.svc.cluster.local:9090"
+                          e.g. `http://prometheus-server.monitoring.svc.cluster.local:9090`
                         type: string
                       params:
                         properties:
                           query:
                             description: |-
                               The Prometheus query string.
-                              If you want to use multiple time series, join them with semicolons.
+                              To query multiple time series, join queries with semicolons.
                             type: string
                           range:
                             description: The time range in seconds for the query.
@@ -230,7 +295,7 @@ spec:
                       path:
                         description: |-
                           The API path of the source.
-                          e.g. "/api/v1/query_range" for Prometheus
+                          e.g. `/api/v1/query_range` for Prometheus
                         type: string
                       type:
                         description: SourceType represents the type of the source.
