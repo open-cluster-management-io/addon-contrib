@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-workload-scorer
+  namespace: ai-workload-scoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-workload-scorer
+  template:
+    metadata:
+      labels:
+        app: ai-workload-scorer
+    spec:
+      containers:
+        - name: ai-workload-scorer
+          image: image-registry.openshift-image-registry.svc:5000/ai-workload-scoring/ai-workload-scorer:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: THRESHOLD
+              value: "650"
+            - name: ALPHA
+              value: "0.01"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/static/config.json
+              subPath: config.json
+      volumes:
+        - name: config-volume
+          configMap:
+            name: ai-workload-scorer-config
+      
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-workload-scorer
+  namespace: ai-workload-scoring
+spec:
+  selector:
+    app: ai-workload-scorer
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ai-workload-scorer
+  namespace: ai-workload-scoring
+spec:
+  host: ai-workload-scorer.cluster-example.com
+  to:
+    kind: Service
+    name: ai-workload-scorer
+  port:
+    targetPort: 8000
+

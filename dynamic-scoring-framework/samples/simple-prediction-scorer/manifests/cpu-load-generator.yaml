@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-load-generator
+  namespace: cpu-load-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-load-generator
+  template:
+    metadata:
+      labels:
+        app: cpu-load-generator
+    spec:
+      containers:
+      - name: stressor
+        image: polinux/stress
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            while true; do
+              echo "Stress ON"; stress --cpu 2 --timeout 300;
+              echo "Stress OFF"; sleep 600;
+            done
+        resources:
+          limits:
+            cpu: "2"
+            memory: "128Mi"
+          requests:
+            cpu: "500m"
+            memory: "64Mi"

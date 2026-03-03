@@ -1,0 +1,18 @@
+apiVersion: dynamic-scoring.open-cluster-management.io/v1alpha1
+kind: DynamicScorer
+metadata:
+  name: ai-workload-perf-scorer
+spec:
+  description: |
+    This score evaluates the performance of the inference application.
+    The score ranges from 0 to 100, where values closer to 100 indicate higher throughput.
+  configURL: http://${AI_WORKLOAD_SCORER_HOST}/performance/config
+  configSyncMode: Full
+  location: External
+  scoreDestination: AddOnPlacementScore
+  scoreDimensionFormat: "${app};${device}"
+  source:
+    auth:
+      tokenSecretRef:
+        name: source-query-secret
+        key: token

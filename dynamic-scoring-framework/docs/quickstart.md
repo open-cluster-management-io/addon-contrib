@@ -1,4 +1,4 @@
-# Dynamic Scoring Framewkork Quickstart
+# Dynamic Scoring Framework Quickstart
 
 Dynamic Scoring Framework is a framework for automating resource scoring in multi-cluster environments. It calculates dynamic scores for each cluster and provides foundational information for resource optimization and automated control.
 
@@ -64,9 +64,9 @@ You can choose to install Prometheus chart based on your use case:
 
 - Just use Prometheus as a metrics store (source) in managed clusters -> ```prometheus``` chart
 - use Prometheus as a scoring results store (output) -> ```kube-prometheus-stack``` chart, including ServiceMonitor stack
-- use Prometheus for cetralized scoring results store -> ```kube-prometheus-stack``` chart with remote write configuration to the hub cluster
+- use Prometheus for centralized scoring results store -> ```kube-prometheus-stack``` chart with remote write configuration to the hub cluster
 
-In tne [Setup Prometheus](./setup-prometheus.md) guide, instructions are provided for setting up Prometheus in managed clusters, including optional centralized scoring results collection via Prometheus in the hub cluster.
+In the [Setup Prometheus](./setup-prometheus.md) guide, instructions are provided for setting up Prometheus in managed clusters, including optional centralized scoring results collection via Prometheus in the hub cluster.
 
 ## Setup Sample Scoring API and DynamicScorer
 
