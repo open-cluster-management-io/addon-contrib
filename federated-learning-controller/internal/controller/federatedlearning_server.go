@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"sort"
 	"strings"
@@ -120,43 +119,36 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
 	}
 
-	var serverParams any
-	var serverFS embed.FS
+	clusters, err := r.getDecidedClusters(ctx, instance)
+	if err != nil {
+		return err
+	}
+	sort.Strings(clusters)
+	log.Infof("clusters: %+v", clusters)
 
-	switch instance.Spec.Framework {
-	case flv1alpha1.OpenFL:
-		serverFS = manifests.OpenFLServerFiles
-		clusters, err := r.getDecidedClusters(ctx, instance)
-		if err != nil {
-			return err
-		}
-		sort.Strings(clusters)
-		log.Infof("clusters: %+v", clusters)
-		// determine endpoint info (IP and port) prior to rendering, especially for NodePort
-		listenerIP, listenerPort, err := r.determineEndpointInfo(ctx, instance)
-		if err != nil {
-			return err
-		}
-		serverParams = &manifests.OpenFLServerParams{
-			Namespace:         instance.Namespace,
-			Name:              getSeverName(instance.Name),
-			Image:             instance.Spec.Server.Image,
-			NumberOfRounds:    instance.Spec.Server.Rounds,
-			StorageVolumeName: instance.Spec.Server.Storage.Name,
-			ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
-			ListenerIP:        listenerIP,
-			ListenerPort:      listenerPort,
-			CreateService:     createService,
-			ModelDir:          modelDir,
-			ObsSidecarImage:   obsSidecarImage,
-			Collaborators:     strings.Join(clusters, ","),
-		}
-		log.Infof("server params: %+v", serverParams)
-	default:
-		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
+	// determine endpoint info (IP and port) prior to rendering, especially for NodePort
+	listenerIP, listenerPort, err := r.determineEndpointInfo(ctx, instance)
+	if err != nil {
+		return err
 	}
 
-	render, deployer := applier.NewRenderer(serverFS), applier.NewDeployer(r.Client)
+	serverParams := &manifests.OpenFLServerParams{
+		Namespace:         instance.Namespace,
+		Name:              getSeverName(instance.Name),
+		Image:             instance.Spec.Server.Image,
+		NumberOfRounds:    instance.Spec.Server.Rounds,
+		StorageVolumeName: instance.Spec.Server.Storage.Name,
+		ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
+		ListenerIP:        listenerIP,
+		ListenerPort:      listenerPort,
+		CreateService:     createService,
+		ModelDir:          modelDir,
+		ObsSidecarImage:   obsSidecarImage,
+		Collaborators:     strings.Join(clusters, ","),
+	}
+	log.Infof("server params: %+v", serverParams)
+
+	render, deployer := applier.NewRenderer(manifests.OpenFLServerFiles), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
 		return serverParams, nil
 	})

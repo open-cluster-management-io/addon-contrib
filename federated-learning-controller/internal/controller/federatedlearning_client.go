@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"net"
 	"reflect"
@@ -334,43 +333,35 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
 	}
 
-	var clientParams any
-	var clientFS embed.FS
-
-	switch instance.Spec.Framework {
-	case flv1alpha1.OpenFL:
-		clientFS = manifests.OpenFLClientFiles
-		host, port, err := net.SplitHostPort(serverAddress)
-		if err != nil {
-			return fmt.Errorf("failed to parse server address: %w", err)
-		}
-		portUint, err := strconv.ParseUint(port, 10, 16)
-		if err != nil {
-			return fmt.Errorf("failed to parse server port: %w", err)
-		}
-		modelDir, _, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
-		if err != nil {
-			return err
-		}
-		clientParams = &manifests.OpenFLClientParams{
-			ManifestName:       instance.Name,
-			ManifestNamespace:  clusterName,
-			ClientJobNamespace: instance.Namespace,
-			ClientJobName:      fmt.Sprintf("%s-client", instance.Name),
-			ClientJobImage:     instance.Spec.Client.Image,
-			ClientDataPath:     dataConfig,
-			ServerIP:           host,
-			ServerPort:         uint16(portUint),
-			ModelDir:           modelDir,
-			ObsSidecarImage:    obsSidecarImage,
-			ClientName:         clusterName,
-			NumberOfRounds:     instance.Spec.Server.Rounds,
-		}
-	default:
-		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
+	host, port, err := net.SplitHostPort(serverAddress)
+	if err != nil {
+		return fmt.Errorf("failed to parse server address: %w", err)
+	}
+	portUint, err := strconv.ParseUint(port, 10, 16)
+	if err != nil {
+		return fmt.Errorf("failed to parse server port: %w", err)
+	}
+	modelDir, _, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
+	if err != nil {
+		return err
 	}
 
-	render, deployer := applier.NewRenderer(clientFS), applier.NewDeployer(r.Client)
+	clientParams := &manifests.OpenFLClientParams{
+		ManifestName:       instance.Name,
+		ManifestNamespace:  clusterName,
+		ClientJobNamespace: instance.Namespace,
+		ClientJobName:      fmt.Sprintf("%s-client", instance.Name),
+		ClientJobImage:     instance.Spec.Client.Image,
+		ClientDataPath:     dataConfig,
+		ServerIP:           host,
+		ServerPort:         uint16(portUint),
+		ModelDir:           modelDir,
+		ObsSidecarImage:    obsSidecarImage,
+		ClientName:         clusterName,
+		NumberOfRounds:     instance.Spec.Server.Rounds,
+	}
+
+	render, deployer := applier.NewRenderer(manifests.OpenFLClientFiles), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
 		return clientParams, nil
 	})
