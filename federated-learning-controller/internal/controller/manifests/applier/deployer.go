@@ -36,19 +36,20 @@ type deployer struct {
 func NewDeployer(client client.Client) Deployer {
 	deployer := &deployer{client: client}
 	deployer.deployFuncs = map[string]deployFunc{
-		"Deployment":         deployer.deployDeployment,
-		"StatefulSet":        deployer.deployDeployment,
-		"Job":                deployer.deployJob,
-		"Service":            deployer.deployService,
-		"ServiceAccount":     deployer.deployServiceAccount,
-		"ConfigMap":          deployer.deployConfigMap,
-		"Secret":             deployer.deploySecret,
-		"Role":               deployer.deployRole,
-		"RoleBinding":        deployer.deployRoleBinding,
-		"ClusterRole":        deployer.deployClusterRole,
-		"ClusterRoleBinding": deployer.deployClusterRoleBinding,
-		"PodMonitor":         deployer.deployPodMonitor,
-		"ManifestWork":       deployer.deployDeployment,
+		"Deployment":             deployer.deployDeployment,
+		"StatefulSet":            deployer.deployDeployment,
+		"Job":                    deployer.deployJob,
+		"Service":                deployer.deployService,
+		"ServiceAccount":         deployer.deployServiceAccount,
+		"ConfigMap":              deployer.deployConfigMap,
+		"Secret":                 deployer.deploySecret,
+		"Role":                   deployer.deployRole,
+		"RoleBinding":            deployer.deployRoleBinding,
+		"ClusterRole":            deployer.deployClusterRole,
+		"ClusterRoleBinding":     deployer.deployClusterRoleBinding,
+		"PodMonitor":             deployer.deployPodMonitor,
+		"ManifestWork":           deployer.deployDeployment,
+		"ManifestWorkReplicaSet": deployer.deployDeployment,
 	}
 	return deployer
 }

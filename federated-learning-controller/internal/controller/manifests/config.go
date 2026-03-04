@@ -1,19 +1,11 @@
 package manifests
 
-// FlowerServerParams defines the parameters for a Flower server.
-type FlowerServerParams struct {
-	Namespace           string
-	Name                string
-	Image               string
-	NumberOfRounds      int
-	MinAvailableClients int
-	StorageVolumeName   string
-	ModelDir            string
-	InitModel           string
-	ListenerType        string
-	ListenerPort        int
-	CreateService       bool
-	ObsSidecarImage     string
+// FlowerServerAppParams defines the parameters for a Flower 2.x SuperExec-ServerApp Deployment on hub.
+type FlowerServerAppParams struct {
+	Namespace        string // FL CR namespace (where Deployment is created)
+	Name             string // e.g., "<cr-name>-serverapp"
+	Image            string // app image with ServerApp code
+	SuperLinkAddress string // from spec.server.superlink, e.g. "superlink.flower-system:9091"
 }
 
 // OpenFLServerParams defines the parameters for an OpenFL server.
@@ -32,16 +24,14 @@ type OpenFLServerParams struct {
 	Collaborators     string
 }
 
-// FlowerClientParams defines the parameters for a Flower client.
-type FlowerClientParams struct {
-	ManifestName       string
-	ManifestNamespace  string
-	ClientJobNamespace string
-	ClientJobName      string
-	ClientJobImage     string
-	ClientDataConfig   string
-	ServerAddress      string
-	ObsSidecarImage    string
+// FlowerClientAppParams defines the parameters for a Flower 2.x SuperExec-ClientApp ManifestWorkReplicaSet.
+type FlowerClientAppParams struct {
+	Name             string // e.g., "<cr-name>-clientapp"
+	Namespace        string // FL CR namespace (where MWRS is created)
+	PlacementName    string // Placement name for cluster selection
+	Image            string // app image with ClientApp code
+	SuperNodeAddress string // from spec.client.supernode, e.g. "flower-supernode.flower-addon:9094"
+	ClientNamespace  string // derived from supernode endpoint, e.g. "flower-addon"
 }
 
 // OpenFLClientParams defines the parameters for an OpenFL client.

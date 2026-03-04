@@ -7,15 +7,20 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/restmapper"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	clusterv1beta2 "open-cluster-management.io/api/cluster/v1beta2"
 	workv1 "open-cluster-management.io/api/work/v1"
+	workv1alpha1 "open-cluster-management.io/api/work/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -32,6 +37,7 @@ var clusterclientset *clusterclient.Clientset
 // +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=placements,verbs=get;update;watch;list;delete;create
 // +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclusters,verbs=get;update;watch;list
 // +kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworks,verbs=get;list;watch;update;delete;create
+// +kubebuilder:rbac:groups=work.open-cluster-management.io,resources=manifestworkreplicasets,verbs=get;list;watch;create;update;delete
 // +kubebuilder:rbac:groups=cluster.open-cluster-management.io,resources=managedclustersetbindings;managedclustersets;managedclustersets/bind;managedclustersets/finalizers;managedclustersets/join,verbs=create;get;list;patch;update;watch;delete
 
 func (r *FederatedLearningReconciler) federatedLearningClient(ctx context.Context,
@@ -56,6 +62,105 @@ func (r *FederatedLearningReconciler) federatedLearningClient(ctx context.Contex
 		log.Error(err)
 		return err
 	}
+	return nil
+}
+
+// parseNamespaceFromEndpoint extracts the namespace from a SuperNode endpoint string.
+// Format: <service>.<namespace>:<port> -> returns <namespace>
+func parseNamespaceFromEndpoint(endpoint string) string {
+	// Strip port if present
+	host := endpoint
+	if colonIdx := strings.LastIndex(endpoint, ":"); colonIdx != -1 {
+		host = endpoint[:colonIdx]
+	}
+	// Extract namespace (part after the first dot)
+	if dotIdx := strings.Index(host, "."); dotIdx != -1 {
+		return host[dotIdx+1:]
+	}
+	return host
+}
+
+// deployFlowerClientApp deploys the SuperExec-ClientApp via ManifestWorkReplicaSet.
+func (r *FederatedLearningReconciler) deployFlowerClientApp(ctx context.Context,
+	instance *flv1alpha1.FederatedLearning,
+) error {
+	// Check placement readiness
+	placement := &clusterv1beta1.Placement{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: instance.Name, Namespace: instance.Namespace,
+		},
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(placement), placement); err != nil {
+		return err
+	}
+
+	selectedClusters := placement.Status.NumberOfSelectedClusters
+	minimizeClients := instance.Spec.Server.MinAvailableClients
+	if selectedClusters < int32(minimizeClients) {
+		log.Infow("waiting for available clients", "selected", selectedClusters, "minimum", minimizeClients)
+		message := fmt.Sprintf(MessageWaitingAvailableClients, minimizeClients, selectedClusters)
+		if message != instance.Status.Message {
+			instance.Status.Message = message
+			if err := r.Client.Status().Update(ctx, instance); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	supernode := instance.Spec.Client.SuperNode
+	if supernode == "" {
+		supernode = "flower-supernode.flower-addon:9094"
+	}
+
+	clientNamespace := parseNamespaceFromEndpoint(supernode)
+
+	clientAppParams := &manifests.FlowerClientAppParams{
+		Name:             fmt.Sprintf("%s-clientapp", instance.Name),
+		Namespace:        instance.Namespace,
+		PlacementName:    instance.Name,
+		Image:            instance.Spec.Client.Image,
+		SuperNodeAddress: supernode,
+		ClientNamespace:  clientNamespace,
+	}
+
+	render, deployer := applier.NewRenderer(manifests.FlowerClientAppFiles), applier.NewDeployer(r.Client)
+	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
+		return clientAppParams, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// create discovery client for setting owner references
+	dc, err := discovery.NewDiscoveryClientForConfig(r.GetConfig())
+	if err != nil {
+		return err
+	}
+
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
+	if err = SetOwner(unstructuredObjects, instance, mapper, r.Scheme); err != nil {
+		return err
+	}
+
+	for _, obj := range unstructuredObjects {
+		log.Infof("deploying Flower ClientApp %s/%s", obj.GetNamespace(), obj.GetName())
+		if err := deployer.Deploy(obj); err != nil {
+			return err
+		}
+	}
+
+	// Switch to Running
+	message := fmt.Sprintf(MessageRunning, selectedClusters)
+	if instance.Status.Phase != flv1alpha1.PhaseRunning || instance.Status.Message != message {
+		log.Infow("switch to Running", "message", message)
+		instance.Status.Phase = flv1alpha1.PhaseRunning
+		instance.Status.Message = message
+		if err := r.Client.Status().Update(ctx, instance); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -121,6 +226,53 @@ func (r *FederatedLearningReconciler) generateWorkload(ctx context.Context, inst
 
 func (r *FederatedLearningReconciler) pruneClientResources(ctx context.Context, instance *flv1alpha1.FederatedLearning,
 ) (err error) {
+	if instance.Spec.Framework == flv1alpha1.Flower {
+		return r.pruneFlowerClientResources(ctx, instance)
+	}
+	return r.pruneOpenFLClientResources(ctx, instance)
+}
+
+// pruneFlowerClientResources cleans up Flower 2.x client resources (ManifestWorkReplicaSet + Placement).
+func (r *FederatedLearningReconciler) pruneFlowerClientResources(ctx context.Context, instance *flv1alpha1.FederatedLearning,
+) error {
+	// Delete ManifestWorkReplicaSet
+	mwrs := &workv1alpha1.ManifestWorkReplicaSet{}
+	mwrsName := fmt.Sprintf("%s-clientapp", instance.Name)
+	if err := r.Get(ctx, types.NamespacedName{
+		Namespace: instance.Namespace, Name: mwrsName,
+	}, mwrs); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+	} else {
+		if err := r.Delete(ctx, mwrs); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ManifestWorkReplicaSet %s: %w", mwrsName, err)
+		}
+		log.Infof("deleted ManifestWorkReplicaSet %s/%s", instance.Namespace, mwrsName)
+	}
+
+	// Delete Placement
+	placement := &clusterv1beta1.Placement{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: instance.Name, Namespace: instance.Namespace,
+		},
+	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(placement), placement); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if err := r.Delete(ctx, placement); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	return nil
+}
+
+// pruneOpenFLClientResources cleans up OpenFL client resources (per-cluster ManifestWorks + Placement).
+func (r *FederatedLearningReconciler) pruneOpenFLClientResources(ctx context.Context, instance *flv1alpha1.FederatedLearning,
+) (err error) {
 	placement := &clusterv1beta1.Placement{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: instance.Name, Namespace: instance.Namespace,
@@ -133,8 +285,7 @@ func (r *FederatedLearningReconciler) pruneClientResources(ctx context.Context, 
 		return nil
 	}
 
-	// delete the mainfestwork based on the placement status
-	// TODO: Use the Label to delete it
+	// delete the manifestwork based on the placement status
 	for _, decisionGroup := range placement.Status.DecisionGroups {
 		for _, decisionName := range decisionGroup.Decisions {
 			decision := clusterv1beta1.PlacementDecision{}
@@ -143,12 +294,11 @@ func (r *FederatedLearningReconciler) pruneClientResources(ctx context.Context, 
 			}, &decision); err != nil {
 				return err
 			}
-			// generate workload
 			for _, clusterDecision := range decision.Status.Decisions {
-				namesapce := clusterDecision.ClusterName
+				namespace := clusterDecision.ClusterName
 				work := &workv1.ManifestWork{}
-				log.Infow("delete the workload for the cluster", "cluster", namesapce)
-				err = r.Get(ctx, types.NamespacedName{Namespace: namesapce, Name: instance.Name}, work)
+				log.Infow("delete the workload for the cluster", "cluster", namespace)
+				err = r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: instance.Name}, work)
 				if err != nil && !errors.IsNotFound(err) {
 					return err
 				} else if errors.IsNotFound(err) {
@@ -188,18 +338,6 @@ func (r *FederatedLearningReconciler) clusterWorkload(ctx context.Context, insta
 	var clientFS embed.FS
 
 	switch instance.Spec.Framework {
-	case flv1alpha1.Flower:
-		clientFS = manifests.FlowerClientFiles
-		clientParams = &manifests.FlowerClientParams{
-			ManifestName:       instance.Name,
-			ManifestNamespace:  clusterName,
-			ClientJobNamespace: instance.Namespace,
-			ClientJobName:      fmt.Sprintf("%s-client", instance.Name),
-			ClientJobImage:     instance.Spec.Client.Image,
-			ClientDataConfig:   dataConfig,
-			ServerAddress:      serverAddress,
-			ObsSidecarImage:    obsSidecarImage,
-		}
 	case flv1alpha1.OpenFL:
 		clientFS = manifests.OpenFLClientFiles
 		host, port, err := net.SplitHostPort(serverAddress)

@@ -8,7 +8,35 @@ This Kubernetes controller automates the deployment and management of federated 
 
 ![Controller Architecture](./assets/images/architecture.png)
 
---- 
+---
+
+## Architecture
+
+### Flower 2.x (SuperLink/SuperNode)
+
+The Flower path leverages the [Flower Addon](../flower-addon/) to pre-deploy the SuperLink/SuperNode infrastructure. The controller deploys only the application layer on top:
+
+```
+Hub Cluster:
+  ├── SuperLink (pre-deployed by Flower Addon)
+  ├── SuperExec-ServerApp Deployment (deployed by FederatedLearning Controller)
+  │   └── connects to SuperLink exec API (port 9091)
+  └── FederatedLearning Controller
+
+Managed Clusters:
+  ├── SuperNode (pre-deployed by Flower Addon)
+  └── SuperExec-ClientApp Deployment (deployed via ManifestWorkReplicaSet)
+      └── connects to SuperNode ClientAppIO API (port 9094)
+```
+
+- **ServerApp** is deployed as a Deployment on the hub cluster, connecting to the SuperLink exec API.
+- **ClientApp** is deployed to managed clusters via a single ManifestWorkReplicaSet, which automatically handles cluster adds/removes through OCM Placement.
+
+### OpenFL
+
+The OpenFL path manages the full server/client lifecycle using Jobs, Services, and per-cluster ManifestWorks.
+
+---
 
 ## Getting Started
 
@@ -24,9 +52,9 @@ Ensure the following tools are installed:
 Optional (for container image building):
 
 - Podman or Docker
-- Go (version 1.19 or later)
+- Go (version 1.23 or later)
 
---- 
+---
 
 ### Set Up the Environment
 
@@ -51,11 +79,34 @@ cluster1   true           https://cluster1-control-plane:6443   True     True   
 cluster2   true           https://cluster2-control-plane:6443   True     True        3m
 ```
 
+#### 4. Deploy the Flower Addon (required for Flower framework)
+
+The Flower addon pre-deploys SuperLink on the hub and SuperNode on managed clusters:
+
+```bash
+cd ../flower-addon
+make deploy
+make enable-addon CLUSTER=cluster1
+make enable-addon CLUSTER=cluster2
+```
+
+Verify the addon is running:
+
+```bash
+$ kubectl get pods -n flower-system
+NAME                         READY   STATUS    RESTARTS   AGE
+superlink-c8d95648d-6vdv8    1/1     Running   0          1m
+
+$ kubectl get managedclusteraddons -A | grep flower
+cluster1    flower-addon   True
+cluster2    flower-addon   True
+```
+
 #### Optional: Configure Environment for Observability
 
 Please refer to the [Observability Setup](docs/configure-environment-observability.md) documentation for more details.
 
---- 
+---
 
 ### Deploy Federated Learning Controller
 
@@ -124,15 +175,13 @@ federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3
   ```
 </details>
 
---- 
+---
 
-### Deploy the Federated Learning Instance
+### Deploy a Federated Learning Instance (Flower)
 
-#### 1. Deploy a Federated Learning Instance
+#### 1. Create a FederatedLearning Resource
 
-In this example, both the server and clients use the pre-built image `quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest`. Once the resource is created, the server is deployed to the hub cluster, and the clients are prepared for deployment to the managed clusters.
-
-Create a `FederatedLearning` resource in the controller namespace on the hub cluster:
+The Flower path requires the Flower addon to be installed. The controller deploys a SuperExec-ServerApp on the hub and SuperExec-ClientApp Deployments on managed clusters via ManifestWorkReplicaSet.
 
 ```yaml
 apiVersion: federation-ai.open-cluster-management.io/v1alpha1
@@ -142,7 +191,112 @@ metadata:
 spec:
   framework: flower
   server:
-    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
+    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
+    minAvailableClients: 2
+    # superlink: superlink.flower-system:9091  # default, can be omitted
+  client:
+    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
+    # supernode: flower-supernode.flower-addon:9094  # default, can be omitted
+    placement:
+      clusterSets:
+        - global
+      predicates:
+        - requiredClusterSelector:
+            labelSelector:
+              matchLabels:
+                feature.open-cluster-management.io/addon-flower-addon: available
+```
+
+Key fields:
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| `server.superlink` | SuperLink exec API endpoint | `superlink.flower-system:9091` |
+| `client.supernode` | SuperNode ClientAppIO API endpoint | `flower-supernode.flower-addon:9094` |
+| `server.minAvailableClients` | Minimum clusters required before training starts | - |
+| `client.placement` | OCM Placement spec for cluster selection | - |
+
+#### 2. Check the Federated Learning Instance Status
+
+After creating the resource, the controller transitions through phases:
+
+- **Waiting**: Placement is created, waiting for enough clusters to be selected.
+- **Running**: ServerApp and ClientApp are deployed. The CR stays in `Running` until deleted.
+
+```bash
+$ kubectl get fl
+NAME                        PHASE     AGE
+federated-learning-sample   Running   30s
+```
+
+Verify the resources:
+
+```bash
+# ServerApp Deployment on hub
+$ kubectl get deployments
+NAME                                  READY   UP-TO-DATE   AVAILABLE   AGE
+federated-learning-sample-serverapp   1/1     1            1           30s
+
+# ManifestWorkReplicaSet for client distribution
+$ kubectl get manifestworkreplicasets
+NAME                                  PLACEMENT                     FOUND   MANIFESTWORKS   APPLIED
+federated-learning-sample-clientapp   federated-learning-sample     True    AsExpected       True
+
+# ClientApp Deployments on managed clusters
+$ kubectl get deployments --context kind-cluster1 -n flower-addon
+NAME                                  READY   UP-TO-DATE   AVAILABLE   AGE
+federated-learning-sample-clientapp   1/1     1            1           30s
+flower-supernode                      1/1     1            1           10m
+```
+
+#### 3. Trigger Training
+
+With SuperExec-ServerApp and SuperExec-ClientApp running, use `flwr run` against the SuperLink to trigger a training round:
+
+```bash
+flwr run --insecure --run-config 'num-server-rounds=3' \
+  --app <your-flower-app> \
+  --federation <superlink-address>
+```
+
+<details>
+
+<summary><strong>Build Your Own Flower App Image</strong></summary>
+
+You can use the [Flower PyTorch App](./examples/flower/) as a reference. The app image must contain a Flower `ServerApp` and `ClientApp` that are compatible with the SuperExec architecture.
+
+  ```bash
+  cd examples/flower
+  export IMAGE_REGISTRY=<your-registry>
+  export IMAGE_TAG=<your-tag>
+  export APP_NAME=cifar10
+  make build-app-image
+  make push-app-image
+  ```
+
+</details>
+
+---
+
+<details>
+
+<summary><strong>Deploy a Federated Learning Instance (OpenFL)</strong></summary>
+
+### OpenFL Path
+
+The OpenFL path uses the legacy server/client Job model with its own networking (Service, LoadBalancer/NodePort).
+
+#### 1. Create a FederatedLearning Resource
+
+```yaml
+apiVersion: federation-ai.open-cluster-management.io/v1alpha1
+kind: FederatedLearning
+metadata:
+  name: federated-learning-openfl
+spec:
+  framework: openfl
+  server:
+    image: quay.io/open-cluster-management/federated-learning-application:openfl-latest
     rounds: 3
     minAvailableClients: 2
     listeners:
@@ -150,16 +304,12 @@ spec:
         port: 8080
         type: NodePort
     storage:
-      type: PersistentVolumeClaim # switch to S3Bucket for S3-backed static volumes
+      type: PersistentVolumeClaim
       name: model-pvc
       path: /data/models
       size: 2Gi
-      # s3:
-      #   bucketName: <your-bucket-name>
-      #   region: us-east-1
-      #   prefix: optional/prefix/
   client:
-    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
+    image: quay.io/open-cluster-management/federated-learning-application:openfl-latest
     placement:
       clusterSets:
         - global
@@ -167,63 +317,15 @@ spec:
         - requiredClusterSelector:
             claimSelector:
               matchExpressions:
-                - key: federated-learning-sample.client-data
+                - key: federated-learning-openfl.client-data
                   operator: Exists
 ```
 
 > **Note**: Only `NodePort` is supported in KinD clusters.
 
-<details>
+#### 2. Schedule Clients with ClusterClaims
 
-<summary><strong>Alternatively: Build and Use Your Own Application Image</strong></summary>
-
-### Containerized Federated Learning Application
-
-The controller manages the lifecycle of federated learning across multiple clusters by creating server and client jobs from your containerized app.
-
-- **Server Job Example**:
-
-  ```bash
-  server --num-rounds <number>
-  ```
-
-- **Client Job Example**:
-
-  ```bash
-  client --data-config <data-path> --server-address <address> ...
-  ```
-
-You can use the [Flower PyTorch App](./examples/flower/) as a reference template. Customize the model, adjust hyperparameters, add different datasets, etc. Ensure your built image can be launched as server and client using the command patterns above.
-
-  **Navigate to the flower example directory:**
-
-  ```bash
-  cd examples/flower
-  ```
-
-  **Build and push the application image:**
-
-  ```bash
-  export IMAGE_REGISTRY=<your-registry>
-  export IMAGE_TAG=<your-tag>
-  export APP_NAME=flower-mnist
-  make build-app-image
-  make push-app-image
-  ```
-
-  This will create an image with the format: `<IMAGE_REGISTRY>/federated-learning-application:<APP_NAME>-<IMAGE_TAG>`
-
-  **Update the YAML with your custom image:**
-
-  Replace the `image` fields in both `server` and `client` sections with your custom image reference.
-
-</details>
-
-#### 2. Schedule the Federated Learning Clients into Managed Clusters
-
-The above configuration schedules only clusters with a `ClusterClaim` having the key `federated-learning-sample.client-data`. You can combine this with other scheduling policies (refer to the Placement API for details).
-
-Add the `ClusterClaim` to these clusters own the data for the client:
+Add `ClusterClaim` resources to managed clusters that own the training data:
 
 **Cluster1:**
 
@@ -231,7 +333,7 @@ Add the `ClusterClaim` to these clusters own the data for the client:
 apiVersion: cluster.open-cluster-management.io/v1alpha1
 kind: ClusterClaim
 metadata:
-  name: federated-learning-sample.client-data
+  name: federated-learning-openfl.client-data
 spec:
   value: /data/private/cluster1
 ```
@@ -242,47 +344,25 @@ spec:
 apiVersion: cluster.open-cluster-management.io/v1alpha1
 kind: ClusterClaim
 metadata:
-  name: federated-learning-sample.client-data
+  name: federated-learning-openfl.client-data
 spec:
   value: /data/private/cluster2
 ```
 
-#### 3. Check the Federated Learning Instance Status
+#### 3. Check Status
 
-- After creating the instance, the server initially shows a status of `Waiting`
+The OpenFL path transitions through: `Waiting` -> `Running` -> `Completed`.
 
-  Example - server in hub cluster:
-
-  ```bash
-  $ kubectl get pods
-  NAME                                            READY   STATUS      RESTARTS   AGE
-  federated-learning-sample-server-7jnfs          0/1     Completed   0          10m
-  ```
-
-- Once the required clients are ready, status changes to `Running`
-
-  Example - client in managed cluster
-
-  ```bash
-  $ kubectl get pods -n open-cluster-management
-  NAME                                     READY   STATUS      RESTARTS   AGE
-  federated-learning-sample-client-75sc8   0/1     Completed   0          10m
-  ```
-
-- After the training and aggregation rounds complete, the status becomes `Completed`
-
-  Example - Federated Learning instance:
-
-  ```yaml
-  status:
-    listeners:
-    - address: 172.18.0.2:31166
-      name: listener(service):federated-learning-sample-server
-      port: 31166
-      type: NodePort
-    message: Model training successful. Check storage for details
-    phase: Completed
-  ```
+```yaml
+status:
+  listeners:
+  - address: 172.18.0.2:31166
+    name: listener(service):federated-learning-openfl-server
+    port: 31166
+    type: NodePort
+  message: Model training successful. Check storage for details
+  phase: Completed
+```
 
 #### 4. Download and Verify the Trained Model
 
@@ -291,7 +371,9 @@ The trained model is saved in the `model-pvc` volume.
 - [Deploy a Jupyter notebook server](./examples/notebooks/deploy)
 - [Validate the model](./examples/notebooks/1.hub-evaluation.ipynb)
 
---- 
+</details>
+
+---
 
 ### To Uninstall
 

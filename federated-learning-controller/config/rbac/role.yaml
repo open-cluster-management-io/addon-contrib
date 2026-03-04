@@ -26,6 +26,17 @@ rules:
   - update
   - watch
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
   - batch
   resources:
   - jobs
@@ -124,6 +135,7 @@ rules:
 - apiGroups:
   - work.open-cluster-management.io
   resources:
+  - manifestworkreplicasets
   - manifestworks
   verbs:
   - create

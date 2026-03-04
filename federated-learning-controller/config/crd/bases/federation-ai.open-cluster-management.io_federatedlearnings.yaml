@@ -531,6 +531,12 @@ spec:
                           type: object
                         type: array
                     type: object
+                  supernode:
+                    default: flower-supernode.flower-addon:9094
+                    description: |-
+                      SuperNode is the endpoint of the pre-deployed SuperNode ClientAppIO API.
+                      Format: <service>.<namespace>:<port>
+                    type: string
                 type: object
               framework:
                 default: other
@@ -596,6 +602,12 @@ spec:
                         description: StorageType represents the type of storage.
                         type: string
                     type: object
+                  superlink:
+                    default: superlink.flower-system:9091
+                    description: |-
+                      SuperLink is the endpoint of the pre-deployed SuperLink exec API.
+                      Format: <service>.<namespace>:<port>
+                    type: string
                 type: object
             type: object
           status:

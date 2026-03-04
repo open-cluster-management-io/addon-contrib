@@ -72,6 +72,12 @@ type FederatedLearningSpec struct {
 type ClientSpec struct {
 	Image     string                        `json:"image,omitempty"`
 	Placement clustersv1beta1.PlacementSpec `json:"placement,omitempty"`
+
+	// SuperNode is the endpoint of the pre-deployed SuperNode ClientAppIO API.
+	// Format: <service>.<namespace>:<port>
+	// +kubebuilder:default="flower-supernode.flower-addon:9094"
+	// +optional
+	SuperNode string `json:"supernode,omitempty"`
 }
 
 // ServerSpec defines the specification for the server in federated learning.
@@ -82,6 +88,12 @@ type ServerSpec struct {
 	MinAvailableClients int              `json:"minAvailableClients,omitempty"`
 	Listeners           []ListenerSpec   `json:"listeners,omitempty"`
 	Storage             ModelStorageSpec `json:"storage,omitempty"`
+
+	// SuperLink is the endpoint of the pre-deployed SuperLink exec API.
+	// Format: <service>.<namespace>:<port>
+	// +kubebuilder:default="superlink.flower-system:9091"
+	// +optional
+	SuperLink string `json:"superlink,omitempty"`
 }
 
 // ModelStorageSpec defines the storage specification for the model.

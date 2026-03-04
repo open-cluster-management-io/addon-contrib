@@ -5,30 +5,17 @@ metadata:
 spec:
   framework: flower
   server:
-    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
-    rounds: 3
+    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
     minAvailableClients: 2
-    listeners:
-      - name: server-listener
-        port: 8080
-        type: LoadBalancer
-    storage:
-      type: PersistentVolumeClaim # set to S3Bucket to bind a pre-provisioned S3 PV
-      name: model-pvc
-      path: /data/models
-      size: 2Gi
-      # s3:
-      #   bucketName: <your-bucket-name>
-      #   region: us-east-1
-      #   prefix: optional/prefix/
+    # superlink: superlink.flower-system:9091  # default, can be omitted
   client:
-    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
+    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
+    # supernode: flower-supernode.flower-addon:9094  # default, can be omitted
     placement:
       clusterSets:
         - global
       predicates:
         - requiredClusterSelector:
-            claimSelector:
-              matchExpressions:
-                - key: federated-learning-sample.client-data
-                  operator: Exists
+            labelSelector:
+              matchLabels:
+                feature.open-cluster-management.io/addon-flower-addon: available
