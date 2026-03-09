@@ -231,7 +231,7 @@ func (r *FederatedLearningReconciler) pruneClientResources(ctx context.Context, 
 	return r.pruneOpenFLClientResources(ctx, instance)
 }
 
-// pruneFlowerClientResources cleans up Flower 2.x client resources (ManifestWorkReplicaSet + Placement).
+// pruneFlowerClientResources cleans up Flower 1.26.x client resources (ManifestWorkReplicaSet + Placement).
 func (r *FederatedLearningReconciler) pruneFlowerClientResources(ctx context.Context, instance *flv1alpha1.FederatedLearning,
 ) error {
 	// Delete ManifestWorkReplicaSet

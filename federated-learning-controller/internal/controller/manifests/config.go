@@ -1,8 +1,8 @@
 package manifests
 
-// FlowerServerAppParams defines the parameters for a Flower 2.x SuperExec-ServerApp Deployment on hub.
+// FlowerServerAppParams defines the parameters for a Flower 1.26.x SuperExec-ServerApp Deployment on hub.
 type FlowerServerAppParams struct {
-	Namespace        string // FL CR namespace (where Deployment is created)
+	Namespace        string // FederatedLearning CR namespace (where Deployment is created)
 	Name             string // e.g., "<cr-name>-serverapp"
 	Image            string // app image with ServerApp code
 	SuperLinkAddress string // from spec.server.superlink, e.g. "superlink.flower-system:9091"
@@ -24,10 +24,10 @@ type OpenFLServerParams struct {
 	Collaborators     string
 }
 
-// FlowerClientAppParams defines the parameters for a Flower 2.x SuperExec-ClientApp ManifestWorkReplicaSet.
+// FlowerClientAppParams defines the parameters for a Flower 1.26.x SuperExec-ClientApp ManifestWorkReplicaSet.
 type FlowerClientAppParams struct {
 	Name             string // e.g., "<cr-name>-clientapp"
-	Namespace        string // FL CR namespace (where MWRS is created)
+	Namespace        string // FederatedLearning CR namespace (where MWRS is created)
 	PlacementName    string // Placement name for cluster selection
 	Image            string // app image with ClientApp code
 	SuperNodeAddress string // from spec.client.supernode, e.g. "flower-supernode.flower-addon:9094"

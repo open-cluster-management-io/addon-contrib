@@ -12,7 +12,7 @@ This Kubernetes controller automates the deployment and management of federated 
 
 ## Architecture
 
-### Flower 2.x (SuperLink/SuperNode)
+### Flower 1.26.x (SuperLink/SuperNode)
 
 The Flower path leverages the [Flower Addon](../flower-addon/) to pre-deploy the SuperLink/SuperNode infrastructure. The controller deploys only the application layer on top:
 
@@ -255,8 +255,8 @@ With SuperExec-ServerApp and SuperExec-ClientApp running, use `flwr run` against
 
 ```bash
 flwr run --insecure --run-config 'num-server-rounds=3' \
-  --app <your-flower-app> \
-  --federation <superlink-address>
+  <your-flower-app> \
+  <superlink-connection>
 ```
 
 <details>
@@ -273,103 +273,6 @@ You can use the [Flower PyTorch App](./examples/flower/) as a reference. The app
   make build-app-image
   make push-app-image
   ```
-
-</details>
-
----
-
-<details>
-
-<summary><strong>Deploy a Federated Learning Instance (OpenFL)</strong></summary>
-
-### OpenFL Path
-
-The OpenFL path uses the legacy server/client Job model with its own networking (Service, LoadBalancer/NodePort).
-
-#### 1. Create a FederatedLearning Resource
-
-```yaml
-apiVersion: federation-ai.open-cluster-management.io/v1alpha1
-kind: FederatedLearning
-metadata:
-  name: federated-learning-openfl
-spec:
-  framework: openfl
-  server:
-    image: quay.io/open-cluster-management/federated-learning-application:openfl-latest
-    rounds: 3
-    minAvailableClients: 2
-    listeners:
-      - name: server-listener
-        port: 8080
-        type: NodePort
-    storage:
-      type: PersistentVolumeClaim
-      name: model-pvc
-      path: /data/models
-      size: 2Gi
-  client:
-    image: quay.io/open-cluster-management/federated-learning-application:openfl-latest
-    placement:
-      clusterSets:
-        - global
-      predicates:
-        - requiredClusterSelector:
-            claimSelector:
-              matchExpressions:
-                - key: federated-learning-openfl.client-data
-                  operator: Exists
-```
-
-> **Note**: Only `NodePort` is supported in KinD clusters.
-
-#### 2. Schedule Clients with ClusterClaims
-
-Add `ClusterClaim` resources to managed clusters that own the training data:
-
-**Cluster1:**
-
-```yaml
-apiVersion: cluster.open-cluster-management.io/v1alpha1
-kind: ClusterClaim
-metadata:
-  name: federated-learning-openfl.client-data
-spec:
-  value: /data/private/cluster1
-```
-
-**Cluster2:**
-
-```yaml
-apiVersion: cluster.open-cluster-management.io/v1alpha1
-kind: ClusterClaim
-metadata:
-  name: federated-learning-openfl.client-data
-spec:
-  value: /data/private/cluster2
-```
-
-#### 3. Check Status
-
-The OpenFL path transitions through: `Waiting` -> `Running` -> `Completed`.
-
-```yaml
-status:
-  listeners:
-  - address: 172.18.0.2:31166
-    name: listener(service):federated-learning-openfl-server
-    port: 31166
-    type: NodePort
-  message: Model training successful. Check storage for details
-  phase: Completed
-```
-
-#### 4. Download and Verify the Trained Model
-
-The trained model is saved in the `model-pvc` volume.
-
-- [Deploy a Jupyter notebook server](./examples/notebooks/deploy)
-- [Validate the model](./examples/notebooks/1.hub-evaluation.ipynb)
 
 </details>
 

@@ -176,7 +176,7 @@ func (r *FederatedLearningReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return ctrl.Result{}, nil
 }
 
-// reconcileFlower handles the Flower 2.x SuperLink/SuperNode architecture.
+// reconcileFlower handles the Flower 1.26.x SuperLink/SuperNode architecture.
 // It deploys SuperExec-ServerApp on the hub and SuperExec-ClientApp via ManifestWorkReplicaSet.
 func (r *FederatedLearningReconciler) reconcileFlower(ctx context.Context,
 	instance *flv1alpha1.FederatedLearning,

@@ -343,7 +343,7 @@ func getSeverName(instanceName string) string {
 // pruneServerResources cleans up server-side Kubernetes resources when the instance is deleted.
 func (r *FederatedLearningReconciler) pruneServerResources(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
 	if instance.Spec.Framework == flv1alpha1.Flower {
-		// Flower 2.x: delete the ServerApp Deployment (owner reference handles it,
+		// Flower 1.26.x: delete the ServerApp Deployment (owner reference handles it,
 		// but explicit cleanup ensures it's removed even if owner ref is missing)
 		deploy := &appsv1.Deployment{}
 		deployName := fmt.Sprintf("%s-serverapp", instance.Name)
