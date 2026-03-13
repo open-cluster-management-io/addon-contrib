@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"sort"
 	"strings"
 
 	routev1 "github.com/openshift/api/route/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -109,7 +109,7 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		}
 	}
 
-	modelDir, initModel, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
+	modelDir, _, err := getDirFile(instance.Spec.Server.Storage.ModelPath)
 	if err != nil {
 		return err
 	}
@@ -119,59 +119,36 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 		obsSidecarImage = instance.ObjectMeta.Annotations[v1alpha1.AnnotationSidecarImage]
 	}
 
-	var serverParams any
-	var serverFS embed.FS
+	clusters, err := r.getDecidedClusters(ctx, instance)
+	if err != nil {
+		return err
+	}
+	sort.Strings(clusters)
+	log.Infof("clusters: %+v", clusters)
 
-	switch instance.Spec.Framework {
-	case flv1alpha1.Flower:
-		serverFS = manifests.FlowerServerFiles
-		serverParams = &manifests.FlowerServerParams{
-			Namespace:           instance.Namespace,
-			Name:                getSeverName(instance.Name),
-			Image:               instance.Spec.Server.Image,
-			NumberOfRounds:      instance.Spec.Server.Rounds,
-			MinAvailableClients: instance.Spec.Server.MinAvailableClients,
-			ModelDir:            modelDir,
-			InitModel:           initModel,
-			StorageVolumeName:   instance.Spec.Server.Storage.Name,
-			ListenerType:        string(instance.Spec.Server.Listeners[0].Type),
-			ListenerPort:        instance.Spec.Server.Listeners[0].Port,
-			CreateService:       createService,
-			ObsSidecarImage:     obsSidecarImage,
-		}
-	case flv1alpha1.OpenFL:
-		serverFS = manifests.OpenFLServerFiles
-		clusters, err := r.getDecidedClusters(ctx, instance)
-		if err != nil {
-			return err
-		}
-		sort.Strings(clusters)
-		log.Infof("clusters: %+v", clusters)
-		// determine endpoint info (IP and port) prior to rendering, especially for NodePort
-		listenerIP, listenerPort, err := r.determineEndpointInfo(ctx, instance)
-		if err != nil {
-			return err
-		}
-		serverParams = &manifests.OpenFLServerParams{
-			Namespace:         instance.Namespace,
-			Name:              getSeverName(instance.Name),
-			Image:             instance.Spec.Server.Image,
-			NumberOfRounds:    instance.Spec.Server.Rounds,
-			StorageVolumeName: instance.Spec.Server.Storage.Name,
-			ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
-			ListenerIP:        listenerIP,
-			ListenerPort:      listenerPort,
-			CreateService:     createService,
-			ModelDir:          modelDir,
-			ObsSidecarImage:   obsSidecarImage,
-			Collaborators:     strings.Join(clusters, ","),
-		}
-		log.Infof("server params: %+v", serverParams)
-	default:
-		return fmt.Errorf("unsupported framework: %s", instance.Spec.Framework)
+	// determine endpoint info (IP and port) prior to rendering, especially for NodePort
+	listenerIP, listenerPort, err := r.determineEndpointInfo(ctx, instance)
+	if err != nil {
+		return err
 	}
 
-	render, deployer := applier.NewRenderer(serverFS), applier.NewDeployer(r.Client)
+	serverParams := &manifests.OpenFLServerParams{
+		Namespace:         instance.Namespace,
+		Name:              getSeverName(instance.Name),
+		Image:             instance.Spec.Server.Image,
+		NumberOfRounds:    instance.Spec.Server.Rounds,
+		StorageVolumeName: instance.Spec.Server.Storage.Name,
+		ListenerType:      string(instance.Spec.Server.Listeners[0].Type),
+		ListenerIP:        listenerIP,
+		ListenerPort:      listenerPort,
+		CreateService:     createService,
+		ModelDir:          modelDir,
+		ObsSidecarImage:   obsSidecarImage,
+		Collaborators:     strings.Join(clusters, ","),
+	}
+	log.Infof("server params: %+v", serverParams)
+
+	render, deployer := applier.NewRenderer(manifests.OpenFLServerFiles), applier.NewDeployer(r.Client)
 	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
 		return serverParams, nil
 	})
@@ -197,6 +174,53 @@ func (r *FederatedLearningReconciler) federatedLearningServer(ctx context.Contex
 
 	if err = r.updateServerAddress(ctx, instance); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete
+
+// deployFlowerServerApp deploys the SuperExec-ServerApp Deployment on the hub cluster.
+func (r *FederatedLearningReconciler) deployFlowerServerApp(ctx context.Context,
+	instance *flv1alpha1.FederatedLearning,
+) error {
+	superlink := instance.Spec.Server.SuperLink
+	if superlink == "" {
+		superlink = "superlink.flower-system:9091"
+	}
+
+	serverAppParams := &manifests.FlowerServerAppParams{
+		Namespace:        instance.Namespace,
+		Name:             fmt.Sprintf("%s-serverapp", instance.Name),
+		Image:            instance.Spec.Server.Image,
+		SuperLinkAddress: superlink,
+	}
+
+	render, deployer := applier.NewRenderer(manifests.FlowerServerAppFiles), applier.NewDeployer(r.Client)
+	unstructuredObjects, err := render.Render("", "", func(profile string) (interface{}, error) {
+		return serverAppParams, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// create discovery client for setting owner references
+	dc, err := discovery.NewDiscoveryClientForConfig(r.GetConfig())
+	if err != nil {
+		return err
+	}
+
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
+	if err = SetOwner(unstructuredObjects, instance, mapper, r.Scheme); err != nil {
+		return err
+	}
+
+	for _, obj := range unstructuredObjects {
+		log.Infof("deploying Flower ServerApp %s/%s", obj.GetNamespace(), obj.GetName())
+		if err := deployer.Deploy(obj); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -318,6 +342,28 @@ func getSeverName(instanceName string) string {
 
 // pruneServerResources cleans up server-side Kubernetes resources when the instance is deleted.
 func (r *FederatedLearningReconciler) pruneServerResources(ctx context.Context, instance *flv1alpha1.FederatedLearning) error {
+	if instance.Spec.Framework == flv1alpha1.Flower {
+		// Flower 1.26.x: delete the ServerApp Deployment (owner reference handles it,
+		// but explicit cleanup ensures it's removed even if owner ref is missing)
+		deploy := &appsv1.Deployment{}
+		deployName := fmt.Sprintf("%s-serverapp", instance.Name)
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: instance.Namespace,
+			Name:      deployName,
+		}, deploy); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to get ServerApp deployment during deletion: %w", err)
+		}
+		if err := r.Delete(ctx, deploy); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ServerApp deployment during deletion: %w", err)
+		}
+		log.Infof("deleted ServerApp deployment %s/%s", deploy.Namespace, deploy.Name)
+		return nil
+	}
+
+	// OpenFL: delete the Service
 	svc := &corev1.Service{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Namespace: instance.Namespace,

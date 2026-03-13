@@ -1,0 +1,36 @@
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  placementRefs:
+    - name: {{ .PlacementName }}
+  manifestWorkTemplate:
+    workload:
+      manifests:
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: {{ .Name }}
+            namespace: {{ .ClientNamespace }}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/component: superexec-clientapp
+                app.kubernetes.io/instance: {{ .Name }}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/component: superexec-clientapp
+                  app.kubernetes.io/instance: {{ .Name }}
+              spec:
+                containers:
+                  - name: superexec
+                    image: {{ .Image }}
+                    imagePullPolicy: Always
+                    args:
+                      - "--insecure"
+                      - "--appio-api-address={{ .SuperNodeAddress }}"
+                      - "--plugin-type=clientapp"
