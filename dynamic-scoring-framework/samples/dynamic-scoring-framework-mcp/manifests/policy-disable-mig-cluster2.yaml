@@ -1,7 +1,7 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: policy-disable-mig-worker02
+  name: policy-disable-mig-cluster2
   namespace: default
   labels:
     resource-supply-kind: "gpu"
@@ -24,7 +24,7 @@ spec:
                 apiVersion: v1
                 kind: Node
                 metadata:
-                  name: worker02-control-plane
+                  name: cluster2-control-plane
                   labels:
                     migsettinglabel: "disabled"
     - objectDefinition:
@@ -41,6 +41,6 @@ spec:
                 apiVersion: v1
                 kind: Node
                 metadata:
-                  name: worker02-control-plane
+                  name: cluster2-control-plane
                   labels:
                     migresultlabel: "true"

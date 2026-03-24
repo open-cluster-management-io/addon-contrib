@@ -2,30 +2,30 @@
   "namespace": "default",
   "clusters": [
     {
-      "name": "worker01",
+      "name": "cluster1",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker01"
+          "name": "policy-enable-mig-2g-cluster1"
         },
         {
-          "name": "policy-enable-mig-3g-worker01"
+          "name": "policy-enable-mig-3g-cluster1"
         },
         {
-          "name": "policy-disable-mig-worker01"
+          "name": "policy-disable-mig-cluster1"
         }
       ]
     },
     {
-      "name": "worker02",
+      "name": "cluster2",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker02"
+          "name": "policy-enable-mig-2g-cluster2"
         },
         {
-          "name": "policy-enable-mig-3g-worker02"
+          "name": "policy-enable-mig-3g-cluster2"
         },
         {
-          "name": "policy-disable-mig-worker02"
+          "name": "policy-disable-mig-cluster2"
         }
       ]
     }

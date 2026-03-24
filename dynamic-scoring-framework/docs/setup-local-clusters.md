@@ -1,5 +1,7 @@
 # Setup Local Clusters with Kind
 
+**NOTE**: This guide is intended for development. For general setup instructions, please refer to the [OCM Quick Start Guide](https://open-cluster-management.io/docs/getting-started/quick-start/).
+
 This guide provides instructions to set up a local hub cluster and managed clusters using [Kind (Kubernetes IN Docker)](https://kind.sigs.k8s.io/). This setup is useful for development and testing of the Dynamic Scoring Framework.
 
 
@@ -27,14 +29,14 @@ default bundle  version :1.1.1
 
 Create three Kubernetes clusters using `kind`:
 
-- **hub01**: The hub cluster that manages worker clusters
-- **worker01**: First managed cluster for workload execution
-- **worker02**: Second managed cluster for workload execution
+- **hub**: The hub cluster that manages worker clusters
+- **cluster1**: First managed cluster for workload execution
+- **cluster2**: Second managed cluster for workload execution
 
 ```bash
-kind create cluster --name hub01
-kind create cluster --name worker01
-kind create cluster --name worker02
+kind create cluster --name hub
+kind create cluster --name cluster1
+kind create cluster --name cluster2
 ```
 
 ## Step 3: Initialize OCM Hub Cluster
@@ -42,7 +44,7 @@ kind create cluster --name worker02
 Initialize the hub cluster with OCM components. This installs the necessary controllers and CRDs for cluster management:
 
 ```bash
-clusteradm init --wait --context kind-hub01 --bundle-version=latest
+clusteradm init --wait --context kind-hub --bundle-version=latest
 ```
 
 This command:
@@ -56,7 +58,7 @@ This command:
 First, obtain the join token from the hub cluster. This token is used to authenticate worker clusters:
 
 ```bash
-$ clusteradm get token --context kind-hub01
+$ clusteradm get token --context kind-hub
 token=TOKEN
 please log on spoke and run:
 clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name <cluster_name>
@@ -67,11 +69,11 @@ clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --clus
 Now, join each worker cluster using the token. The `--force-internal-endpoint-lookup` flag ensures proper networking in kind clusters:
 
 ```bash
-clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name worker01 --context kind-worker01 --force-internal-endpoint-lookup --wait
+clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name cluster1 --context kind-cluster1 --force-internal-endpoint-lookup --wait
 ```
 
 ```bash
-clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name worker02 --context kind-worker02 --force-internal-endpoint-lookup --wait
+clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name cluster2 --context kind-cluster2 --force-internal-endpoint-lookup --wait
 ```
 
 **Replace `TOKEN` and the API server URL** with the values from the previous command.
@@ -81,7 +83,7 @@ clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --clus
 The hub cluster needs to approve the join requests from worker clusters:
 
 ```bash
-clusteradm accept --context kind-hub01 --clusters worker01,worker02 --wait
+clusteradm accept --context kind-hub --clusters cluster1,cluster2 --wait
 ```
 
 This creates the necessary resources (ManagedCluster, klusterlet) for each worker cluster.
@@ -91,10 +93,10 @@ This creates the necessary resources (ManagedCluster, klusterlet) for each worke
 Confirm that the worker clusters are successfully joined and available:
 
 ```bash
-$ kubectl get managedclusters --all-namespaces --context kind-hub01
+$ kubectl get managedclusters --all-namespaces --context kind-hub
 NAME       HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
-worker01   true           https://worker01-control-plane:6443   True     True        150m
-worker02   true           https://worker02-control-plane:6443   True     True        148m
+cluster1   true           https://cluster1-control-plane:6443   True     True        150m
+cluster2   true           https://cluster2-control-plane:6443   True     True        148m
 ```
 
 Both clusters should show:

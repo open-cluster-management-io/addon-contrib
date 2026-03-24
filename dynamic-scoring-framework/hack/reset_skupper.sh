@@ -2,11 +2,11 @@
 
 NAMESPACE=${NAMESPACE:-dynamic-scoring}
 HUB_NODE_IP=${HUB_NODE_IP:-10.89.1.16}
-HUB_CONTEXT=kind-hub01
-CLUSTER1_NAME=worker01
-CLUSTER1_CONTEXT=kind-worker01
-CLUSTER2_NAME=worker02
-CLUSTER2_CONTEXT=kind-worker02
+HUB_CONTEXT=kind-hub
+CLUSTER1_NAME=cluster1
+CLUSTER1_CONTEXT=kind-cluster1
+CLUSTER2_NAME=cluster2
+CLUSTER2_CONTEXT=kind-cluster2
 
 # Create secrets directory if it doesn't exist
 mkdir -p ./secrets

@@ -15,13 +15,13 @@ In this architecture, we assume that OCM Policy Framework is set up to manage po
 OCM Policy Framework can install via `clusteradm` CLI. It provides a set of controllers for managing policies across clusters.
 
 ```sh
-export CTX_HUB_CLUSTER=kind-hub01
+export CTX_HUB_CLUSTER=kind-hub
 clusteradm install hub-addon --names governance-policy-framework --context ${CTX_HUB_CLUSTER}
 
-clusteradm addon enable --names governance-policy-framework --clusters worker01 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names governance-policy-framework --clusters worker02 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names config-policy-controller --clusters worker01 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names config-policy-controller --clusters worker02 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names governance-policy-framework --clusters cluster1 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names governance-policy-framework --clusters cluster2 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names config-policy-controller --clusters cluster1 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names config-policy-controller --clusters cluster2 --context ${CTX_HUB_CLUSTER}
 ```
 
 ### MWRS Installation
@@ -53,20 +53,20 @@ Build and deploy the PolicyWatcher to each worker cluster. This component monito
 
 ```bash
 podman build -t quay.io/dynamic-scoring/policy-watcher:v0.1.0 samples/policy-watcher
-kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name worker01
-kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name worker02
-CLUSTER_NAME=worker01 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-worker01
-CLUSTER_NAME=worker01 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-worker01
-CLUSTER_NAME=worker02 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-worker02
-CLUSTER_NAME=worker02 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-worker02
+kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name cluster1
+kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name cluster2
+CLUSTER_NAME=cluster1 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-cluster1
+CLUSTER_NAME=cluster2 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-cluster2
+CLUSTER_NAME=cluster2 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-cluster2
 ```
 
 Verify that PolicyWatcher is running and has created ClusterClaims:
 
 ```bash
-$ kubectl get clusterclaims policy-watcher-claim --context kind-worker01 -o yaml|grep value:
+$ kubectl get clusterclaims policy-watcher-claim --context kind-cluster1 -o yaml|grep value:
   value: empty
-$ kubectl get clusterclaims policy-watcher-claim --context kind-worker02 -o yaml|grep value:
+$ kubectl get clusterclaims policy-watcher-claim --context kind-cluster2 -o yaml|grep value:
   value: empty
 ```
 
@@ -82,9 +82,9 @@ The Operation API Server provides an interface for OCM to retrieve scores and ma
 
 ```bash
 podman build -t quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest samples/dynamic-scoring-framework-mcp
-kind load docker-image quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest --name hub01
-kubectl apply -f samples/dynamic-scoring-framework-mcp/deployment.yaml --context kind-hub01
-kubectl port-forward -n dynamic-scoring pod/$(kubectl get pods -n dynamic-scoring -l app=dynamic-scoring-framework-mcp --context kind-hub01 -o name | head -1 | cut -d/ -f2) 8338:8338 --context kind-hub01
+kind load docker-image quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest --name hub
+kubectl apply -f samples/dynamic-scoring-framework-mcp/deployment.yaml --context kind-hub
+kubectl port-forward -n dynamic-scoring pod/$(kubectl get pods -n dynamic-scoring -l app=dynamic-scoring-framework-mcp --context kind-hub -o name | head -1 | cut -d/ -f2) 8338:8338 --context kind-hub
 ```
 
 ## Prepare Optimization
@@ -95,12 +95,12 @@ Deploy sample MWRS and Policies.
 $ oc apply -f samples/dynamic-scoring-framework-mcp/manifests/
 manifestworkreplicaset.work.open-cluster-management.io/mwrs-app01 created
 manifestworkreplicaset.work.open-cluster-management.io/mwrs-app02 created
-policy.policy.open-cluster-management.io/policy-disable-mig-worker01 created
-policy.policy.open-cluster-management.io/policy-disable-mig-worker02 created
-policy.policy.open-cluster-management.io/policy-enable-mig-3g-worker01 created
-policy.policy.open-cluster-management.io/policy-enable-mig-2g-worker02 created
-policy.policy.open-cluster-management.io/policy-enable-mig-2g-worker01 created
-policy.policy.open-cluster-management.io/policy-enable-mig-3g-worker02 created
+policy.policy.open-cluster-management.io/policy-disable-mig-cluster1 created
+policy.policy.open-cluster-management.io/policy-disable-mig-cluster2 created
+policy.policy.open-cluster-management.io/policy-enable-mig-3g-cluster1 created
+policy.policy.open-cluster-management.io/policy-enable-mig-2g-cluster2 created
+policy.policy.open-cluster-management.io/policy-enable-mig-2g-cluster1 created
+policy.policy.open-cluster-management.io/policy-enable-mig-3g-cluster2 created
 ```
 
 MWRSs are sample applications to be deployed to each worker cluster. They have resource requests for GPU. The labels indicate the GPU demands.
@@ -124,7 +124,7 @@ The labels indicate the GPU supply information when this policy is applied to th
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: policy-disable-mig-worker01
+  name: policy-disable-mig-cluster1
   namespace: default
   labels:
     resource-supply-kind: "gpu"
@@ -149,10 +149,10 @@ This policies are watched by the PolicyWatcher and placement for applications wi
 Finally, label the ManagedClusters for easier placement selection:
 
 ```bash
-$ oc label managedcluster worker01 cluster-name=worker01
-managedcluster.cluster.open-cluster-management.io/worker01 labeled
-$ oc label managedcluster worker02 cluster-name=worker02
-managedcluster.cluster.open-cluster-management.io/worker02 labeled
+$ oc label managedcluster cluster1 cluster-name=cluster1
+managedcluster.cluster.open-cluster-management.io/cluster1 labeled
+$ oc label managedcluster cluster2 cluster-name=cluster2
+managedcluster.cluster.open-cluster-management.io/cluster2 labeled
 ```
 
 ## Execute Optimization
@@ -169,30 +169,30 @@ Create the optimization parameter file `samples/dynamic-scoring-framework-mcp/ex
   "namespace": "default",
   "clusters": [
     {
-      "name": "worker01",
+      "name": "cluster1",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker01"
+          "name": "policy-enable-mig-2g-cluster1"
         },
         {
-          "name": "policy-enable-mig-3g-worker01"
+          "name": "policy-enable-mig-3g-cluster1"
         },
         {
-          "name": "policy-disable-mig-worker01"
+          "name": "policy-disable-mig-cluster1"
         }
       ]
     },
     {
-      "name": "worker02",
+      "name": "cluster2",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker02"
+          "name": "policy-enable-mig-2g-cluster2"
         },
         {
-          "name": "policy-enable-mig-3g-worker02"
+          "name": "policy-enable-mig-3g-cluster2"
         },
         {
-          "name": "policy-disable-mig-worker02"
+          "name": "policy-disable-mig-cluster2"
         }
       ]
     }
@@ -227,22 +227,22 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                    SELECTEDCLUSTERS
 app01-placement               False       NoManagedClusterMatched   
 app02-placement               False       NoManagedClusterMatched   
-placement-worker01-b7552597   True        AllDecisionsScheduled     1
-placement-worker02-b7552597   True        AllDecisionsScheduled     1
+placement-cluster1-b7552597   True        AllDecisionsScheduled     1
+placement-cluster2-b7552597   True        AllDecisionsScheduled     1
 ```
 
 Policy is attached to each cluster.
 
 ```bash
-$ oc get policies -n worker01
+$ oc get policies -n cluster1
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker01                        NonCompliant       2m9s
-$ oc get policies -n worker02
+default.policy-enable-mig-3g-cluster1                        NonCompliant       2m9s
+$ oc get policies -n cluster2
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker02                        NonCompliant       7m31s
-$ oc get node --context kind-worker01 -o yaml | grep mig
+default.policy-enable-mig-3g-cluster2                        NonCompliant       7m31s
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migsettinglabel: 3g.48gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migsettinglabel: 3g.48gb
 ```
 
@@ -251,19 +251,19 @@ $ oc get node --context kind-worker02 -o yaml | grep mig
 In a real environment, the GPU Operator would set the `migresultlabel` when MIG configuration is complete. For this demo, set it manually:
 
 ```bash
-$ oc label node worker01-control-plane migresultlabel=true --context kind-worker01
-node/worker01-control-plane labeled
-$ oc label node worker02-control-plane migresultlabel=true --context kind-worker02
-node/worker02-control-plane labeled
+$ oc label node cluster1-control-plane migresultlabel=true --context kind-cluster1
+node/cluster1-control-plane labeled
+$ oc label node cluster2-control-plane migresultlabel=true --context kind-cluster2
+node/cluster2-control-plane labeled
 ```
 
 Verify the MIG labels on nodes:
 
 ```bash
-$ oc get node --context kind-worker01 -o yaml | grep mig
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 3g.48gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 3g.48gb
 ```
@@ -271,12 +271,12 @@ $ oc get node --context kind-worker02 -o yaml | grep mig
 Check that policies are now compliant:
 
 ```bash
-$ oc get policies -n worker01
+$ oc get policies -n cluster1
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker01                        Compliant          39m
-$ oc get policies -n worker02
+default.policy-enable-mig-3g-cluster1                        Compliant          39m
+$ oc get policies -n cluster2
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker02                        Compliant          39m
+default.policy-enable-mig-3g-cluster2                        Compliant          39m
 ```
 
 ### Verify Workload Placement
@@ -288,21 +288,21 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                  SELECTEDCLUSTERS
 app01-placement               True        AllDecisionsScheduled   1
 app02-placement               True        AllDecisionsScheduled   1
-placement-worker01-b7552597   True        AllDecisionsScheduled   1
-placement-worker02-b7552597   True        AllDecisionsScheduled   1
+placement-cluster1-b7552597   True        AllDecisionsScheduled   1
+placement-cluster2-b7552597   True        AllDecisionsScheduled   1
 ```
 
 Reset generated placements and placementbindings for next optimization.
 
 ```bash
-$ kubectl delete placements -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub01
+$ kubectl delete placements -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub
 placement.cluster.open-cluster-management.io "app01-placement" deleted
 placement.cluster.open-cluster-management.io "app02-placement" deleted
-placement.cluster.open-cluster-management.io "placement-worker01-b7552597" deleted
-placement.cluster.open-cluster-management.io "placement-worker02-b7552597" deleted
-$ kubectl delete placementbindings -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub01
-placementbinding.policy.open-cluster-management.io "binding-worker01-b7552597" deleted
-placementbinding.policy.open-cluster-management.io "binding-worker02-b7552597" deleted
+placement.cluster.open-cluster-management.io "placement-cluster1-b7552597" deleted
+placement.cluster.open-cluster-management.io "placement-cluster2-b7552597" deleted
+$ kubectl delete placementbindings -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub
+placementbinding.policy.open-cluster-management.io "binding-cluster1-b7552597" deleted
+placementbinding.policy.open-cluster-management.io "binding-cluster2-b7552597" deleted
 ```
 
 This removes all optimization-generated resources, allowing you to run a new optimization with different preferences.
@@ -316,30 +316,30 @@ Now run optimization with a different objective. Change the preference in `param
   "namespace": "default",
   "clusters": [
     {
-      "name": "worker01",
+      "name": "cluster1",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker01"
+          "name": "policy-enable-mig-2g-cluster1"
         },
         {
-          "name": "policy-enable-mig-3g-worker01"
+          "name": "policy-enable-mig-3g-cluster1"
         },
         {
-          "name": "policy-disable-mig-worker01"
+          "name": "policy-disable-mig-cluster1"
         }
       ]
     },
     {
-      "name": "worker02",
+      "name": "cluster2",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker02"
+          "name": "policy-enable-mig-2g-cluster2"
         },
         {
-          "name": "policy-enable-mig-3g-worker02"
+          "name": "policy-enable-mig-3g-cluster2"
         },
         {
-          "name": "policy-disable-mig-worker02"
+          "name": "policy-disable-mig-cluster2"
         }
       ]
     }
@@ -376,10 +376,10 @@ The optimization will now select different GPU configurations that minimize powe
 Check the MIG settings. Notice that different policies are now selected (2g.24gb instead of 3g.48gb):
 
 ```bash
-$ oc get node --context kind-worker01 -o yaml | grep mig
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 2g.24gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 2g.24gb
 ```
@@ -399,8 +399,8 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                  SELECTEDCLUSTERS
 app01-placement               True        AllDecisionsScheduled   1
 app02-placement               True        AllDecisionsScheduled   1
-placement-worker01-1f3306ad   True        AllDecisionsScheduled   1
-placement-worker02-1f3306ad   True        AllDecisionsScheduled   1
+placement-cluster1-1f3306ad   True        AllDecisionsScheduled   1
+placement-cluster2-1f3306ad   True        AllDecisionsScheduled   1
 ```
 
 All placements are successfully scheduled with the power-optimized configuration.

@@ -34,6 +34,8 @@ kind: Deployment
 metadata:
   name: policy-watcher
   namespace: dynamic-scoring
+  labels:
+    app: policy-watcher
 spec:
   replicas: 1
   selector:
@@ -45,10 +47,12 @@ spec:
         app: policy-watcher
     spec:
       serviceAccountName: policy-watcher-sa
+      imagePullSecrets:
+        - name: hub-registry-secret
       containers:
         - name: policy-watcher
           image: quay.io/dynamic-scoring/policy-watcher:v0.1.0
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
               value: ${CLUSTER_NAME}

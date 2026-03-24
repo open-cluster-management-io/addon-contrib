@@ -28,7 +28,8 @@ The typical setup involves:
 3. Initialize the hub cluster
 4. Join managed clusters to the hub cluster
 
-As an example, local kind clusters can be used for both hub and managed clusters during development. See the [setup local clusters](./setup-local-clusters.md) for more details.
+As an example, local kind clusters can be used for both hub and managed clusters during development.
+[OCM Quick Start](https://open-cluster-management.io/docs/getting-started/quick-start/) guide provides instructions for setting up local clusters using kind.
 
 ## Setup Dynamic Scoring Framework
 
@@ -124,12 +125,12 @@ Apply the Sample Scoring API and DynamicScorer manifest to the hub cluster:
 
 ```bash
 # if you are using Local kind clusters, load the sample scorer image into the kind cluster
-kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name worker01
+kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name cluster1
 # deploy the sample scorer and register DynamicScorer
-CLUSTER_NAME=worker01 envsubst < samples/sample-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub01
+CLUSTER_NAME=cluster1 envsubst < samples/sample-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub
 ```
 
-The manifestwork deploys the Sample Scoring API in the managed cluster (worker01).
+The manifestwork deploys the Sample Scoring API in the managed cluster (cluster1).
 
 **NOTE**: In the provided manifest, the Sample Scoring API uses nodeport to expose the API from the managed cluster for simplicity.
 
@@ -138,10 +139,10 @@ To verify the Sample Scoring API, create a test pod in the hub cluster and exec 
 
 ```bash
 # Create a test pod in the hub cluster for testing the Scoring API connectivity and response. You can use the provided test-pod.yaml manifest or create your own test pod.
-kubectl apply -f deploy/utils/test-pod.yaml -n dynamic-scoring --context kind-hub01
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' --context kind-worker01)
+kubectl apply -f deploy/utils/test-pod.yaml -n dynamic-scoring --context kind-hub
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' --context kind-cluster1)
 # Replace the URL with the actual NodePort IP and run the test command to verify the Scoring API connectivity and response:
-kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://$NODE_IP:30007/config|jq
+kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub -- curl -sS http://$NODE_IP:30007/config|jq
 ```
 
 You should see the configuration of the Sample Scoring API.
@@ -174,7 +175,7 @@ Then, create a DynamicScorer resource to register the Scoring API:
 
 ```bash
 # before applying the DynamicScorer manifest, make sure to update the sourceEndpoint in the manifest based on where your Scoring API is deployed and how it can be accessed. For example, if you are using NodePort to access the Scoring API, update the sourceEndpoint to http://<NODE_IP>:30007/api/v1/query_range.
-kubectl apply -f samples/mydynamicscorer-sample.yaml -n open-cluster-management --context kind-hub01
+kubectl apply -f samples/mydynamicscorer-sample.yaml -n open-cluster-management --context kind-hub
 ```
 
 **NOTE**: If you install Dynamic Scoring Framework in a different hub namespace, change namespace to create DynamicScorer accordingly. DynamicScorer should be created in the same namespace where Dynamic Scoring Framework is installed.
@@ -186,7 +187,7 @@ kubectl apply -f samples/mydynamicscorer-sample.yaml -n open-cluster-management 
 Apply the DynamicScoringConfig manifest to the hub cluster:
 
 ```bash
-kubectl apply -f samples/mydynamicscoringconfig.yaml -n open-cluster-management --context kind-hub01
+kubectl apply -f samples/mydynamicscoringconfig.yaml -n open-cluster-management --context kind-hub
 ```
 
 **NOTE**: DynamicScoringConfig should be named ```dynamic-scoring-config``` and created in the same namespace where Dynamic Scoring Framework is installed on the hub cluster.
@@ -194,7 +195,7 @@ kubectl apply -f samples/mydynamicscoringconfig.yaml -n open-cluster-management 
 After applying, the DynamicScoringConfig controller will create ConfigMaps in each managed cluster.
 
 ```bash
-$ kubectl get configmap dynamic-scoring-config -n dynamic-scoring --context kind-worker01 -o=jsonpath='{$.data.summaries}'|jq
+$ kubectl get configmap dynamic-scoring-config -n dynamic-scoring --context kind-cluster1 -o=jsonpath='{$.data.summaries}'|jq
 [
   {
     "name": "sample-scorer",
@@ -222,19 +223,19 @@ $ kubectl get configmap dynamic-scoring-config -n dynamic-scoring --context kind
 You can check the AddOnPlacementScore resources created in the hub cluster:
 
 ```bash
-$ kubectl get addonplacementscores sample-my-score -n worker01 --context kind-hub01 -o yaml
+$ kubectl get addonplacementscores sample-my-score -n cluster1 --context kind-hub -o yaml
 apiVersion: cluster.open-cluster-management.io/v1alpha1
 kind: AddOnPlacementScore
 metadata:
   creationTimestamp: "2026-02-05T11:44:16Z"
   generation: 1
   name: sample-my-score
-  namespace: worker01
+  namespace: cluster1
   resourceVersion: "327413"
   uid: 17676d46-569c-496f-9d56-e87354b385fc
 status:
   scores:
-  - name: worker01-control-plane;open-cluster-management-agent;klusterlet-work-agent-6477c8c976-bk9nt
+  - name: cluster1-control-plane;open-cluster-management-agent;klusterlet-work-agent-6477c8c976-bk9nt
     value: 0
   - ...
 ```
@@ -274,8 +275,8 @@ Apply the secret to each managed cluster:
 
 
 ```bash
-kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-worker01
-kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-worker02
+kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-cluster1
+kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-cluster2
 ```
 
 Then, the DynamicScorer CR references this secret for authentication. 
@@ -313,7 +314,7 @@ After setting up Skupper and redeploying the Scoring API, you can verify the con
 
 ```bash
 # If you are using Skupper to access the Scoring API using Skupper, you can use the following command to verify the Scoring API connectivity:
-kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://sample-scorer.dynamic-scoring.svc:8000/config|jq
+kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub -- curl -sS http://sample-scorer.dynamic-scoring.svc:8000/config|jq
 ```
 
 Then, update the sourceEndpoint in the DynamicScorer spec to use the Skupper address to access the Scoring API across clusters.
@@ -332,14 +333,14 @@ If you have set up Prometheus in the managed clusters, you can query the scoring
 
 ```bash
 # deploy ServiceMonitor for scraping scoring results from DynamicScoringAgent
-kubectl apply -f deploy/agentfeedback -n dynamic-scoring --context kind-worker01
-kubectl apply -f deploy/agentfeedback -n dynamic-scoring --context kind-worker02
+kubectl apply -f deploy/agentfeedback -n dynamic-scoring --context kind-cluster1
+kubectl apply -f deploy/agentfeedback -n dynamic-scoring --context kind-cluster2
 ```
 
 After that, you can query the scoring results from Prometheus in each managed cluster. For example, to query the sample score:
 
 ```bash
-kubectl exec -it --context kind-worker01 curl-tester -n dynamic-scoring -- curl http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090/api/v1/query?query="avg(dynamic_score\{ds_score_name=\"sample_my_score\"\})by(ds_cluster)"|jq
+kubectl exec -it --context kind-cluster1 curl-tester -n dynamic-scoring -- curl http://kube-prometheus-kube-prome-prometheus.monitoring.svc:9090/api/v1/query?query="avg(dynamic_score\{ds_score_name=\"sample_my_score\"\})by(ds_cluster)"|jq
 ```
 
 ```json
@@ -350,7 +351,7 @@ kubectl exec -it --context kind-worker01 curl-tester -n dynamic-scoring -- curl 
     "result": [
       {
         "metric": {
-          "ds_cluster": "worker01"
+          "ds_cluster": "cluster1"
         },
         "value": [
           1770604907,
@@ -367,7 +368,7 @@ In addition, to centralize scoring results from managed clusters to the hub clus
 After setting up centralized scoring results collection, you can query the scoring results from the hub cluster as well. For example, to query the sample score from the hub cluster's VictoriaMetrics:
 
 ```bash
-kubectl exec -it --context kind-hub01 curl-tester -n dynamic-scoring -- curl http://vm-hub.monitoring.svc:8428/api/v1/query?query="avg(dynamic_score\{ds_score_name=\"sample_my_score\"\})by(ds_cluster)"|jq
+kubectl exec -it --context kind-hub curl-tester -n dynamic-scoring -- curl http://vm-hub.monitoring.svc:8428/api/v1/query?query="avg(dynamic_score\{ds_score_name=\"sample_my_score\"\})by(ds_cluster)"|jq
 ```
 
 ```json
@@ -378,7 +379,7 @@ kubectl exec -it --context kind-hub01 curl-tester -n dynamic-scoring -- curl htt
     "result": [
       {
         "metric": {
-          "ds_cluster": "worker01"
+          "ds_cluster": "cluster1"
         },
         "value": [
           1770604907,
@@ -387,7 +388,7 @@ kubectl exec -it --context kind-hub01 curl-tester -n dynamic-scoring -- curl htt
       },
       {
         "metric": {
-          "ds_cluster": "worker02"
+          "ds_cluster": "cluster2"
         },
         "value": [
           1770604907,

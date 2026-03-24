@@ -7,17 +7,17 @@ import re
 
 
 def parse_with_format(fmt: str, s: str):
-    # ${name} を (?P<name>.+?) に置換
+    # Replace ${name} with (?P<name>.+?)
     pattern = re.sub(r"\$\{(\w+)\}", r"(?P<\1>.+?)", fmt)
 
-    # 完全一致を要求
+    # Require full match
     pattern = "^" + pattern + "$"
 
     m = re.match(pattern, s)
     return m.groupdict() if m else None
 
 
-# --- データ定義 -------------------------------------------------
+# --- Data Definitions -------------------------------------------------
 
 with open("params.yaml", "r") as f:
     params = yaml.safe_load(f)
@@ -92,11 +92,11 @@ print("Devices:", devices)
 print("Preference Scores:", preference_scores)
 print("Resource Capacity:", resource_capacity)
 
-# --- モデル定義 -------------------------------------------------
+# --- Model Definition -------------------------------------------------
 
 model = pulp.LpProblem("Resource_Assignment", pulp.LpMaximize)
 
-# 変数 x_{a,c}: ジョブaをリソースcに割り当てるか
+# Variable x_{a,c}: whether job a is assigned to resource c
 x = pulp.LpVariable.dicts(
     "x",
     [(a, c) for a in apps for c in clusters],
@@ -105,7 +105,7 @@ x = pulp.LpVariable.dicts(
     cat=pulp.LpBinary,
 )
 
-# 変数 y_{c,d}: リソースcがタイプdを選ぶか
+# Variable y_{c,d}: whether resource c selects type d
 y = pulp.LpVariable.dicts(
     "y",
     [(c, d) for c in clusters for d in devices],
@@ -114,7 +114,7 @@ y = pulp.LpVariable.dicts(
     cat=pulp.LpBinary,
 )
 
-# 変数 z_{a,c,d}: ジョブaをタイプdで動くリソースcに割り当てるか
+# Variable z_{a,c,d}: whether job a is assigned to resource c running on type d
 z = pulp.LpVariable.dicts(
     "z",
     [(a, c, d) for a in apps for c in clusters for d in devices],
@@ -123,7 +123,7 @@ z = pulp.LpVariable.dicts(
     cat=pulp.LpBinary,
 )
 
-# --- 目的関数 ---------------------------------------------------
+# --- Objective Function ---------------------------------------------------
 
 model += (
     pulp.lpSum(
@@ -135,16 +135,16 @@ model += (
     "Total_Performance",
 )
 
-# --- 制約 -------------------------------------------------------
+# --- Constraints -------------------------------------------------------
 
-# 1. 各リソースは高々1つのタイプを選択
+# 1. Each resource selects at most one type
 for c in clusters:
     model += pulp.lpSum(y[(c, d)] for d in devices) <= 1, f"OneType_per_resource_{c}"
-# 2. 各ジョブは高々1つのリソースに割り当て
+# 2. Each job is assigned to at most one resource
 for a in apps:
     model += pulp.lpSum(x[(a, c)] for c in clusters) <= 1, f"OneResource_per_job_{a}"
 
-# 3. キャパシティ制約
+# 3. Capacity constraints
 for c in clusters:
     for d in devices:
         model += (
@@ -155,7 +155,7 @@ for c in clusters:
             f"Capacity_{c}_{d}",
         )
 
-# 4. リンク制約: z <= x, z <= y, z >= x + y - 1
+# 4. Linking constraints: z <= x, z <= y, z >= x + y - 1
 for a in apps:
     for c in clusters:
         for d in devices:
@@ -166,7 +166,7 @@ for a in apps:
                 f"z_ge_x_plus_y_minus1_{a}_{c}_{d}",
             )
 
-# 5. 一貫性: x_{a,c} = sum_d z_{a,c,d}
+# 5. Consistency: x_{a,c} = sum_d z_{a,c,d}
 for a in apps:
     for c in clusters:
         model += (
@@ -174,7 +174,7 @@ for a in apps:
             f"x_equals_sum_z_{a}_{c}",
         )
 
-# --- 求解 -------------------------------------------------------
+# --- Solve -------------------------------------------------------
 
 print("Solving the model...")
 
@@ -183,7 +183,7 @@ model.solve(pulp.PULP_CBC_CMD(msg=0))
 print("Status:", pulp.LpStatus[model.status])
 print("Objective (Total Performance):", pulp.value(model.objective))
 
-# 結果表示
+# Display results
 print("\nCluster Device Type Assignments:")
 
 exec_hash = secrets.token_hex(4)
@@ -214,7 +214,7 @@ placement_for_workloads = []
 for a in apps:
     for c in clusters:
         if pulp.value(x[(a, c)]) > 0.5:
-            # どのタイプで動いているかを見る
+            # Check which device type the job is running on
             assigned_types = [d for d in devices if pulp.value(z[(a, c, d)]) > 0.5]
             t_str = ",".join(assigned_types) if assigned_types else "None"
             print(f"  {a} -> {c} (device type={t_str})")
@@ -226,7 +226,7 @@ for a in apps:
                 }
             )
 
-# --- 結果出力 -----------------------------------------------------
+# --- Output Results -----------------------------------------------------
 print("\nOutput written to output.yaml")
 
 res = []

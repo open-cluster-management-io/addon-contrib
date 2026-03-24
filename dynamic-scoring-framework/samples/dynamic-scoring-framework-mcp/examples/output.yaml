@@ -1,7 +1,7 @@
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: placement-worker02-af0f78e6
+  name: placement-cluster2-af0f78e6
   namespace: default
 spec:
   numberOfClusters: 1
@@ -9,12 +9,12 @@ spec:
     - requiredClusterSelector:
         labelSelector:
           matchLabels:
-            cluster-name: worker02
+            cluster-name: cluster2
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta1
 kind: Placement
 metadata:
-  name: placement-worker01-af0f78e6
+  name: placement-cluster1-af0f78e6
   namespace: default
 spec:
   numberOfClusters: 1
@@ -22,33 +22,33 @@ spec:
     - requiredClusterSelector:
         labelSelector:
           matchLabels:
-            cluster-name: worker01
+            cluster-name: cluster1
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-worker02-af0f78e6
+  name: binding-cluster2-af0f78e6
   namespace: default
 placementRef:
-  name: placement-worker02-af0f78e6
+  name: placement-cluster2-af0f78e6
   kind: Placement
   apiGroup: cluster.open-cluster-management.io/v1beta1
 subjects:
-- name: policy-enable-mig-3g-worker02
+- name: policy-enable-mig-3g-cluster2
   kind: Policy
   apiGroup: policy.open-cluster-management.io/v1
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
-  name: binding-worker01-af0f78e6
+  name: binding-cluster1-af0f78e6
   namespace: default
 placementRef:
-  name: placement-worker01-af0f78e6
+  name: placement-cluster1-af0f78e6
   kind: Placement
   apiGroup: cluster.open-cluster-management.io/v1beta1
 subjects:
-- name: policy-enable-mig-3g-worker01
+- name: policy-enable-mig-3g-cluster1
   kind: Policy
   apiGroup: policy.open-cluster-management.io/v1
 ---
@@ -63,7 +63,7 @@ spec:
     - requiredClusterSelector:
         labelSelector:
           matchLabels:
-            cluster-name: worker02
+            cluster-name: cluster2
         claimSelector:
           matchExpressions:
             - key: compliance
@@ -82,7 +82,7 @@ spec:
     - requiredClusterSelector:
         labelSelector:
           matchLabels:
-            cluster-name: worker01
+            cluster-name: cluster1
         claimSelector:
           matchExpressions:
             - key: compliance
