@@ -4,10 +4,10 @@ This section demonstrates how to build and deploy various types of Dynamic Score
 
 | Scorer | Location | Input Type | Use Case |
 |--------|----------|------------|----------|
-| Sample Scorer | Internal (worker01, via NodePort or Skupper) | Time series | Basic CPU-based scoring |
+| Sample Scorer | Internal (cluster1, via NodePort or Skupper) | Time series | Basic CPU-based scoring |
 | LLM Forecast Scorer | External (Host machine) | Time series | LLM-powered predictions |
-| Simple Prediction Scorer | Internal (worker02, via Skupper) | Time series | Namespace-level forecasts |
-| Static Scorer | Internal (worker01, via Skupper) | None | Pre-defined performance/power scores |
+| Simple Prediction Scorer | Internal (cluster2, via Skupper) | Time series | Namespace-level forecasts |
+| Static Scorer | Internal (cluster1, via Skupper) | None | Pre-defined performance/power scores |
 | AI Workload Scorer | External (Route) | Time series | AI workload scoring |
 
 ## Sample DynamicScorer (Internal, Time Series Input)
@@ -22,21 +22,21 @@ export SAMPLE_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/sample-scorer:latest
 podman tag localhost/sample-scorer:latest $SAMPLE_SCORER_IMAGE_NAME
 ```
 
-Load the image into worker01 and deploy via ManifestWork:
+Load the image into cluster1 and deploy via ManifestWork:
 
 ```bash
-kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name worker01
-CLUSTER_NAME=worker01 envsubst < samples/sample-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub01
+kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/sample-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub
 ```
 
 Verify the scorer is accessible from the hub cluster.
 
 ```bash
-kubectl apply -f deploy/utils/test-pod.yaml -n dynamic-scoring --context kind-hub01
+kubectl apply -f deploy/utils/test-pod.yaml -n dynamic-scoring --context kind-hub
 # If you are using Skupper, you can access the scorer service directly from each cluster:
-kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://sample-scorer.dynamic-scoring.svc:8000/config|jq
+kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub -- curl -sS http://sample-scorer.dynamic-scoring.svc:8000/config|jq
 # If you are using NodePort to access the Scoring API from the hub cluster, use the following command instead:
-# kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub01 -- curl -sS http://localhost:30007/config|jq
+# kubectl exec -it curl-tester -n dynamic-scoring --context kind-hub -- curl -sS http://localhost:30007/config|jq
 ```
 
 Then query the scorer's configuration endpoint:
@@ -118,8 +118,8 @@ This Scorer is example of using token authentication to access Inference Endpoin
 At first, create a sample API token secret on worker clusters:
 
 ```bash
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker01
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker02
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster1
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster2
 ```
 
 sample-api-token.yaml:
@@ -159,10 +159,10 @@ The Simple Prediction Scorer is a scoring API that takes CPU usage as input and 
 podman build -t simple-prediction-scorer samples/simple-prediction-scorer
 export SIMPLE_PREDICTION_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/simple-prediction-scorer:latest
 podman tag localhost/simple-prediction-scorer:latest $SIMPLE_PREDICTION_SCORER_IMAGE_NAME
-kind load docker-image  $SIMPLE_PREDICTION_SCORER_IMAGE_NAME --name worker02
-CLUSTER_NAME=worker02 envsubst < samples/simple-prediction-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub01
-kubectl apply -f tmp/test-pod.yaml --context kind-hub01
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://simple-prediction-scorer:8000/config|jq
+kind load docker-image  $SIMPLE_PREDICTION_SCORER_IMAGE_NAME --name cluster2
+CLUSTER_NAME=cluster2 envsubst < samples/simple-prediction-scorer/manifests/manifestwork.yaml | kubectl apply -f - --context kind-hub
+kubectl apply -f tmp/test-pod.yaml --context kind-hub
+kubectl exec -it curl-tester --context kind-hub -- curl http://simple-prediction-scorer:8000/config|jq
 ```
 
 Simple Prediction Scorer config:
@@ -201,11 +201,11 @@ The Static Scorer is a simple implementation of a scoring API that returns pre-d
 podman build -t static-scorer samples/static-scorer
 export STATIC_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/static-scorer:latest
 podman tag localhost/static-scorer:latest $STATIC_SCORER_IMAGE_NAME
-kind load docker-image  $STATIC_SCORER_IMAGE_NAME --name worker01
-CLUSTER_NAME=worker01 envsubst < samples/static-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub01
-kubectl apply -f tmp/test-pod.yaml --context kind-hub01
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://static-scorer:8000/performance/config|jq
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://static-scorer:8000/powerconsumption/config|jq
+kind load docker-image  $STATIC_SCORER_IMAGE_NAME --name cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/static-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub
+kubectl apply -f tmp/test-pod.yaml --context kind-hub
+kubectl exec -it curl-tester --context kind-hub -- curl http://static-scorer:8000/performance/config|jq
+kubectl exec -it curl-tester --context kind-hub -- curl http://static-scorer:8000/powerconsumption/config|jq
 ```
 
 Static Scorer config:
@@ -259,7 +259,7 @@ podman build -t ai-workload-scorer samples/ai-workload-scorer
 export AI_WORKLOAD_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/ai-workload-scorer:latest
 podman tag localhost/ai-workload-scorer:latest $AI_WORKLOAD_SCORER_IMAGE_NAME
 podman push $AI_WORKLOAD_SCORER_IMAGE_NAME
-kubectl apply -f samples/ai-workload-scorer/manifests/ai-workload-scorer.yaml --context kind-hub01
+kubectl apply -f samples/ai-workload-scorer/manifests/ai-workload-scorer.yaml --context kind-hub
 curl http://ai-workload-scorer.cluster-example.com/power/config|jq
 ```
 
@@ -320,17 +320,17 @@ Register the DynamicScorer CRs to the hub cluster.
 
 ```bash
 # Create secrets for Scoring API token authentication
-kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-worker01
-kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-worker02
+kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-cluster1
+kubectl apply -f secrets/sample-api-token.yaml -n dynamic-scoring --context kind-cluster2
 # Create secrets for Source API token authentication
-kubectl apply -f secrets/source-query-secret.yaml -n dynamic-scoring --context kind-worker01
-kubectl apply -f secrets/source-query-secret.yaml -n dynamic-scoring --context kind-worker02
+kubectl apply -f secrets/source-query-secret.yaml -n dynamic-scoring --context kind-cluster1
+kubectl apply -f secrets/source-query-secret.yaml -n dynamic-scoring --context kind-cluster2
 # Register DynamicScorer CRs
-kubectl apply -f samples/mydynamicscorer-sample.yaml -n open-cluster-management --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-external-llm.yaml -n open-cluster-management --context kind-hub01
-cat samples/mydynamicscorer-external-llm.yaml | sed "s/\${EXTERNAL_SCORER_IP}/$EXTERNAL_SCORER_IP/g" | kubectl apply -f - -n open-cluster-management --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-simple-prediction.yaml -n open-cluster-management --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-example-performance.yaml -n open-cluster-management --context kind-hub01
-cat samples/mydynamicscorer-example-performance.yaml | sed "s/\${AI_WORKLOAD_SCORER_HOST}/$AI_WORKLOAD_SCORER_HOST/g" | kubectl apply -f - -n open-cluster-management --context kind-hub01
-cat samples/mydynamicscorer-example-powerconsumption.yaml | sed "s/\${AI_WORKLOAD_SCORER_HOST}/$AI_WORKLOAD_SCORER_HOST/g" | kubectl apply -f - -n open-cluster-management --context kind-hub01
+kubectl apply -f samples/mydynamicscorer-sample.yaml -n open-cluster-management --context kind-hub
+kubectl apply -f samples/mydynamicscorer-external-llm.yaml -n open-cluster-management --context kind-hub
+cat samples/mydynamicscorer-external-llm.yaml | sed "s/\${EXTERNAL_SCORER_IP}/$EXTERNAL_SCORER_IP/g" | kubectl apply -f - -n open-cluster-management --context kind-hub
+kubectl apply -f samples/mydynamicscorer-simple-prediction.yaml -n open-cluster-management --context kind-hub
+kubectl apply -f samples/mydynamicscorer-example-performance.yaml -n open-cluster-management --context kind-hub
+cat samples/mydynamicscorer-example-performance.yaml | sed "s/\${AI_WORKLOAD_SCORER_HOST}/$AI_WORKLOAD_SCORER_HOST/g" | kubectl apply -f - -n open-cluster-management --context kind-hub
+cat samples/mydynamicscorer-example-powerconsumption.yaml | sed "s/\${AI_WORKLOAD_SCORER_HOST}/$AI_WORKLOAD_SCORER_HOST/g" | kubectl apply -f - -n open-cluster-management --context kind-hub
 ```

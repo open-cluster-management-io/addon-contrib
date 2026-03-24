@@ -30,12 +30,13 @@ If your environment requires arm64 images, you can build and push them from an e
 (As future work, it planned to support multi-arch builds. this step may not be needed then.)
 
 ```bash
-oc create sa dynamic-scoring-image-pusher -n open-cluster-management
-oc policy add-role-to-user system:image-pusher -z dynamic-scoring-image-pusher -n open-cluster-management
-TOKEN=$(oc create token dynamic-scoring-image-pusher -n open-cluster-management)
+SERVICEACCOUNT=dynamic-scoring-image-pusher
+oc create sa $SERVICEACCOUNT -n open-cluster-management
+oc policy add-role-to-user system:image-pusher -z $SERVICEACCOUNT -n open-cluster-management
+TOKEN=$(oc create token $SERVICEACCOUNT -n open-cluster-management)
 REGISTRY=$(oc get route default-route -n openshift-image-registry --template='{{ .spec.host }}')
-AUTH=$(echo -n "serviceaccount:$TOKEN" | base64 -w0)
-cat <<EOF > ./secrets/pull-dockerconfig.json
+AUTH=$(echo -n "$SERVICEACCOUNT:$TOKEN" | base64 -w0)
+cat <<EOF > ./secrets/push-dockerconfig.json
 {
 	"auths": {
 		"$REGISTRY": {
@@ -49,11 +50,16 @@ EOF
 ```bash
 # before running these commands, make sure you have push secret build-push-secret in managed cluster
 oc create secret generic hub-push-secret \
-  --from-file=.dockerconfigjson=./secrets/pull-dockerconfig.json \
-  --type=kubernetes.io/dockerconfigjson
-oc apply -f hack/image-build/buildconfig-addon-aarch64.yaml
-oc start-build addon-aarch64-build --from-dir=. --follow
+  --from-file=.dockerconfigjson=./secrets/push-dockerconfig.json \
+  --type=kubernetes.io/dockerconfigjson -n dynamic-scoring
+oc apply -f hack/image-build/buildconfig-addon-aarch64.yaml -n dynamic-scoring
+# update buildconfig for addon image
+oc start-build addon-aarch64-build -n dynamic-scoring --from-dir=. --follow
+# update buildconfig for policy-watcher image if needed
+oc start-build policy-watcher-aarch64-build -n dynamic-scoring --from-dir=samples/policy-watcher --follow
 ```
+
+NOTE: If you want to push images to hub cluster from an external cluster, make sure the external cluster has network access to the hub cluster's internal registry and existence of imagestreams.
 
 ## Deploy Dynamic Scoring Framework
 
@@ -74,11 +80,12 @@ As default, this framework copy pull secret named `dynamic-scoring-addon-pull-se
 Following are the steps to create the pull secret on hub cluster.
 
 ```bash
-oc create sa dynamic-scoring-image-puller -n open-cluster-management
-oc policy add-role-to-user system:image-puller -z dynamic-scoring-image-puller -n open-cluster-management
-TOKEN=$(oc create token dynamic-scoring-image-puller -n open-cluster-management)
+SERVICEACCOUNT=dynamic-scoring-image-puller
+oc create sa $SERVICEACCOUNT -n open-cluster-management
+oc policy add-role-to-user system:image-puller -z $SERVICEACCOUNT -n open-cluster-management
+TOKEN=$(oc create token $SERVICEACCOUNT -n open-cluster-management)
 REGISTRY=default-route-openshift-image-registry.apps.hubdev01.airan.localdomain
-AUTH=$(echo -n "serviceaccount:$TOKEN" | base64 -w0)
+AUTH=$(echo -n "$SERVICEACCOUNT:$TOKEN" | base64 -w0)
 
 cat <<EOF > ./secrets/pull-dockerconfig.json
 {
@@ -118,3 +125,7 @@ spec:
 ```
 
 Note: `ImagePullSecrets` is interpreted as an array of secret names.
+
+oc create secret generic policy-watcher-pull-secret \
+  --from-file=.dockerconfigjson=./secrets/pull-dockerconfig.json \
+  --type=kubernetes.io/dockerconfigjson -n dynamic-scoring
