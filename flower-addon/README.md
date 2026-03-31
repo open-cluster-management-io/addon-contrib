@@ -58,7 +58,7 @@ Flower Addon leverages OCM's multi-cluster management to address these challenge
 - [x] [Auto-Install with Placement](docs/auto-install-by-placement.md) - Schedule SuperNodes across clusters via OCM Placement ([demo](https://asciinema.org/a/776746))
 - [x] [Run Federated Learning Applications](docs/run-federated-app.md) - Run federated learning applications on the Flower Addon environment ([demo](https://asciinema.org/a/776749))
 - [x] Automatic ClientApp distribution via ManifestWorkReplicaSet
-- [ ] TLS-secured SuperNode-SuperLink connections via Addon auto-registration
+- [x] [Enable TLS](docs/enable-tls.md) - TLS-secured SuperNode-SuperLink connections
 
 ## Related Projects
 

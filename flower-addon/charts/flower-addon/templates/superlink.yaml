@@ -1,4 +1,10 @@
 {{- if .Values.superlink.enabled }}
+{{- if .Values.tls.enabled }}
+{{- $serverSecret := (lookup "v1" "Secret" .Values.superlink.namespace .Values.tls.serverCert.secretName) }}
+{{- if not $serverSecret }}
+{{- fail (printf "TLS enabled but Secret '%s/%s' not found. Run hack/generate-certs.sh first." .Values.superlink.namespace .Values.tls.serverCert.secretName) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,8 +27,15 @@ spec:
         image: {{ .Values.superlink.image.repository }}:{{ .Values.superlink.image.tag }}
         imagePullPolicy: {{ .Values.superlink.image.pullPolicy }}
         args:
+        {{- if .Values.tls.enabled }}
+        - "--ssl-ca-certfile=/etc/flower/tls/ca.crt"
+        - "--ssl-certfile=/etc/flower/tls/server.pem"
+        - "--ssl-keyfile=/etc/flower/tls/server.key"
+        {{- end }}
         {{- range .Values.superlink.args }}
+        {{- if not (and $.Values.tls.enabled (eq . "--insecure")) }}
         - {{ . | quote }}
+        {{- end }}
         {{- end }}
         ports:
         - name: exec
@@ -34,6 +47,12 @@ spec:
         - name: control
           containerPort: 9093
           protocol: TCP
+        {{- if .Values.tls.enabled }}
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/flower/tls
+          readOnly: true
+        {{- end }}
         resources:
           {{- toYaml .Values.superlink.resources | nindent 10 }}
         livenessProbe:
@@ -46,6 +65,12 @@ spec:
             port: 9092
           initialDelaySeconds: 5
           periodSeconds: 5
+      {{- if .Values.tls.enabled }}
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: {{ .Values.tls.serverCert.secretName }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

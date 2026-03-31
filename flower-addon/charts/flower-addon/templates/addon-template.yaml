@@ -46,12 +46,22 @@ spec:
                     image: "{{`{{IMAGE}}`}}"
                     imagePullPolicy: {{ .Values.supernode.image.pullPolicy }}
                     args:
+                      {{- if .Values.tls.enabled }}
+                      - "--root-certificates=/etc/flower/tls/ca.crt"
+                      {{- else }}
                       - "--insecure"
+                      {{- end }}
                       - "--superlink={{`{{SUPERLINK_ADDRESS}}`}}:{{`{{SUPERLINK_PORT}}`}}"
                       - "--node-config"
                       - 'cluster-name="{{`{{CLUSTER_NAME}}`}}" num-partitions={{`{{NUM_PARTITIONS}}`}}'
                       - "--isolation=process"
                       - "--clientappio-api-address=0.0.0.0:9094"
+                    {{- if .Values.tls.enabled }}
+                    volumeMounts:
+                      - name: tls-ca
+                        mountPath: /etc/flower/tls
+                        readOnly: true
+                    {{- end }}
                     ports:
                       - name: clientappio
                         containerPort: 9094
@@ -68,6 +78,28 @@ spec:
                         port: 9094
                       initialDelaySeconds: 5
                       periodSeconds: 5
+                {{- if .Values.tls.enabled }}
+                volumes:
+                  - name: tls-ca
+                    secret:
+                      secretName: flower-tls-ca
+                {{- end }}
+
+        {{- if .Values.tls.enabled }}
+        # CA certificate Secret (distributed to managed clusters)
+        {{- $caSecret := (lookup "v1" "Secret" .Values.superlink.namespace .Values.tls.ca.secretName) }}
+        {{- if not $caSecret }}
+        {{- fail (printf "TLS enabled but Secret '%s/%s' not found. Run hack/generate-certs.sh first." .Values.superlink.namespace .Values.tls.ca.secretName) }}
+        {{- end }}
+        - apiVersion: v1
+          kind: Secret
+          metadata:
+            name: flower-tls-ca
+            namespace: flower-addon
+          type: Opaque
+          data:
+            ca.crt: {{ index $caSecret.data "ca.crt" }}
+        {{- end }}
 
         # SuperNode Service
         - apiVersion: v1
