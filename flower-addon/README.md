@@ -87,6 +87,29 @@ helm install flower-addon ./charts/flower-addon \
 
 SuperLink starts with `--ssl-certfile`/`--ssl-keyfile` and SuperNode connects with `--root-certificates` to verify the server identity.
 
+### 3. Run FL Jobs with TLS
+
+When submitting FL jobs via `flwr run`, configure TLS in `~/.flwr/config.toml`:
+
+```toml
+[superlink.ocm-deployment]
+address = "<HUB_NODE_IP>:30093"
+insecure = false
+root-certificates = "/path/to/ca.crt"
+```
+
+Extract the CA cert from the cluster:
+
+```bash
+kubectl get secret flower-tls-ca -n flower-system -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
+```
+
+Then run:
+
+```bash
+flwr run . ocm-deployment --stream
+```
+
 ## Related Projects
 
 - [Flower](https://flower.ai) - A friendly federated learning framework
