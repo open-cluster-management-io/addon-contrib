@@ -1,4 +1,10 @@
 {{- if .Values.superlink.enabled }}
+{{- if .Values.tls.enabled }}
+{{- $serverSecret := (lookup "v1" "Secret" .Values.superlink.namespace .Values.tls.serverCert.secretName) }}
+{{- if not $serverSecret }}
+{{- fail (printf "TLS enabled but Secret '%s/%s' not found. Run hack/generate-certs.sh first." .Values.superlink.namespace .Values.tls.serverCert.secretName) }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

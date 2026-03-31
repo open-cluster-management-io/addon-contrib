@@ -16,8 +16,13 @@ cd flower-addon
 ./hack/generate-certs.sh --hub-ip <HUB_NODE_IP>
 ```
 
-This creates two Kubernetes Secrets in `flower-system`:
-- `flower-tls-ca` — CA certificate and key
+This creates two Kubernetes Secrets in `flower-system` (default namespace). If you override `superlink.namespace` in Helm values, pass the same namespace here:
+
+```bash
+./hack/generate-certs.sh --hub-ip <HUB_NODE_IP> --namespace <YOUR_NAMESPACE>
+```
+
+- `flower-tls-ca` — CA certificate and key (used to verify server identity)
 - `flower-superlink-tls` — SuperLink server certificate, key, and CA cert
 
 The server certificate SANs include:
@@ -51,6 +56,7 @@ root-certificates = "/path/to/ca.crt"
 Extract the CA cert from the cluster:
 
 ```bash
+# Use the same namespace as your SuperLink deployment (default: flower-system)
 kubectl get secret flower-tls-ca -n flower-system -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
 ```
 
