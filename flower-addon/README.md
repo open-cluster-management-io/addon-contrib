@@ -58,7 +58,34 @@ Flower Addon leverages OCM's multi-cluster management to address these challenge
 - [x] [Auto-Install with Placement](docs/auto-install-by-placement.md) - Schedule SuperNodes across clusters via OCM Placement ([demo](https://asciinema.org/a/776746))
 - [x] [Run Federated Learning Applications](docs/run-federated-app.md) - Run federated learning applications on the Flower Addon environment ([demo](https://asciinema.org/a/776749))
 - [x] Automatic ClientApp distribution via ManifestWorkReplicaSet
-- [ ] TLS-secured SuperNode-SuperLink connections via Addon auto-registration
+- [x] TLS-secured SuperNode-SuperLink connections
+
+## Enable TLS
+
+By default, SuperLink and SuperNode communicate over insecure gRPC. To enable TLS:
+
+### 1. Generate Certificates
+
+```bash
+cd flower-addon
+
+# Generate CA + server cert (include hub node IP in SANs for NodePort access)
+./hack/generate-certs.sh --hub-ip <HUB_NODE_IP>
+```
+
+This creates two Kubernetes Secrets in `flower-system`:
+- `flower-tls-ca` — CA certificate and key
+- `flower-superlink-tls` — SuperLink server certificate, key, and CA cert
+
+### 2. Deploy with TLS Enabled
+
+```bash
+helm install flower-addon ./charts/flower-addon \
+  --set tls.enabled=true \
+  --set deploymentConfig.superlinkAddress=<HUB_NODE_IP>
+```
+
+SuperLink starts with `--ssl-certfile`/`--ssl-keyfile` and SuperNode connects with `--root-certificates` to verify the server identity.
 
 ## Related Projects
 

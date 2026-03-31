@@ -23,6 +23,14 @@ superlink:
     - "--insecure"
     - "--isolation=process"
 
+# TLS configuration
+tls:
+  enabled: false
+  ca:
+    secretName: flower-tls-ca           # CA secret (created by hack/generate-certs.sh)
+  serverCert:
+    secretName: flower-superlink-tls    # Server cert secret
+
 # SuperNode configuration (deployed on managed clusters via OCM addon)
 supernode:
   image:
