@@ -1,0 +1,36 @@
+apiVersion: work.open-cluster-management.io/v1
+kind: ManifestWork
+metadata:
+  name: simple-prediction-scorer-deployment
+  namespace: ${CLUSTER_NAME}
+spec:
+  workload:
+    manifests:
+      - apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: simple-prediction-scorer
+          namespace: dynamic-scoring
+          annotations:
+            skupper.io/address: simple-prediction-scorer
+            skupper.io/port: "8000"
+            skupper.io/proxy: "tcp"
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: simple-prediction-scorer
+          template:
+            metadata:
+              labels:
+                app: simple-prediction-scorer
+            spec:
+              containers:
+                - name: simple-prediction-scorer
+                  image: quay.io/dynamic-scoring/simple-prediction-scorer:latest
+                  imagePullPolicy: Never
+                  ports:
+                    - containerPort: 8000
+                  env:
+                    - name: THRESHOLD
+                      value: "1"

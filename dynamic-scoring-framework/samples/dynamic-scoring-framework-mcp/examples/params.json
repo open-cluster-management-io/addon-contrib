@@ -1,0 +1,45 @@
+{
+  "namespace": "default",
+  "clusters": [
+    {
+      "name": "cluster1",
+      "availablePolicies": [
+        {
+          "name": "policy-enable-mig-2g-cluster1"
+        },
+        {
+          "name": "policy-enable-mig-3g-cluster1"
+        },
+        {
+          "name": "policy-disable-mig-cluster1"
+        }
+      ]
+    },
+    {
+      "name": "cluster2",
+      "availablePolicies": [
+        {
+          "name": "policy-enable-mig-2g-cluster2"
+        },
+        {
+          "name": "policy-enable-mig-3g-cluster2"
+        },
+        {
+          "name": "policy-disable-mig-cluster2"
+        }
+      ]
+    }
+  ],
+  "targetWorkloads": [
+    {
+      "name": "mwrs-app01"
+    },
+    {
+      "name": "mwrs-app02"
+    }
+  ],
+  "preference": {
+    "addOnPlacementScore": "example-powerconsumption-score",
+    "scoreDimensionFormat": "${app};${device}"
+  }
+}

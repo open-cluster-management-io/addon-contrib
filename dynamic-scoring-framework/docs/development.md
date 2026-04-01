@@ -35,14 +35,14 @@ default bundle  version :1.1.1
 ### Step 2: Create Kubernetes Clusters
 
 Create three Kubernetes clusters using `kind`:
-- **hub01**: The hub cluster that manages worker clusters
-- **worker01**: First managed cluster for workload execution
-- **worker02**: Second managed cluster for workload execution
+- **hub**: The hub cluster that manages worker clusters
+- **cluster1**: First managed cluster for workload execution
+- **cluster2**: Second managed cluster for workload execution
 
 ```bash
-kind create cluster --name hub01
-kind create cluster --name worker01
-kind create cluster --name worker02
+kind create cluster --name hub
+kind create cluster --name cluster1
+kind create cluster --name cluster2
 ```
 
 ### Step 3: Initialize OCM Hub Cluster
@@ -50,7 +50,7 @@ kind create cluster --name worker02
 Initialize the hub cluster with OCM components. This installs the necessary controllers and CRDs for cluster management:
 
 ```bash
-clusteradm init --wait --context kind-hub01 --bundle-version=latest
+clusteradm init --wait --context kind-hub --bundle-version=latest
 ```
 
 This command:
@@ -63,7 +63,7 @@ This command:
 First, obtain the join token from the hub cluster. This token is used to authenticate worker clusters:
 
 ```bash
-$ clusteradm get token --context kind-hub01
+$ clusteradm get token --context kind-hub
 token=TOKEN
 please log on spoke and run:
 clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name <cluster_name>
@@ -74,11 +74,11 @@ clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --clus
 Now, join each worker cluster using the token. The `--force-internal-endpoint-lookup` flag ensures proper networking in kind clusters:
 
 ```bash
-clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name worker01 --context kind-worker01 --force-internal-endpoint-lookup --wait
+clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name cluster1 --context kind-cluster1 --force-internal-endpoint-lookup --wait
 ```
 
 ```bash
-clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name worker02 --context kind-worker02 --force-internal-endpoint-lookup --wait
+clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --cluster-name cluster2 --context kind-cluster2 --force-internal-endpoint-lookup --wait
 ```
 
 **Replace `TOKEN` and the API server URL** with the values from the previous command.
@@ -88,7 +88,7 @@ clusteradm join --hub-token TOKEN --hub-apiserver https://127.0.0.1:36197 --clus
 The hub cluster needs to approve the join requests from worker clusters:
 
 ```bash
-clusteradm accept --context kind-hub01 --clusters worker01,worker02 --wait
+clusteradm accept --context kind-hub --clusters cluster1,cluster2 --wait
 ```
 
 This creates the necessary resources (ManagedCluster, klusterlet) for each worker cluster.
@@ -98,10 +98,10 @@ This creates the necessary resources (ManagedCluster, klusterlet) for each worke
 Confirm that the worker clusters are successfully joined and available:
 
 ```bash
-$ kubectl get managedclusters --all-namespaces --context kind-hub01
+$ kubectl get managedclusters --all-namespaces --context kind-hub
 NAME       HUB ACCEPTED   MANAGED CLUSTER URLS                  JOINED   AVAILABLE   AGE
-worker01   true           https://worker01-control-plane:6443   True     True        150m
-worker02   true           https://worker02-control-plane:6443   True     True        148m
+cluster1   true           https://cluster1-control-plane:6443   True     True        150m
+cluster2   true           https://cluster2-control-plane:6443   True     True        148m
 ```
 
 Both clusters should show:
@@ -114,17 +114,17 @@ Both clusters should show:
 Create the `dynamic-scoring` namespace on all clusters. This namespace will host the Dynamic Scoring Framework components:
 
 ```bash
-kubectl create namespace dynamic-scoring --context kind-hub01
-kubectl create namespace dynamic-scoring --context kind-worker01
-kubectl create namespace dynamic-scoring --context kind-worker02
+kubectl create namespace dynamic-scoring --context kind-hub
+kubectl create namespace dynamic-scoring --context kind-cluster1
+kubectl create namespace dynamic-scoring --context kind-cluster2
 ```
 
 Set the default namespace for each context to simplify subsequent commands:
 
 ```bash
-kubectl config set-context kind-hub01 --namespace=dynamic-scoring
-kubectl config set-context kind-worker01 --namespace=dynamic-scoring
-kubectl config set-context kind-worker02 --namespace=dynamic-scoring
+kubectl config set-context kind-hub --namespace=dynamic-scoring
+kubectl config set-context kind-cluster1 --namespace=dynamic-scoring
+kubectl config set-context kind-cluster2 --namespace=dynamic-scoring
 ```
 
 ---
@@ -149,7 +149,7 @@ Load the image into the hub cluster and deploy:
 
 ```bash
 export IMG_CONTROLLER=quay.io/open-cluster-management/dynamic-scoring-controller:latest
-kind load docker-image $IMG_CONTROLLER --name hub01
+kind load docker-image $IMG_CONTROLLER --name hub
 make deploy IMG_CONTROLLER=$IMG_CONTROLLER
 ```
 
@@ -181,9 +181,9 @@ Load the addon image into all clusters (hub and workers):
 
 ```bash
 export IMG_ADDON=quay.io/open-cluster-management/dynamic-scoring-addon:latest
-kind load docker-image  $IMG_ADDON --name hub01
-kind load docker-image  $IMG_ADDON --name worker01
-kind load docker-image  $IMG_ADDON --name worker02
+kind load docker-image  $IMG_ADDON --name hub
+kind load docker-image  $IMG_ADDON --name cluster1
+kind load docker-image  $IMG_ADDON --name cluster2
 ```
 
 Deploy the addon using OCM's addon framework:
@@ -195,10 +195,10 @@ make deploy-addon IMG_ADDON=$IMG_ADDON
 Verify that addon agents are running on each worker cluster:
 
 ```bash
-$ kubectl get pods --context kind-worker01
+$ kubectl get pods --context kind-cluster1
 NAME                                     READY   STATUS    RESTARTS   AGE
 dynamic-scoring-agent-6f7bcdd467-vn68j   1/1     Running   0          64s
-$ kubectl get pods --context kind-worker02
+$ kubectl get pods --context kind-cluster2
 NAME                                     READY   STATUS    RESTARTS   AGE
 dynamic-scoring-agent-77bd85bb96-r9dk5   1/1     Running   0          69s
 ```
@@ -219,12 +219,12 @@ Skupper enables secure Layer 7 networking across clusters without requiring VPNs
 Install the Skupper site controller on each cluster:
 
 ```bash
-kubectl create namespace skupper-site-controller --context kind-hub01
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-hub01
-kubectl create namespace skupper-site-controller --context kind-worker01
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker01
-kubectl create namespace skupper-site-controller --context kind-worker02
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker02
+kubectl create namespace skupper-site-controller --context kind-hub
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-hub
+kubectl create namespace skupper-site-controller --context kind-cluster1
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-cluster1
+kubectl create namespace skupper-site-controller --context kind-cluster2
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-cluster2
 ```
 
 ### Configure Podman Network for Kind Clusters
@@ -233,16 +233,16 @@ For kind clusters to communicate via Skupper, create a shared podman network:
 
 ```bash
 podman network create my-kind-net
-podman network connect my-kind-net hub01-control-plane
-podman network connect my-kind-net worker01-control-plane
-podman network connect my-kind-net worker02-control-plane
+podman network connect my-kind-net hub-control-plane
+podman network connect my-kind-net cluster1-control-plane
+podman network connect my-kind-net cluster2-control-plane
 podman network inspect my-kind-net # Check connected clusters
 ```
 
 Get the hub cluster IP address.
 
 ```bash
-HUB_NODE_IP=$(podman inspect hub01-control-plane | jq -r '.[0].NetworkSettings.Networks["my-kind-net"].IPAddress')
+HUB_NODE_IP=$(podman inspect hub-control-plane | jq -r '.[0].NetworkSettings.Networks["my-kind-net"].IPAddress')
 echo $HUB_NODE_IP
 ```
 
@@ -283,9 +283,9 @@ Install the kube-prometheus-stack on each cluster. This includes:
 - Node exporter and kube-state-metrics
 
 ```bash
-helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-hub01
-helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-worker01
-helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-worker02
+helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-hub
+helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-cluster1
+helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context kind-cluster2
 ```
 
 **Note**: Installation may take a few minutes. Wait for all pods to be ready before proceeding.
@@ -327,8 +327,8 @@ skupper status --namespace monitoring
 Update Prometheus on worker clusters to remote-write metrics to the hub's VictoriaMetrics:
 
 ```bash
-helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-worker01
-helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-worker02
+helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-cluster1
+helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-cluster2
 ```
 
 The `values.yaml` file contains remote_write configuration pointing to `vm-hub:8428`.
@@ -338,8 +338,8 @@ The `values.yaml` file contains remote_write configuration pointing to `vm-hub:8
 Deploy Prometheus recording rules to pre-aggregate metrics. This improves query performance and reduces storage requirements:
 
 ```bash
-CLUSTER_NAME=worker01 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-worker01
-CLUSTER_NAME=worker02 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-worker02
+CLUSTER_NAME=cluster1 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-cluster1
+CLUSTER_NAME=cluster2 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-cluster2
 ```
 
 ### Verify Metrics Collection with Grafana
@@ -372,10 +372,10 @@ This section demonstrates how to build and deploy various types of Dynamic Score
 
 | Scorer | Location | Input Type | Use Case |
 |--------|----------|------------|----------|
-| Sample Scorer | Internal (worker01) | Time series | Basic CPU-based scoring |
+| Sample Scorer | Internal (cluster1) | Time series | Basic CPU-based scoring |
 | LLM Forecast Scorer | External (host) | Time series | AI-powered predictions |
-| Simple Prediction Scorer | Internal (worker02) | Time series | Namespace-level forecasts |
-| Static Scorer | Internal (worker01) | None | Pre-defined performance/power scores |
+| Simple Prediction Scorer | Internal (cluster2) | Time series | Namespace-level forecasts |
+| Static Scorer | Internal (cluster1) | None | Pre-defined performance/power scores |
 
 ### Sample DynamicScorer (Internal, Time Series Input)
 
@@ -389,17 +389,17 @@ export SAMPLE_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/sample-scorer:latest
 podman tag localhost/sample-scorer:latest $SAMPLE_SCORER_IMAGE_NAME
 ```
 
-Load the image into worker01 and deploy via ManifestWork:
+Load the image into cluster1 and deploy via ManifestWork:
 
 ```bash
-kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name worker01
-CLUSTER_NAME=worker01 envsubst < samples/sample-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub01
+kind load docker-image  $SAMPLE_SCORER_IMAGE_NAME --name cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/sample-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub
 ```
 
 Verify the scorer is accessible. First, create a test pod:
 
 ```bash
-kubectl apply -f tmp/test-pod.yaml --context kind-hub01
+kubectl apply -f tmp/test-pod.yaml --context kind-hub
 ```
 
 Then query the scorer's configuration endpoint:
@@ -473,8 +473,8 @@ And this Scorer is example of using token authentication to access vLLM server.
 At first, create a sample API token secret on worker clusters:
 
 ```bash
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker01
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker02
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster1
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster2
 ```
 
 sample-api-token.yaml:
@@ -506,10 +506,10 @@ Then, the DynamicScorer CR references this secret for authentication.
 podman build -t simple-prediction-scorer samples/simple-prediction-scorer
 export SIMPLE_PREDICTION_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/simple-prediction-scorer:latest
 podman tag localhost/simple-prediction-scorer:latest $SIMPLE_PREDICTION_SCORER_IMAGE_NAME
-kind load docker-image  $SIMPLE_PREDICTION_SCORER_IMAGE_NAME --name worker02
-CLUSTER_NAME=worker02 envsubst < samples/simple-prediction-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub01
-kubectl apply -f tmp/test-pod.yaml --context kind-hub01
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://simple-prediction-scorer:8000/config|jq
+kind load docker-image  $SIMPLE_PREDICTION_SCORER_IMAGE_NAME --name cluster2
+CLUSTER_NAME=cluster2 envsubst < samples/simple-prediction-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub
+kubectl apply -f tmp/test-pod.yaml --context kind-hub
+kubectl exec -it curl-tester --context kind-hub -- curl http://simple-prediction-scorer:8000/config|jq
 ```
 
 Simple Prediction Scorer config:
@@ -544,11 +544,11 @@ Simple Prediction Scorer config:
 podman build -t static-scorer samples/static-scorer
 export STATIC_SCORER_IMAGE_NAME=quay.io/dynamic-scoring/static-scorer:latest
 podman tag localhost/static-scorer:latest $STATIC_SCORER_IMAGE_NAME
-kind load docker-image  $STATIC_SCORER_IMAGE_NAME --name worker01
-CLUSTER_NAME=worker01 envsubst < samples/static-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub01
-kubectl apply -f tmp/test-pod.yaml --context kind-hub01
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://static-scorer:8000/performance/config|jq
-kubectl exec -it curl-tester --context kind-hub01 -- curl http://static-scorer:8000/powerconsumption/config|jq
+kind load docker-image  $STATIC_SCORER_IMAGE_NAME --name cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/static-scorer/manifestwork.yaml | kubectl apply -f - --context kind-hub
+kubectl apply -f tmp/test-pod.yaml --context kind-hub
+kubectl exec -it curl-tester --context kind-hub -- curl http://static-scorer:8000/performance/config|jq
+kubectl exec -it curl-tester --context kind-hub -- curl http://static-scorer:8000/powerconsumption/config|jq
 ```
 
 Static Scorer config:
@@ -592,20 +592,20 @@ Static Scorer config:
 Register the DynamicScorer CRs to the hub cluster.
 
 ```bash
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker01
-kubectl apply -f secrets/sample-api-token.yaml --context kind-worker02
-kubectl apply -f samples/mydynamicscorer-sample.yaml --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-external-llm.yaml --context kind-hub01
-cat samples/mydynamicscorer-external-llm.yaml | sed "s/\${EXTERNAL_SCORER_IP}/$EXTERNAL_SCORER_IP/g" | kubectl apply -f - --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-simple-prediction.yaml --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-example-performance.yaml --context kind-hub01
-kubectl apply -f samples/mydynamicscorer-example-powerconsumption.yaml --context kind-hub01
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster1
+kubectl apply -f secrets/sample-api-token.yaml --context kind-cluster2
+kubectl apply -f samples/mydynamicscorer-sample.yaml --context kind-hub
+kubectl apply -f samples/mydynamicscorer-external-llm.yaml --context kind-hub
+cat samples/mydynamicscorer-external-llm.yaml | sed "s/\${EXTERNAL_SCORER_IP}/$EXTERNAL_SCORER_IP/g" | kubectl apply -f - --context kind-hub
+kubectl apply -f samples/mydynamicscorer-simple-prediction.yaml --context kind-hub
+kubectl apply -f samples/mydynamicscorer-example-performance.yaml --context kind-hub
+kubectl apply -f samples/mydynamicscorer-example-powerconsumption.yaml --context kind-hub
 ```
 
 Create DynamicScoringConfig CR to link DynamicScorers.
 
 ```bash
-kubectl apply -f samples/mydynamicscoringconfig.yaml --context kind-hub01
+kubectl apply -f samples/mydynamicscoringconfig.yaml --context kind-hub
 ```
 
 ## Gather Metrics and Verify Scoring
@@ -613,10 +613,10 @@ kubectl apply -f samples/mydynamicscoringconfig.yaml --context kind-hub01
 Create servicemonitor to scrape metrics from Dynamic Scoring Agent.
 
 ```bash
-kubectl apply -f deploy/agentfeedback --context kind-worker01
-kubectl apply -f deploy/agentfeedback --context kind-worker02
+kubectl apply -f deploy/agentfeedback --context kind-cluster1
+kubectl apply -f deploy/agentfeedback --context kind-cluster2
 
-kubectl exec -it -n monitoring --context kind-hub01 curl-tester -- curl http://vm-hub:8428/api/v1/query?query=dynamic_score
+kubectl exec -it -n monitoring --context kind-hub curl-tester -- curl http://vm-hub:8428/api/v1/query?query=dynamic_score
 ```
 
 ## Verify AddOnPlacementScore on Hub Cluster
@@ -626,16 +626,16 @@ Check AddOnPlacementScore status on hub cluster.
 ```bash
 $ oc get addonplacementscores -A
 NAMESPACE   NAME                             AGE
-worker01    example-performance-score        37s
-worker01    example-powerconsumption-score   37s
-worker01    llm-forecast-score               93m
-worker01    sample-my-score                  18h
-worker01    simple-prediction-score          18h
-worker02    example-performance-score        37s
-worker02    example-powerconsumption-score   37s
-worker02    llm-forecast-score               93m
-worker02    sample-my-score                  18h
-worker02    simple-prediction-score          18h
+cluster1    example-performance-score        37s
+cluster1    example-powerconsumption-score   37s
+cluster1    llm-forecast-score               93m
+cluster1    sample-my-score                  18h
+cluster1    simple-prediction-score          18h
+cluster2    example-performance-score        37s
+cluster2    example-powerconsumption-score   37s
+cluster2    llm-forecast-score               93m
+cluster2    sample-my-score                  18h
+cluster2    simple-prediction-score          18h
 ```
 
 ## Update Addon Agent Image
@@ -645,10 +645,10 @@ When updating the Addon Agent image, rebuild and redeploy the image to each work
 ```bash
 make docker-build-addon
 export IMG_ADDON=quay.io/open-cluster-management/dynamic-scoring-addon:latest
-kind load docker-image  $IMG_ADDON --name worker01
-kubectl delete pod -l app=dynamic-scoring-agent --context kind-worker01
-kind load docker-image  $IMG_ADDON --name worker02
-kubectl delete pod -l app=dynamic-scoring-agent --context kind-worker02
+kind load docker-image  $IMG_ADDON --name cluster1
+kubectl delete pod -l app=dynamic-scoring-agent --context kind-cluster1
+kind load docker-image  $IMG_ADDON --name cluster2
+kubectl delete pod -l app=dynamic-scoring-agent --context kind-cluster2
 ```
 
 ---
@@ -687,34 +687,34 @@ spec:
 ### Enable Policy and PolicyWatcher
 
 ```sh
-export CTX_HUB_CLUSTER=kind-hub01
+export CTX_HUB_CLUSTER=kind-hub
 export HUB_NAMESPACE="open-cluster-management"
 clusteradm install hub-addon --names governance-policy-framework --context ${CTX_HUB_CLUSTER}
 
-clusteradm addon enable --names governance-policy-framework --clusters worker01 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names governance-policy-framework --clusters worker02 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names config-policy-controller --clusters worker01 --context ${CTX_HUB_CLUSTER}
-clusteradm addon enable --names config-policy-controller --clusters worker02 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names governance-policy-framework --clusters cluster1 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names governance-policy-framework --clusters cluster2 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names config-policy-controller --clusters cluster1 --context ${CTX_HUB_CLUSTER}
+clusteradm addon enable --names config-policy-controller --clusters cluster2 --context ${CTX_HUB_CLUSTER}
 ```
 
 Build and deploy the PolicyWatcher to each worker cluster. This component monitors policy compliance status:
 
 ```bash
 podman build -t quay.io/dynamic-scoring/policy-watcher:v0.1.0 samples/policy-watcher
-kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name worker01
-kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name worker02
-CLUSTER_NAME=worker01 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-worker01
-CLUSTER_NAME=worker01 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-worker01
-CLUSTER_NAME=worker02 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-worker02
-CLUSTER_NAME=worker02 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-worker02
+kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name cluster1
+kind load docker-image quay.io/dynamic-scoring/policy-watcher:v0.1.0 --name cluster2
+CLUSTER_NAME=cluster1 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-cluster1
+CLUSTER_NAME=cluster1 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-cluster1
+CLUSTER_NAME=cluster2 envsubst < samples/policy-watcher/deployment.yaml | kubectl delete -f - --context kind-cluster2
+CLUSTER_NAME=cluster2 envsubst < samples/policy-watcher/deployment.yaml | kubectl apply -f - --context kind-cluster2
 ```
 
 Verify that PolicyWatcher is running and has created ClusterClaims:
 
 ```bash
-$ kubectl get clusterclaims policy-watcher-claim --context kind-worker01 -o yaml|grep value:
+$ kubectl get clusterclaims policy-watcher-claim --context kind-cluster1 -o yaml|grep value:
   value: empty
-$ kubectl get clusterclaims policy-watcher-claim --context kind-worker02 -o yaml|grep value:
+$ kubectl get clusterclaims policy-watcher-claim --context kind-cluster2 -o yaml|grep value:
   value: empty
 ```
 
@@ -723,9 +723,9 @@ $ kubectl get clusterclaims policy-watcher-claim --context kind-worker02 -o yaml
 
 ```bash
 podman build -t quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest samples/dynamic-scoring-framework-mcp
-kind load docker-image quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest --name hub01
-kubectl apply -f samples/dynamic-scoring-framework-mcp/deployment.yaml --context kind-hub01
-kubectl port-forward -n dynamic-scoring pod/$(kubectl get pods -n dynamic-scoring -l app=dynamic-scoring-framework-mcp --context kind-hub01 -o name | head -1 | cut -d/ -f2) 8338:8338 --context kind-hub01
+kind load docker-image quay.io/dynamic-scoring/dynamic-scoring-framework-mcp:latest --name hub
+kubectl apply -f samples/dynamic-scoring-framework-mcp/deployment.yaml --context kind-hub
+kubectl port-forward -n dynamic-scoring pod/$(kubectl get pods -n dynamic-scoring -l app=dynamic-scoring-framework-mcp --context kind-hub -o name | head -1 | cut -d/ -f2) 8338:8338 --context kind-hub
 ```
 
 ### Prepare Optimization
@@ -736,12 +736,12 @@ Deploy sample MWRS and Policies.
 $ oc apply -f samples/dynamic-scoring-framework-mcp/manifests/
 manifestworkreplicaset.work.open-cluster-management.io/mwrs-app01 created
 manifestworkreplicaset.work.open-cluster-management.io/mwrs-app02 created
-policy.policy.open-cluster-management.io/policy-disable-mig-worker01 created
-policy.policy.open-cluster-management.io/policy-disable-mig-worker02 created
-policy.policy.open-cluster-management.io/policy-enable-mig-3g-worker01 created
-policy.policy.open-cluster-management.io/policy-enable-mig-2g-worker02 created
-policy.policy.open-cluster-management.io/policy-enable-mig-2g-worker01 created
-policy.policy.open-cluster-management.io/policy-enable-mig-3g-worker02 created
+policy.policy.open-cluster-management.io/policy-disable-mig-cluster1 created
+policy.policy.open-cluster-management.io/policy-disable-mig-cluster2 created
+policy.policy.open-cluster-management.io/policy-enable-mig-3g-cluster1 created
+policy.policy.open-cluster-management.io/policy-enable-mig-2g-cluster2 created
+policy.policy.open-cluster-management.io/policy-enable-mig-2g-cluster1 created
+policy.policy.open-cluster-management.io/policy-enable-mig-3g-cluster2 created
 ```
 
 MWRSs are sample applications to be deployed to each worker cluster. They have resource requests for GPU. The labels indicate the GPU demands.
@@ -765,7 +765,7 @@ The labels indicate the GPU supply information when this policy is applied to th
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
-  name: policy-disable-mig-worker01
+  name: policy-disable-mig-cluster1
   namespace: default
   labels:
     resource-supply-kind: "gpu"
@@ -782,10 +782,10 @@ These labels mock the behavior of NVIDIA GPU Operator's MIG controller.
 Label the ManagedClusters for easier placement selection:
 
 ```bash
-$ oc label managedcluster worker01 cluster-name=worker01
-managedcluster.cluster.open-cluster-management.io/worker01 labeled
-$ oc label managedcluster worker02 cluster-name=worker02
-managedcluster.cluster.open-cluster-management.io/worker02 labeled
+$ oc label managedcluster cluster1 cluster-name=cluster1
+managedcluster.cluster.open-cluster-management.io/cluster1 labeled
+$ oc label managedcluster cluster2 cluster-name=cluster2
+managedcluster.cluster.open-cluster-management.io/cluster2 labeled
 ```
 
 In this example, resource supply amount and demand amount are represented as the number of GPUs and resource arrangement must satisfy capacity constraints.
@@ -802,30 +802,30 @@ Create the optimization parameter file `samples/dynamic-scoring-framework-mcp/pa
   "namespace": "default",
   "clusters": [
     {
-      "name": "worker01",
+      "name": "cluster1",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker01"
+          "name": "policy-enable-mig-2g-cluster1"
         },
         {
-          "name": "policy-enable-mig-3g-worker01"
+          "name": "policy-enable-mig-3g-cluster1"
         },
         {
-          "name": "policy-disable-mig-worker01"
+          "name": "policy-disable-mig-cluster1"
         }
       ]
     },
     {
-      "name": "worker02",
+      "name": "cluster2",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker02"
+          "name": "policy-enable-mig-2g-cluster2"
         },
         {
-          "name": "policy-enable-mig-3g-worker02"
+          "name": "policy-enable-mig-3g-cluster2"
         },
         {
-          "name": "policy-disable-mig-worker02"
+          "name": "policy-disable-mig-cluster2"
         }
       ]
     }
@@ -862,22 +862,22 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                    SELECTEDCLUSTERS
 app01-placement               False       NoManagedClusterMatched   
 app02-placement               False       NoManagedClusterMatched   
-placement-worker01-b7552597   True        AllDecisionsScheduled     1
-placement-worker02-b7552597   True        AllDecisionsScheduled     1
+placement-cluster1-b7552597   True        AllDecisionsScheduled     1
+placement-cluster2-b7552597   True        AllDecisionsScheduled     1
 ```
 
 Policy is attached to each cluster.
 
 ```bash
-$ oc get policies -n worker01
+$ oc get policies -n cluster1
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker01                        NonCompliant       2m9s
-$ oc get policies -n worker02
+default.policy-enable-mig-3g-cluster1                        NonCompliant       2m9s
+$ oc get policies -n cluster2
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker02                        NonCompliant       7m31s
-$ oc get node --context kind-worker01 -o yaml | grep mig
+default.policy-enable-mig-3g-cluster2                        NonCompliant       7m31s
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migsettinglabel: 3g.48gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migsettinglabel: 3g.48gb
 ```
 
@@ -886,19 +886,19 @@ $ oc get node --context kind-worker02 -o yaml | grep mig
 In a real environment, the GPU Operator would set the `migresultlabel` when MIG configuration is complete. For this demo, set it manually:
 
 ```bash
-$ oc label node worker01-control-plane migresultlabel=true --context kind-worker01
-node/worker01-control-plane labeled
-$ oc label node worker02-control-plane migresultlabel=true --context kind-worker02
-node/worker02-control-plane labeled
+$ oc label node cluster1-control-plane migresultlabel=true --context kind-cluster1
+node/cluster1-control-plane labeled
+$ oc label node cluster2-control-plane migresultlabel=true --context kind-cluster2
+node/cluster2-control-plane labeled
 ```
 
 Verify the MIG labels on nodes:
 
 ```bash
-$ oc get node --context kind-worker01 -o yaml | grep mig
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 3g.48gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 3g.48gb
 ```
@@ -906,12 +906,12 @@ $ oc get node --context kind-worker02 -o yaml | grep mig
 Check that policies are now compliant:
 
 ```bash
-$ oc get policies -n worker01
+$ oc get policies -n cluster1
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker01                        Compliant          39m
-$ oc get policies -n worker02
+default.policy-enable-mig-3g-cluster1                        Compliant          39m
+$ oc get policies -n cluster2
 NAME                                    REMEDIATION ACTION   COMPLIANCE STATE   AGE
-default.policy-enable-mig-3g-worker02                        Compliant          39m
+default.policy-enable-mig-3g-cluster2                        Compliant          39m
 ```
 
 ### Verify Workload Placement
@@ -923,8 +923,8 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                  SELECTEDCLUSTERS
 app01-placement               True        AllDecisionsScheduled   1
 app02-placement               True        AllDecisionsScheduled   1
-placement-worker01-b7552597   True        AllDecisionsScheduled   1
-placement-worker02-b7552597   True        AllDecisionsScheduled   1
+placement-cluster1-b7552597   True        AllDecisionsScheduled   1
+placement-cluster2-b7552597   True        AllDecisionsScheduled   1
 ```
 
 Reset generated placements and placementbindings for next optimization.
@@ -932,11 +932,11 @@ Reset generated placements and placementbindings for next optimization.
 ```bash
 placement.cluster.open-cluster-management.io "app01-placement" deleted
 placement.cluster.open-cluster-management.io "app02-placement" deleted
-placement.cluster.open-cluster-management.io "placement-worker01-b7552597" deleted
-placement.cluster.open-cluster-management.io "placement-worker02-b7552597" deleted
-$ kubectl delete placementbindings -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub01
-placementbinding.policy.open-cluster-management.io "binding-worker01-b7552597" deleted
-placementbinding.policy.open-cluster-management.io "binding-worker02-b7552597" deleted
+placement.cluster.open-cluster-management.io "placement-cluster1-b7552597" deleted
+placement.cluster.open-cluster-management.io "placement-cluster2-b7552597" deleted
+$ kubectl delete placementbindings -n default -l "dynamic-scoring-framework-mcp/generated=true" --context kind-hub
+placementbinding.policy.open-cluster-management.io "binding-cluster1-b7552597" deleted
+placementbinding.policy.open-cluster-management.io "binding-cluster2-b7552597" deleted
 ```
 
 This removes all optimization-generated resources, allowing you to run a new optimization with different preferences.
@@ -950,30 +950,30 @@ Now run optimization with a different objective. Change the preference in `param
   "namespace": "default",
   "clusters": [
     {
-      "name": "worker01",
+      "name": "cluster1",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker01"
+          "name": "policy-enable-mig-2g-cluster1"
         },
         {
-          "name": "policy-enable-mig-3g-worker01"
+          "name": "policy-enable-mig-3g-cluster1"
         },
         {
-          "name": "policy-disable-mig-worker01"
+          "name": "policy-disable-mig-cluster1"
         }
       ]
     },
     {
-      "name": "worker02",
+      "name": "cluster2",
       "availablePolicies": [
         {
-          "name": "policy-enable-mig-2g-worker02"
+          "name": "policy-enable-mig-2g-cluster2"
         },
         {
-          "name": "policy-enable-mig-3g-worker02"
+          "name": "policy-enable-mig-3g-cluster2"
         },
         {
-          "name": "policy-disable-mig-worker02"
+          "name": "policy-disable-mig-cluster2"
         }
       ]
     }
@@ -1010,10 +1010,10 @@ The optimization will now select different GPU configurations that minimize powe
 Check the MIG settings. Notice that different policies are now selected (2g.24gb instead of 3g.48gb):
 
 ```bash
-$ oc get node --context kind-worker01 -o yaml | grep mig
+$ oc get node --context kind-cluster1 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 2g.24gb
-$ oc get node --context kind-worker02 -o yaml | grep mig
+$ oc get node --context kind-cluster2 -o yaml | grep mig
       migresultlabel: "true"
       migsettinglabel: 2g.24gb
 ```
@@ -1033,8 +1033,8 @@ $ oc get placements -n default
 NAME                          SUCCEEDED   REASON                  SELECTEDCLUSTERS
 app01-placement               True        AllDecisionsScheduled   1
 app02-placement               True        AllDecisionsScheduled   1
-placement-worker01-1f3306ad   True        AllDecisionsScheduled   1
-placement-worker02-1f3306ad   True        AllDecisionsScheduled   1
+placement-cluster1-1f3306ad   True        AllDecisionsScheduled   1
+placement-cluster2-1f3306ad   True        AllDecisionsScheduled   1
 ```
 
 All placements are successfully scheduled with the power-optimized configuration.

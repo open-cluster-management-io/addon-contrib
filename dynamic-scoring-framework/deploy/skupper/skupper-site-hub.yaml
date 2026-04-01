@@ -3,6 +3,6 @@ kind: ConfigMap
 metadata:
   name: skupper-site
 data:
-  name: hub01
+  name: hub
   ingress: nodeport
   ingress-host: ${HUB_NODE_IP}
