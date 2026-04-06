@@ -33,8 +33,8 @@ endif
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
-CONTAINER_TOOL ?= podman
-KIND_PROVIDER ?= podman
+CONTAINER_TOOL ?= docker
+KIND_PROVIDER ?= docker
 ifeq ($(CONTAINER_TOOL),podman)
 KIND_PROVIDER := podman
 endif
