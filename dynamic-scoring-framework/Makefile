@@ -33,8 +33,8 @@ endif
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
 # tools. (i.e. podman)
-CONTAINER_TOOL ?= docker
-KIND_PROVIDER ?= docker
+CONTAINER_TOOL ?= podman
+KIND_PROVIDER ?= podman
 ifeq ($(CONTAINER_TOOL),podman)
 KIND_PROVIDER := podman
 endif
@@ -179,11 +179,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: docker-build-controller
 docker-build-controller: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG_CONTROLLER} .
+	$(CONTAINER_TOOL) build $(IMAGE_BUILD_EXTRA_FLAGS) -t ${IMG_CONTROLLER} .
 
 .PHONY: docker-build-addon
 docker-build-addon: ## Build docker image with the addon.
-	$(CONTAINER_TOOL) build -t ${IMG_ADDON} . -f Dockerfile.addon --no-cache
+	$(CONTAINER_TOOL) build $(IMAGE_BUILD_EXTRA_FLAGS) -t ${IMG_ADDON} . -f Dockerfile.addon --no-cache
 
 .PHONY: docker-push-controller
 docker-push-controller: ## Push docker image with the manager.

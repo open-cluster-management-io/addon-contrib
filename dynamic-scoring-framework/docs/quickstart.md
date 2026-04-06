@@ -31,6 +31,8 @@ The typical setup involves:
 As an example, local kind clusters can be used for both hub and managed clusters during development.
 [OCM Quick Start](https://open-cluster-management.io/docs/getting-started/quick-start/) guide provides instructions for setting up local clusters using kind.
 
+
+
 ## Setup Dynamic Scoring Framework
 
 You can install the Dynamic Scoring Framework on the hub cluster using the following helm commands:
