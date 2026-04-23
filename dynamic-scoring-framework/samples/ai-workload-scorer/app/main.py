@@ -230,12 +230,19 @@ async def power_scoring_timeseries(payload: ScoringPayload, request: Request):
             ts = TimeSeries.from_dataframe(
                 df_node, "timestamp", "total_power", fill_missing_dates=True, freq="60s"
             )
-            model = LinearRegressionModel(lags=10)
+            new_model = LinearRegressionModel(lags=10)
             try:
-                model.fit(ts)
-                model.save(model_path)
+                new_model.fit(ts)
+                new_model.save(model_path)
+                model = new_model
             except Exception as e:
                 print(f"Error training model for {node_label}: {e}")
+                if not os.path.exists(model_path):
+                    # No previous model exists; fall back to mean
+                    print(f"No fallback model for {node_label}, using mean.")
+                    node_base_forecasts[node_label] = df_node["total_power"].mean()
+                    continue
+                # Otherwise keep the previously loaded model
 
         forecast = model.predict(n=HORIZON_LENGTH, series=ts)
         forecast_values = forecast.values().flatten()
