@@ -254,19 +254,19 @@ async def power_scoring_timeseries(payload: ScoringPayload, request: Request):
             relevant_cols = dim_relevant_cols[node_label][dim]
             if not relevant_cols:
                 continue
-            df_subset = df_node[["timestamp"] + relevant_cols]
-            # Aggregate node-wise app-device power
-            node_histories.append(df_subset.drop(columns=["timestamp"]).sum(axis=1))
+            df_subset = df_node[["timestamp"] + relevant_cols].copy()
+            # Aggregate node-wise app-device power, indexed by timestamp
+            df_subset = df_subset.set_index("timestamp")
+            df_subset["node_power"] = df_subset.sum(axis=1)
+            node_histories.append(df_subset[["node_power"]])
         if not node_histories:
             print(f"No data for App-Device: {dim}, assigning OFFSET score.")
             normalized_score = OFFSET
         else:
+            # Align by timestamp index, then average across nodes
             df_concat = pd.concat(node_histories, axis=1)
-            df_concat["timestamp"] = df_node["timestamp"]
-            df_concat["app_device_max_power"] = df_concat.drop(
-                columns=["timestamp"]
-            ).mean(axis=1)
-            df_concat = df_concat[["timestamp", "app_device_max_power"]].dropna()
+            df_concat["app_device_max_power"] = df_concat.mean(axis=1)
+            df_concat = df_concat[["app_device_max_power"]].dropna()
             app_device_max = df_concat["app_device_max_power"].max()
             estimated_score = app_device_max + cluster_base_forecast
             normalized_score = (
