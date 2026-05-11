@@ -79,7 +79,31 @@ cluster1   true           https://cluster1-control-plane:6443   True     True   
 cluster2   true           https://cluster2-control-plane:6443   True     True        3m
 ```
 
-#### 4. Deploy the Flower Addon (required for Flower framework)
+#### 4. Enable the `ManifestWorkReplicaSet` feature gate
+
+The Flower path distributes ClientApps to managed clusters via a
+`ManifestWorkReplicaSet`. The feature gate is **disabled by default** in OCM
+v1.2.x, so enable it on the hub before deploying any Flower instance:
+
+```bash
+kubectl patch clustermanager cluster-manager --type=merge -p '{
+  "spec": {
+    "workConfiguration": {
+      "featureGates": [
+        {"feature": "ManifestWorkReplicaSet", "mode": "Enable"}
+      ]
+    }
+  }
+}'
+```
+
+Verify the work controller restarted with the feature gate on:
+
+```bash
+kubectl -n open-cluster-management-hub get pods | grep work-controller
+```
+
+#### 5. Deploy the Flower Addon (required for Flower framework)
 
 The Flower addon pre-deploys SuperLink on the hub and SuperNode on managed clusters:
 
@@ -183,6 +207,12 @@ federated-learning-controller-d7df846c9-nb4wc   1/1     Running     0          3
 
 The Flower path requires the Flower addon to be installed. The controller deploys a SuperExec-ServerApp on the hub and SuperExec-ClientApp Deployments on managed clusters via ManifestWorkReplicaSet.
 
+> **Image prerequisite**: `server.image` / `client.image` must be a
+> **SuperExec-compatible Flower app** image (Flower ≥ 1.26.x, `ServerApp` and
+> `ClientApp` registered via `[tool.flwr.app.components]`). See
+> [Build Your Own Flower App Image](#build-your-own-flower-app-image) below to
+> build the reference MNIST example.
+
 ```yaml
 apiVersion: federation-ai.open-cluster-management.io/v1alpha1
 kind: FederatedLearning
@@ -191,11 +221,11 @@ metadata:
 spec:
   framework: flower
   server:
-    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     minAvailableClients: 2
     # superlink: superlink.flower-system:9091  # default, can be omitted
   client:
-    image: quay.io/open-cluster-management/flower-app:cifar10-v1.0.0
+    image: quay.io/open-cluster-management/federated-learning-application:flower-mnist-latest
     # supernode: flower-supernode.flower-addon:9094  # default, can be omitted
     placement:
       clusterSets:
@@ -259,17 +289,22 @@ flwr run --insecure --run-config 'num-server-rounds=3' \
   <superlink-connection>
 ```
 
-<details>
+<details id="build-your-own-flower-app-image">
 
 <summary><strong>Build Your Own Flower App Image</strong></summary>
 
-You can use the [Flower PyTorch App](./examples/flower/) as a reference. The app image must contain a Flower `ServerApp` and `ClientApp` that are compatible with the SuperExec architecture.
+The reference [Flower PyTorch MNIST app](./examples/flower/app-torch/) is a
+SuperExec-compatible Flower app — its `Dockerfile` uses
+`flwr/superexec:1.26.1` as the base image and registers
+`ServerApp` / `ClientApp` via `[tool.flwr.app.components]` in
+`pyproject.toml`. Dependencies are baked into the image at build time so pods
+start without re-downloading PyTorch on every restart.
 
   ```bash
   cd examples/flower
   export IMAGE_REGISTRY=<your-registry>
   export IMAGE_TAG=<your-tag>
-  export APP_NAME=cifar10
+  export APP_NAME=flower-mnist
   make build-app-image
   make push-app-image
   ```
