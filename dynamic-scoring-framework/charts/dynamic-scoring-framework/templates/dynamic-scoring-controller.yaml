@@ -392,11 +392,21 @@ spec:
           capabilities:
             drop:
             - ALL
-        volumeMounts: []
+        volumeMounts:
+        {{- with .Values.hubSetting.extraVolumeMounts }}
+{{ toYaml . | nindent 10 }}
+        {{- else }}
+          []
+        {{- end }}
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: dynamic-scoring-framework-controller
       terminationGracePeriodSeconds: 10
-      volumes: []
+      volumes:
+      {{- with .Values.hubSetting.extraVolumes }}
+{{ toYaml . | nindent 8 }}
+      {{- else }}
+        []
+      {{- end }}
