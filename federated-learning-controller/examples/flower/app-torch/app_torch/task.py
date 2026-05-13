@@ -66,13 +66,21 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int):
     return trainloader, testloader
 
 
+_centralized_loader = None
+
+
 def load_centralized_dataset():
-    """Load full MNIST test set for hub-side evaluation."""
+    """Load full MNIST test set for hub-side evaluation (cached after first call)."""
+    global _centralized_loader
+    if _centralized_loader is not None:
+        return _centralized_loader
+
     from datasets import load_dataset
 
     test_dataset = load_dataset("ylecun/mnist", split="test")
-    dataset = test_dataset.with_format("torch").with_transform(apply_transforms)
-    return DataLoader(dataset, batch_size=128)
+    dataset = test_dataset.with_transform(apply_transforms)
+    _centralized_loader = DataLoader(dataset, batch_size=128)
+    return _centralized_loader
 
 
 def train(net, trainloader, epochs, lr, device):

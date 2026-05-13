@@ -1,5 +1,7 @@
 """app-torch: A Flower / PyTorch ClientApp for MNIST."""
 
+import hashlib
+
 import torch
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
@@ -16,7 +18,10 @@ def get_partition_id(context: Context) -> int:
 
     Supports:
     1. Explicit "partition-id" (manual configuration).
-    2. Hash of "cluster-name" (auto-injected by the OCM flower-addon SuperNode).
+    2. sha256("cluster-name") (auto-injected by the OCM flower-addon
+       SuperNode). Python's built-in hash() is salted per process, so it
+       would assign the same cluster to a different partition after a pod
+       restart — sha256 keeps the mapping stable.
     """
     node_config = context.node_config
     num_partitions = int(node_config["num-partitions"])
@@ -25,7 +30,10 @@ def get_partition_id(context: Context) -> int:
         return int(node_config["partition-id"]) % num_partitions
 
     if "cluster-name" in node_config:
-        return hash(node_config["cluster-name"]) % num_partitions
+        digest = hashlib.sha256(
+            str(node_config["cluster-name"]).encode("utf-8")
+        ).digest()
+        return int.from_bytes(digest[:8], "big") % num_partitions
 
     raise ValueError("Either 'partition-id' or 'cluster-name' must be in node_config")
 
