@@ -23,6 +23,18 @@ spec:
         args:
           - "/dynamic-scoring-addon"
           - "controller"
+        volumeMounts:
+        {{- with .Values.hubSetting.extraVolumeMounts }}
+{{ toYaml . | nindent 10 }}
+        {{- else }}
+          []
+        {{- end }}
+      volumes:
+      {{- with .Values.hubSetting.extraVolumes }}
+{{ toYaml . | nindent 8 }}
+      {{- else }}
+        []
+      {{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -1,4 +1,26 @@
 hubSetting:
+  # Additional pod volumes applied to all hub controller Deployments.
+  # Example:
+  # extraVolumes:
+  #   - name: scoring-config
+  #     configMap:
+  #       name: scoring-config
+  #   - name: scoring-secret
+  #     secret:
+  #       secretName: scoring-secret
+  extraVolumes: []
+
+  # Additional volume mounts applied to all hub controller containers.
+  # Example:
+  # extraVolumeMounts:
+  #   - name: scoring-config
+  #     mountPath: /etc/dsf/config
+  #     readOnly: true
+  #   - name: scoring-secret
+  #     mountPath: /etc/dsf/secret
+  #     readOnly: true
+  extraVolumeMounts: []
+
   # Namespace where the hub components (e.g. controllers) will be deployed
   namespace: open-cluster-management
 
