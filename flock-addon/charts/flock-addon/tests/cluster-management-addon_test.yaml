@@ -1,0 +1,89 @@
+suite: ClusterManagementAddOn
+templates:
+  - cluster-management-addon.yaml
+tests:
+  - it: emits a single ClusterManagementAddOn with the addon.name
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterManagementAddOn
+      - equal:
+          path: metadata.name
+          value: flock-addon
+
+  - it: hands lifecycle to OCM addon-manager
+    asserts:
+      - equal:
+          path: metadata.annotations["addon.open-cluster-management.io/lifecycle"]
+          value: addon-manager
+
+  - it: defaults supportedConfigs to the CPU AddOnTemplate and CPU AddOnDeploymentConfig
+    asserts:
+      - equal:
+          path: spec.supportedConfigs[0].resource
+          value: addontemplates
+      - equal:
+          path: spec.supportedConfigs[0].defaultConfig.name
+          value: flock-addon
+      - equal:
+          path: spec.supportedConfigs[1].resource
+          value: addondeploymentconfigs
+      - equal:
+          path: spec.supportedConfigs[1].defaultConfig.name
+          value: flock-addon-config
+      - equal:
+          path: spec.supportedConfigs[1].defaultConfig.namespace
+          value: open-cluster-management
+
+  - it: defaults installStrategy to Manual without rendering placements
+    asserts:
+      - equal:
+          path: spec.installStrategy.type
+          value: Manual
+      - notExists:
+          path: spec.installStrategy.placements
+
+  - it: emits both placements when Placements strategy is selected with both placements enabled
+    set:
+      addon.installStrategy: Placements
+      placement.gpu.enabled: true
+      placement.all.enabled: true
+    asserts:
+      - equal:
+          path: spec.installStrategy.type
+          value: Placements
+      - lengthEqual:
+          path: spec.installStrategy.placements
+          count: 2
+      - equal:
+          path: spec.installStrategy.placements[0].name
+          value: flock-addon-gpu-placement
+      - equal:
+          path: spec.installStrategy.placements[0].configs[0].name
+          value: flock-addon-gpu
+      - equal:
+          path: spec.installStrategy.placements[0].configs[1].name
+          value: flock-addon-gpu-config
+      - equal:
+          path: spec.installStrategy.placements[1].name
+          value: flock-addon-all-placement
+      - equal:
+          path: spec.installStrategy.placements[1].configs[0].name
+          value: flock-addon
+      - equal:
+          path: spec.installStrategy.placements[1].configs[1].name
+          value: flock-addon-config
+
+  - it: only emits the GPU placement when only placement.gpu.enabled is set under Placements strategy
+    set:
+      addon.installStrategy: Placements
+      placement.gpu.enabled: true
+      placement.all.enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.installStrategy.placements
+          count: 1
+      - equal:
+          path: spec.installStrategy.placements[0].name
+          value: flock-addon-gpu-placement

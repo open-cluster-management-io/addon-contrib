@@ -1,0 +1,60 @@
+suite: chart-level fail guards
+templates:
+  - cluster-management-addon.yaml
+tests:
+  - it: rejects an unknown installStrategy at template time
+    set:
+      addon.installStrategy: bogus
+    asserts:
+      - failedTemplate:
+          errorPattern: "addon\\.installStrategy must be one of Manual\\|Placements"
+
+  - it: rejects an unknown storage.backend at template time
+    set:
+      deploymentConfig.storage.backend: bogus
+    asserts:
+      - failedTemplate:
+          errorPattern: "deploymentConfig\\.storage\\.backend must be one of s3\\|local\\|nami"
+
+  - it: rejects Placements strategy when no placement is enabled
+    set:
+      addon.installStrategy: Placements
+      placement.gpu.enabled: false
+      placement.all.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "addon\\.installStrategy=Placements requires enabling placement\\.gpu\\.enabled, placement\\.all\\.enabled, or both"
+
+  - it: accepts Placements strategy when only the GPU placement is enabled
+    set:
+      addon.installStrategy: Placements
+      placement.gpu.enabled: true
+      placement.all.enabled: false
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts Placements strategy when only the All placement is enabled
+    set:
+      addon.installStrategy: Placements
+      placement.gpu.enabled: false
+      placement.all.enabled: true
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts the s3 storage backend
+    set:
+      deploymentConfig.storage.backend: s3
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts the local storage backend
+    set:
+      deploymentConfig.storage.backend: local
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts the nami storage backend
+    set:
+      deploymentConfig.storage.backend: nami
+    asserts:
+      - notFailedTemplate: {}

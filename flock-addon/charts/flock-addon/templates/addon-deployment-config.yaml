@@ -1,0 +1,103 @@
+{{- /*
+-----------------------------------------------------------------------------
+AddOnDeploymentConfig (CPU + GPU variants)
+-----------------------------------------------------------------------------
+Two AddOnDeploymentConfig variants are rendered from a shared spec list so
+the GPU and CPU paths can never drift in any field other than USE_GPU.
+USE_GPU is the only field that legitimately differs between the variants
+because the AddOnTemplate consults it (via `runtime.gpu`) to decide whether
+to load the CUDA backend; every other variable is fleet-wide config that
+must be identical across both variants.
+
+OCM merges customizedVariables from the chart-level AddOnDeploymentConfig
+with the per-cluster ManagedClusterAddOn.spec.configs: per-cluster values
+win when both are set. We therefore intentionally render variables here
+even when they are empty strings so that the substitution placeholders in
+the AddOnTemplate (double-brace-S3_COMPAT_BUCKET-double-brace etc.) always
+resolve to a valid env value rather than being left as a literal placeholder
+in the Pod spec.
+-----------------------------------------------------------------------------
+*/ -}}
+{{- $variants := list
+    (dict "name" .Values.deploymentConfig.name    "useGpu" .Values.deploymentConfig.runtime.useGpu)
+    (dict "name" .Values.deploymentConfig.gpuName "useGpu" .Values.deploymentConfig.runtime.gpuUseGpu)
+-}}
+{{- range $index, $variant := $variants }}
+{{- if gt $index 0 }}
+---
+{{- end }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: {{ $variant.name }}
+  namespace: {{ $.Values.addon.namespace }}
+spec:
+  agentInstallNamespace: {{ $.Values.agent.namespace }}
+  customizedVariables:
+    # -------------------------------------------------------------------------
+    # Image + filesystem layout
+    # -------------------------------------------------------------------------
+    - name: FLOCK_ALLIANCE_IMAGE
+      value: {{ include "flock-addon.flockAllianceImage" $ | quote }}
+    - name: DATA_PATH
+      value: {{ $.Values.agent.dataPath | quote }}
+    - name: HOST_DATA_PATH
+      value: {{ $.Values.agent.dataVolume.hostPath | quote }}
+    # -------------------------------------------------------------------------
+    # Blockchain (hub-pushed; entrypoint enforces hub-wins-when-non-empty)
+    # -------------------------------------------------------------------------
+    - name: BLOCKCHAIN_RPC
+      value: {{ $.Values.deploymentConfig.blockchain.rpc | quote }}
+    - name: TOKEN_ADDRESS
+      value: {{ $.Values.deploymentConfig.blockchain.tokenAddress | quote }}
+    - name: TASK_ADDRESS
+      value: {{ $.Values.deploymentConfig.blockchain.taskAddress | quote }}
+    - name: STAKE
+      value: {{ $.Values.deploymentConfig.blockchain.stake | quote }}
+    # -------------------------------------------------------------------------
+    # Storage backend selection + S3-compat parameters (nami backend)
+    #
+    # SECURITY NOTE: S3_COMPAT_ACCESS_KEY and S3_COMPAT_SECRET_KEY land
+    # in this AddOnDeploymentConfig as plain customizedVariables — i.e.
+    # any hub principal with read access on `addondeploymentconfigs` in
+    # this namespace can recover them. OCM AddOnTemplate does not
+    # support `valueFrom: secretKeyRef` on customizedVariables, so a
+    # Kubernetes Secret indirection is not available on this path. The
+    # chart therefore relies on caller-side discipline: only populate
+    # these fields with task-scoped, throwaway credentials (the make
+    # target `deploy-local-chain-s3-compatible` does this automatically
+    # via `openssl rand -hex` and a `flock-task-<sha>` bucket scope).
+    # See the matching SECURITY MODEL block in values.yaml under
+    # `deploymentConfig.storage.s3Compat` for the full hardening
+    # checklist (RBAC scoping, audit logging, what NOT to paste here).
+    # -------------------------------------------------------------------------
+    - name: STORAGE_BACKEND
+      value: {{ $.Values.deploymentConfig.storage.backend | quote }}
+    - name: LOCAL_STORAGE_DIR
+      value: {{ $.Values.deploymentConfig.storage.localSharedDir | quote }}
+    - name: S3_COMPAT_ENDPOINT_URL
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.endpointUrl | quote }}
+    - name: S3_COMPAT_BUCKET
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.bucket | quote }}
+    - name: S3_COMPAT_ACCESS_KEY
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.accessKey | quote }}
+    - name: S3_COMPAT_SECRET_KEY
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.secretKey | quote }}
+    - name: S3_COMPAT_REGION
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.region | quote }}
+    - name: S3_COMPAT_ADDRESSING_STYLE
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.addressingStyle | quote }}
+    - name: S3_COMPAT_VERIFY_SSL
+      value: {{ $.Values.deploymentConfig.storage.s3Compat.verifySsl | quote }}
+    # -------------------------------------------------------------------------
+    # Runtime + training (USE_GPU is the only field that differs across variants)
+    # -------------------------------------------------------------------------
+    - name: USE_GPU
+      value: {{ $variant.useGpu | quote }}
+    - name: FLOCK_ALLIANCE_ENV_FILE
+      value: {{ $.Values.deploymentConfig.runtime.flockAllianceEnvFile | quote }}
+    - name: NO_INCENTIVE
+      value: {{ $.Values.deploymentConfig.training.noIncentive | quote }}
+    - name: NUM_PARTICIPANTS
+      value: {{ $.Values.deploymentConfig.training.numParticipants | quote }}
+{{- end }}

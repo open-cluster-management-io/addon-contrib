@@ -1,0 +1,94 @@
+suite: Placement and ManagedClusterSetBinding rendering
+templates:
+  - placement.yaml
+tests:
+  - it: emits nothing when no placement is enabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: emits the GPU placement and its ClusterSet binding when only the GPU placement is enabled
+    set:
+      placement.gpu.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        equal:
+          path: kind
+          value: ManagedClusterSetBinding
+      - documentIndex: 0
+        equal:
+          path: spec.clusterSet
+          value: default
+      - documentIndex: 1
+        equal:
+          path: kind
+          value: Placement
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: flock-addon-gpu-placement
+      - documentIndex: 1
+        equal:
+          path: spec.predicates[0].requiredClusterSelector.labelSelector.matchLabels.gpu
+          value: "true"
+      - documentIndex: 1
+        notExists:
+          path: spec.predicates[0].requiredClusterSelector.labelSelector.matchExpressions
+
+  - it: emits the All placement without GPU exclusion when only the All placement is enabled
+    set:
+      placement.all.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: flock-addon-all-placement
+      - documentIndex: 1
+        equal:
+          path: spec.clusterSets[0]
+          value: global
+      - documentIndex: 1
+        notExists:
+          path: spec.predicates
+
+  - it: excludes gpu=true from the All placement when both placements are enabled, partitioning the fleet
+    set:
+      placement.gpu.enabled: true
+      placement.all.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - documentIndex: 3
+        equal:
+          path: metadata.name
+          value: flock-addon-all-placement
+      - documentIndex: 3
+        equal:
+          path: spec.predicates[0].requiredClusterSelector.labelSelector.matchExpressions[0].key
+          value: gpu
+      - documentIndex: 3
+        equal:
+          path: spec.predicates[0].requiredClusterSelector.labelSelector.matchExpressions[0].operator
+          value: NotIn
+      - documentIndex: 3
+        equal:
+          path: spec.predicates[0].requiredClusterSelector.labelSelector.matchExpressions[0].values[0]
+          value: "true"
+
+  - it: honours custom ClusterSet names
+    set:
+      placement.gpu.enabled: true
+      placement.gpu.clusterSet: gpu-pool
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.clusterSet
+          value: gpu-pool
+      - documentIndex: 1
+        equal:
+          path: spec.clusterSets[0]
+          value: gpu-pool

@@ -5,16 +5,19 @@
   "federated-learning-controller": {
     "e2e-artifacts": ["federated-learning-controller.tar.gz"]
   },
+  "flock-addon": {
+    "e2e-artifacts": ["flock-addon.tar.gz"]
+  },
   "flower-addon": {
     "e2e-artifacts": ["flower-addon.tar.gz"]
   },
   "kueue-addon": {
     "e2e-artifacts": ["kueue-addon.tar.gz"]
   },
-  "resource-usage-collect-addon": {
-    "e2e-artifacts": ["resource-usage-collect-addon.tar.gz"]
-  },
   "open-telemetry-addon": {
     "e2e-artifacts": ["open-telemetry-addon.tar.gz"]
+  },
+  "resource-usage-collect-addon": {
+    "e2e-artifacts": ["resource-usage-collect-addon.tar.gz"]
   }
 }

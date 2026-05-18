@@ -1,0 +1,109 @@
+{{- /*
+-----------------------------------------------------------------------------
+ClusterManagementAddOn
+-----------------------------------------------------------------------------
+The hub-side declaration of the addon: identity, lifecycle owner, supported
+config CRDs (with defaults), and install strategy. OCM's addon-manager
+controller picks this up via the lifecycle annotation and reconciles per-
+managed-cluster ManagedClusterAddOn objects accordingly.
+
+Three guard clauses run before any object is rendered. They all use Helm's
+`fail` builtin so misconfiguration aborts at template time with a clear
+message instead of producing a manifest the API server will later reject
+with a less actionable error.
+
+  1. Placements strategy without any enabled Placement renders an OCM
+     ClusterManagementAddOn whose installStrategy.placements list is empty,
+     which OCM accepts but means "install nowhere" — almost certainly not
+     what the operator intended. Catching it at template time keeps
+     `make enable-addon` from being silently no-op.
+  2. installStrategy is open enum in OCM today; restricting it here keeps
+     the chart's mental model small (Manual or Placements) and prevents
+     typos like "Placement" (singular) from rendering an addon that OCM
+     simply ignores.
+  3. storage.backend is consumed only by the entrypoint script, so an
+     invalid value would currently fail at Pod start with a generic
+     message. Validating here gives the operator immediate feedback.
+-----------------------------------------------------------------------------
+*/ -}}
+{{- if and (eq .Values.addon.installStrategy "Placements") (not (or .Values.placement.gpu.enabled .Values.placement.all.enabled)) }}
+{{- fail "addon.installStrategy=Placements requires enabling placement.gpu.enabled, placement.all.enabled, or both" }}
+{{- end }}
+{{- if not (has .Values.addon.installStrategy (list "Manual" "Placements")) }}
+{{- fail (printf "addon.installStrategy must be one of Manual|Placements, got %q" .Values.addon.installStrategy) }}
+{{- end }}
+{{- if not (has .Values.deploymentConfig.storage.backend (list "s3" "local" "nami")) }}
+{{- fail (printf "deploymentConfig.storage.backend must be one of s3|local|nami, got %q" .Values.deploymentConfig.storage.backend) }}
+{{- end }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  name: {{ .Values.addon.name }}
+  annotations:
+    # Hand lifecycle to OCM's addon-manager controller. Without this
+    # annotation the addon-manager would refuse to act on the resource
+    # and operators would have to install agents manually on each
+    # cluster.
+    addon.open-cluster-management.io/lifecycle: addon-manager
+spec:
+  addOnMeta:
+    displayName: {{ .Values.addon.displayName }}
+    description: {{ .Values.addon.description | quote }}
+  # ---------------------------------------------------------------------------
+  # Supported configs / defaults
+  #
+  # Declares the CRDs this addon accepts AND the defaults a
+  # ManagedClusterAddOn inherits when it does not override them itself. The
+  # CPU AddOnTemplate and CPU AddOnDeploymentConfig are listed as defaults
+  # so `make enable-addon` against an unlabelled cluster picks up the CPU
+  # variant automatically; clusters labelled gpu=true override both via the
+  # per-cluster ManagedClusterAddOn.spec.configs that the Makefile produces.
+  # ---------------------------------------------------------------------------
+  supportedConfigs:
+    - group: addon.open-cluster-management.io
+      resource: addontemplates
+      defaultConfig:
+        name: {{ .Values.addon.name }}
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
+      defaultConfig:
+        name: {{ .Values.deploymentConfig.name }}
+        namespace: {{ .Values.addon.namespace }}
+  # ---------------------------------------------------------------------------
+  # Install strategy
+  # ---------------------------------------------------------------------------
+  installStrategy:
+    type: {{ .Values.addon.installStrategy }}
+    {{- if eq .Values.addon.installStrategy "Placements" }}
+    # Each enabled placement is rendered independently so operators can
+    # target only the GPU placement (e.g. while bringing up a GPU pool)
+    # without also enabling the catch-all placement, or vice versa. The
+    # configs blocks override the supportedConfigs defaults above for
+    # whichever clusters fall into that placement; the GPU placement
+    # therefore points at the GPU template + GPU AddOnDeploymentConfig.
+    placements:
+      {{- if .Values.placement.gpu.enabled }}
+      - name: {{ .Values.placement.gpu.name }}
+        namespace: {{ .Values.addon.namespace }}
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addontemplates
+            name: {{ include "flock-addon.gpuTemplateName" . }}
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: {{ .Values.deploymentConfig.gpuName }}
+            namespace: {{ .Values.addon.namespace }}
+      {{- end }}
+      {{- if .Values.placement.all.enabled }}
+      - name: {{ .Values.placement.all.name }}
+        namespace: {{ .Values.addon.namespace }}
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addontemplates
+            name: {{ include "flock-addon.templateName" . }}
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: {{ .Values.deploymentConfig.name }}
+            namespace: {{ .Values.addon.namespace }}
+      {{- end }}
+    {{- end }}

@@ -1,0 +1,196 @@
+suite: AddOnDeploymentConfig variants
+templates:
+  - addon-deployment-config.yaml
+tests:
+  - it: emits exactly two AddOnDeploymentConfig documents (CPU + GPU)
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        equal:
+          path: kind
+          value: AddOnDeploymentConfig
+      - documentIndex: 1
+        equal:
+          path: kind
+          value: AddOnDeploymentConfig
+
+  - it: names the variants with the expected naming convention
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: flock-addon-config
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: flock-addon-gpu-config
+
+  - it: pins agentInstallNamespace to the agent namespace on both variants
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentInstallNamespace
+          value: flock-system
+      - documentIndex: 1
+        equal:
+          path: spec.agentInstallNamespace
+          value: flock-system
+
+  - it: differs only in USE_GPU between CPU and GPU variants
+    asserts:
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: USE_GPU
+            value: "false"
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: USE_GPU
+            value: "true"
+
+  - it: forwards the storage backend to both variants
+    set:
+      deploymentConfig.storage.backend: nami
+    asserts:
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: STORAGE_BACKEND
+            value: nami
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: STORAGE_BACKEND
+            value: nami
+
+  - it: forwards every blockchain field to both variants verbatim
+    set:
+      deploymentConfig.blockchain.rpc: http://hub:8545
+      deploymentConfig.blockchain.tokenAddress: "0xTOKEN"
+      deploymentConfig.blockchain.taskAddress: "0xTASK"
+      deploymentConfig.blockchain.stake: "1"
+    asserts:
+      # CPU variant
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: BLOCKCHAIN_RPC
+            value: http://hub:8545
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: TOKEN_ADDRESS
+            value: "0xTOKEN"
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: TASK_ADDRESS
+            value: "0xTASK"
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: STAKE
+            value: "1"
+      # GPU variant — must carry the same blockchain config verbatim;
+      # without these mirrored asserts a regression that drops blockchain
+      # fields from only the GPU variant would slip through CI.
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: BLOCKCHAIN_RPC
+            value: http://hub:8545
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: TOKEN_ADDRESS
+            value: "0xTOKEN"
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: TASK_ADDRESS
+            value: "0xTASK"
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: STAKE
+            value: "1"
+
+  - it: forwards every nami-only S3 field when configured
+    set:
+      deploymentConfig.storage.backend: nami
+      deploymentConfig.storage.s3Compat.endpointUrl: http://minio:9000
+      deploymentConfig.storage.s3Compat.bucket: flock-dev
+      deploymentConfig.storage.s3Compat.accessKey: AK
+      deploymentConfig.storage.s3Compat.secretKey: SK
+      deploymentConfig.storage.s3Compat.region: eu-west-1
+      deploymentConfig.storage.s3Compat.addressingStyle: virtual
+      deploymentConfig.storage.s3Compat.verifySsl: "true"
+    asserts:
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_ENDPOINT_URL
+            value: http://minio:9000
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_BUCKET
+            value: flock-dev
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_ACCESS_KEY
+            value: AK
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_SECRET_KEY
+            value: SK
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_REGION
+            value: eu-west-1
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_ADDRESSING_STYLE
+            value: virtual
+      - documentIndex: 1
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: S3_COMPAT_VERIFY_SSL
+            value: "true"
+
+  - it: renders the FLOCK_ALLIANCE_IMAGE as repository:tag from values.image
+    set:
+      image.repository: ghcr.io/example/fl
+      image.tag: v1.2.3
+    asserts:
+      - documentIndex: 0
+        contains:
+          path: spec.customizedVariables
+          content:
+            name: FLOCK_ALLIANCE_IMAGE
+            value: ghcr.io/example/fl:v1.2.3
