@@ -1,0 +1,262 @@
+suite: AddOnTemplate variants
+templates:
+  - addon-template.yaml
+tests:
+  - it: emits exactly two AddOnTemplate documents (CPU + GPU)
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 0
+        equal:
+          path: kind
+          value: AddOnTemplate
+      - documentIndex: 0
+        equal:
+          path: metadata.name
+          value: flock-addon
+      - documentIndex: 1
+        equal:
+          path: metadata.name
+          value: flock-addon-gpu
+
+  - it: only the GPU variant requests nvidia.com/gpu
+    asserts:
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.limits["nvidia.com/gpu"]
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
+          value: 1
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.limits["nvidia.com/gpu"]
+          value: 1
+
+  - it: applies a custom GPU count to both requests and limits on the GPU variant
+    set:
+      agent.gpuResource.count: 4
+    asserts:
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.requests["nvidia.com/gpu"]
+          value: 4
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].resources.limits["nvidia.com/gpu"]
+          value: 4
+
+  - it: tags the variant on both Deployment and Pod template labels
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].metadata.labels["app.kubernetes.io/variant"]
+          value: cpu
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.metadata.labels["app.kubernetes.io/variant"]
+          value: cpu
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].metadata.labels["app.kubernetes.io/variant"]
+          value: gpu
+      - documentIndex: 1
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.metadata.labels["app.kubernetes.io/variant"]
+          value: gpu
+
+  - it: pins Recreate strategy and a 30s grace period to protect /data state on rollouts
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.strategy.type
+          value: Recreate
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.terminationGracePeriodSeconds
+          value: 30
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.revisionHistoryLimit
+          value: 3
+
+  - it: passes the OCM image placeholder to the container image field
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].image
+          value: "{{FLOCK_ALLIANCE_IMAGE}}"
+
+  - it: uses hostPath by default with DirectoryOrCreate so the kubelet creates the path on first run
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].hostPath.path
+          value: "{{HOST_DATA_PATH}}"
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].hostPath.type
+          value: DirectoryOrCreate
+
+  - it: prefers an existingClaim over hostPath when both are configured
+    set:
+      agent.dataVolume.existingClaim: my-pvc
+      agent.dataVolume.hostPath: /data/flock-client
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: my-pvc
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].hostPath
+
+  - it: falls through to emptyDir when neither existingClaim nor hostPath is set
+    set:
+      agent.dataVolume.existingClaim: ""
+      agent.dataVolume.hostPath: ""
+    asserts:
+      - documentIndex: 0
+        exists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].emptyDir
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].hostPath
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.volumes[0].persistentVolumeClaim
+
+  - it: omits imagePullSecrets entirely when the values list is empty
+    asserts:
+      - documentIndex: 0
+        notExists:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.imagePullSecrets
+
+  - it: renders imagePullSecrets when configured
+    set:
+      image.pullSecrets:
+        - my-ghcr-secret
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.imagePullSecrets[0].name
+          value: my-ghcr-secret
+
+  - it: provisions the agent Namespace and ServiceAccount on the managed cluster
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[0].kind
+          value: Namespace
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[0].metadata.name
+          value: flock-system
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[1].kind
+          value: ServiceAccount
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[1].metadata.name
+          value: flock-agent
+
+  - it: declares the OCM customizedVariable env list with placeholder values
+    asserts:
+      - documentIndex: 0
+        contains:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].env
+          content:
+            name: STORAGE_BACKEND
+            value: "{{STORAGE_BACKEND}}"
+      - documentIndex: 0
+        contains:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].env
+          content:
+            name: USE_GPU
+            value: "{{USE_GPU}}"
+      - documentIndex: 0
+        contains:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].env
+          content:
+            name: FLOCK_ALLIANCE_ENV_FILE
+            value: "{{FLOCK_ALLIANCE_ENV_FILE}}"
+
+  - it: uses sh -ec to run the embedded entrypoint script
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[0]
+          value: /bin/sh
+      - documentIndex: 0
+        equal:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[1]
+          value: -ec
+
+  - it: embeds the OCM hub-vs-env precedence machinery in the entrypoint
+    asserts:
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "ocm_wins TASK_ADDRESS"
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "ocm_wins BLOCKCHAIN_RPC"
+      # DATA_PATH must appear in the OCM snapshot/reassertion list so a
+      # stale node `.env` cannot retarget the training inputs path away
+      # from the hub-managed value. Asserting both the snapshot capture
+      # and the ocm_wins call closes the loop end-to-end.
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "OCM_DATA_PATH=\"\\$\\{DATA_PATH:-\\}\""
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "ocm_wins DATA_PATH"
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "STORAGE_BACKEND is empty"
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "exec \"\\$@\""
+      # Regression gate: the exec banner must NOT print the raw argv
+      # (`$*`/`$@` of the python invocation), because that argv contains
+      # `--override blockchain.rpc=...`, `blockchain.task_address=...`,
+      # `blockchain.token_address=...` and — when future overrides forward
+      # storage credentials — `--override storage.s3.access_key=...` etc.
+      # The required idiom is the redacted preview loop that emits
+      # `--override KEY=<set>` for every override token (see the script
+      # block right above `exec "$@"`).
+      - documentIndex: 0
+        notMatchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "log \"exec: \\$\\*\""
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "redacted=\"\\$redacted --override \\$\\{key\\}=<set>\""
+      # Regression gate: the entrypoint MUST use the presence_marker()
+      # helper (not the buggy `${VAR:+<set>}${VAR:-<empty>}` concatenation)
+      # for sensitive identifiers in both the startup "vars:" line and
+      # the post-precedence "effective:" line. The buggy idiom expands
+      # to `<set>VALUE` when VAR is non-empty, which leaks the value
+      # we intended to redact. Pin the helper definition AND its use.
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "presence_marker\\(\\) \\{"
+      - documentIndex: 0
+        matchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "BLOCKCHAIN_RPC=\\$\\(presence_marker \"\\$\\{BLOCKCHAIN_RPC:-\\}\"\\)"
+      - documentIndex: 0
+        notMatchRegex:
+          path: spec.agentSpec.workload.manifests[2].spec.template.spec.containers[0].command[2]
+          pattern: "BLOCKCHAIN_RPC=\\$\\{BLOCKCHAIN_RPC:\\+<set>\\}\\$\\{BLOCKCHAIN_RPC:-<empty>\\}"

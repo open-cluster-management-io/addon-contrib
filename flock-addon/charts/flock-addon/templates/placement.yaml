@@ -1,0 +1,86 @@
+{{- /*
+-----------------------------------------------------------------------------
+Placement + ManagedClusterSetBinding
+-----------------------------------------------------------------------------
+Each enabled Placement is paired with a ManagedClusterSetBinding in the
+same namespace because OCM Placements can only select clusters from
+ClusterSets that are bound to the Placement's namespace. Without the
+binding the Placement is technically valid but always returns zero
+decisions, which silently breaks the Placements installStrategy. Rendering
+both objects together makes the chart self-contained: operators do not
+need to remember to create the binding by hand on the hub.
+-----------------------------------------------------------------------------
+*/ -}}
+
+{{- /*
+-----------------------------------------------------------------------------
+GPU placement (selects gpu=true)
+-----------------------------------------------------------------------------
+*/ -}}
+{{- if .Values.placement.gpu.enabled }}
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: {{ .Values.placement.gpu.clusterSet }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  clusterSet: {{ .Values.placement.gpu.clusterSet }}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: {{ .Values.placement.gpu.name }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  clusterSets:
+    - {{ .Values.placement.gpu.clusterSet }}
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            gpu: "true"
+{{- end }}
+
+{{- /*
+-----------------------------------------------------------------------------
+All-clusters placement (excludes gpu=true when GPU placement is also enabled)
+-----------------------------------------------------------------------------
+*/ -}}
+{{- if .Values.placement.all.enabled }}
+{{- if .Values.placement.gpu.enabled }}
+---
+{{- end }}
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: {{ .Values.placement.all.clusterSet }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  clusterSet: {{ .Values.placement.all.clusterSet }}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: {{ .Values.placement.all.name }}
+  namespace: {{ .Values.addon.namespace }}
+spec:
+  clusterSets:
+    - {{ .Values.placement.all.clusterSet }}
+  {{- if .Values.placement.gpu.enabled }}
+  # When the GPU placement is also enabled, exclude gpu=true clusters from
+  # this placement so the fleet partitions cleanly: each cluster is bound
+  # to exactly one placement and therefore receives exactly one
+  # AddOnDeploymentConfig variant. Without this NotIn selector, gpu=true
+  # clusters would match BOTH placements and OCM would arbitrarily pick
+  # one of the two AddOnTemplate references — usually causing the GPU
+  # variant to be replaced by the CPU variant on the next reconcile.
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: gpu
+              operator: NotIn
+              values:
+                - "true"
+  {{- end }}
+{{- end }}

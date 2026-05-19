@@ -20,6 +20,7 @@ This repository contains the following OCM addons:
 - **device-addon**: Enables device management functionality within the OCM ecosystem
 - **dynamic-scoring-framework**: A framework for distributed evaluation across multiclusters and centralized aggregation
 - **federated-learning-controller**: Implements federated learning capabilities across distributed clusters
+- **flock-addon**: Deploys FLockAlliance direct client workloads to managed clusters via OCM
 - **fluid-addon**: Integrates Fluid for data orchestration and management in multicluster environments
 - **hellospoke-addon**: A simple example addon demonstrating basic OCM addon development patterns
 - **kueue-addon**: Integrates Kueue for advanced multicluster batch job scheduling and queue management
@@ -33,12 +34,12 @@ Each addon directory contains its own README with specific installation and usag
 To onboard a new addon-contrib project:
 
 1. If not already discussed with maintainers, open an issue to propose your idea.
-1. Once acknowledged, create a folder named after your project and add your code/docs.
-1. Add an `OWNERS` file listing the new project's maintainers.
-1. **Register your project** in `.github/repositories.json` (see [Repository Registration](#repository-registration) below).
-1. **Ensure CI/CD compliance** by implementing required structure and targets (see [GitHub Actions Requirements](#github-actions-requirements) below).
-1. Create a PR with a brief project overview and confirm all requirements are met.
-1. An OCM maintainer will review and merge the PR.
+2. Once acknowledged, create a folder named after your project and add your code/docs.
+3. Add an `OWNERS` file listing the new project's maintainers.
+4. **Register your project** in `.github/repositories.json` (see [Repository Registration](#repository-registration) below).
+5. **Ensure CI/CD compliance** by implementing required structure and targets (see [GitHub Actions Requirements](#github-actions-requirements) below).
+6. Create a PR with a brief project overview and confirm all requirements are met.
+7. An OCM maintainer will review and merge the PR.
 
 ### GitHub Actions Requirements
 
@@ -50,18 +51,20 @@ Refer to the [Test](./.github/workflows/test.yml) and [E2E](./.github/workflows/
 
 All projects **must** define the following `make` targets in their `Makefile`:
 
-| Target | Description | Can be Stub? |
-|--------|-------------|--------------|
-| `verify` | Code verification (linting, formatting) | No - should run actual checks |
-| `vendor` | Update Go module dependencies | No - if Go project |
-| `build` | Build the application binary | No - if Go project |
-| `test-unit` | Run unit tests | No - should run actual tests |
-| `test-integration` | Run integration tests | **Yes** - can return true if not implemented |
-| `test-e2e` | Run end-to-end tests | **Yes** - can return true if not implemented |
-| `test-chart` | Test Helm chart installation | **Yes** - can return true if no chart |
-| `image` | Build container image | **Yes** - only if Dockerfile exists |
-| `image-push` | Push container image to registry | **Yes** - only if Dockerfile exists |
-| `image-manifest` | Create multi-arch image manifest | **Yes** - only if Dockerfile exists |
+
+| Target             | Description                             | Can be Stub?                                 |
+| ------------------ | --------------------------------------- | -------------------------------------------- |
+| `verify`           | Code verification (linting, formatting) | No - should run actual checks                |
+| `vendor`           | Update Go module dependencies           | No - if Go project                           |
+| `build`            | Build the application binary            | No - if Go project                           |
+| `test-unit`        | Run unit tests                          | No - should run actual tests                 |
+| `test-integration` | Run integration tests                   | **Yes** - can return true if not implemented |
+| `test-e2e`         | Run end-to-end tests                    | **Yes** - can return true if not implemented |
+| `test-chart`       | Test Helm chart installation            | **Yes** - can return true if no chart        |
+| `image`            | Build container image                   | **Yes** - only if Dockerfile exists          |
+| `image-push`       | Push container image to registry        | **Yes** - only if Dockerfile exists          |
+| `image-manifest`   | Create multi-arch image manifest        | **Yes** - only if Dockerfile exists          |
+
 
 #### Dockerfiles (Optional)
 
@@ -112,3 +115,4 @@ addon-contrib operates under the governance structure of the Open Cluster Manage
 - **Maintainership**: Each addon has its own maintainers listed in the respective OWNERS files, while overall repository governance follows OCM standards
 - **Community Guidelines**: All contributions must adhere to the OCM Code of Conduct and contribution guidelines
 - **Decision Making**: Technical decisions follow the same consensus-based approach used across the OCM ecosystem
+

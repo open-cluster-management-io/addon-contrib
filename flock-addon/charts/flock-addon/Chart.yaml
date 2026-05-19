@@ -1,0 +1,22 @@
+apiVersion: v2
+name: flock-addon
+description: FLockAlliance direct-client addon for Open Cluster Management
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.24.0-0"
+keywords:
+  - federated-learning
+  - flock
+  - flockalliance
+  - blockchain
+  - ocm
+  - open-cluster-management
+  - machine-learning
+home: https://github.com/FLock-io
+sources:
+  - https://github.com/FLock-io/FL-Alliance-Client
+  - https://github.com/open-cluster-management-io/addon-contrib/tree/main/flock-addon
+maintainers:
+  - name: flock-io
+    url: https://github.com/FLock-io

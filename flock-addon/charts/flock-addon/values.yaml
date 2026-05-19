@@ -1,0 +1,317 @@
+# -----------------------------------------------------------------------------
+# flock-addon Helm values
+#
+# Top-level groups:
+#
+#   image            - registry coordinates and pull policy for FLockAlliance
+#   agent            - per-managed-cluster Pod shape (namespace, volume,
+#                      resources, optional GPU request)
+#   addon            - hub-side identity of the ClusterManagementAddOn and the
+#                      install strategy operators choose between
+#   deploymentConfig - hub-pushed runtime configuration for FLockAlliance
+#                      (chain, training, runtime, storage)
+#   placement        - optional OCM Placement + ManagedClusterSetBinding
+#                      rendered when installStrategy=Placements
+#
+# Authority rule the entrypoint enforces: hub-pushed values win when
+# non-empty; empty hub values fall back to the per-node `.env` file. Keep
+# secrets (PRIVATE_KEY, HF_TOKEN) out of these values; they belong only on
+# the managed-cluster filesystem.
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# image
+# -----------------------------------------------------------------------------
+image:
+  repository: ghcr.io/flock-io/fl-alliance-client
+  # Prefer an immutable tag (release tag or short git SHA) outside development.
+  # `latest` works for local kind clusters but defeats Kubernetes' ability to
+  # detect that the image actually changed across rollouts, which means
+  # `make update-task`-style upgrades may not pick up a new binary.
+  tag: "latest"
+  # Always pull because callers commonly retag the same `latest` reference
+  # while iterating; switch to IfNotPresent for production with immutable tags
+  # to skip the registry round-trip on every Pod restart.
+  pullPolicy: Always
+  # Names of pre-created image pull Secrets in the agent namespace. Helm
+  # rejects an empty entry inside this list (it would render an invalid
+  # `imagePullSecrets: [{name: ""}]`), so leave it `[]` for public images
+  # and only populate when pulling from a private registry.
+  pullSecrets: []
+
+# -----------------------------------------------------------------------------
+# agent
+# -----------------------------------------------------------------------------
+agent:
+  # Where the AddOnTemplate-rendered Namespace, ServiceAccount and Deployment
+  # land on each managed cluster. Must match `spec.agentInstallNamespace` on
+  # both AddOnDeploymentConfig variants below — OCM's addon-manager uses that
+  # field to look up the namespace, while the AddOnTemplate writes the
+  # objects directly using this value.
+  namespace: flock-system
+  replicas: 1
+  serviceAccountName: flock-agent
+  # Mount path of the shared-data volume inside the FLockAlliance container.
+  # `flockAllianceEnvFile` MUST resolve underneath this path or the entrypoint
+  # will not see the per-node `.env` file (PRIVATE_KEY, HF_TOKEN, ...).
+  dataPath: /data
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # ---------------------------------------------------------------------------
+  # GPU resource (GPU AddOnTemplate variant only)
+  # ---------------------------------------------------------------------------
+  gpuResource:
+    # Number of nvidia.com/gpu units the GPU AddOnTemplate variant requests
+    # AND limits. Setting both to the same value is required by the device-
+    # plugin: nvidia.com/gpu is a non-overcommittable extended resource, so a
+    # request != limit would be rejected by the API server.
+    count: 1
+
+  # ---------------------------------------------------------------------------
+  # Data volume backing /data
+  #
+  # Only one of the three paths is taken, evaluated in this precedence order:
+  #   1. existingClaim — bind a PVC the cluster admin pre-created (preferred
+  #      in any environment with dynamic storage; survives Pod restarts and
+  #      respects PV capacity/QoS limits).
+  #   2. hostPath — absolute path on the node. Use ONLY when no PV is
+  #      available, e.g. single-node dev clusters. Do NOT use `~`: the
+  #      kubelet does not expand it and the Pod will fail with "host path
+  #      not found". The hostPath type is DirectoryOrCreate so the kubelet
+  #      will create the directory on first run.
+  #   3. emptyDir — ephemeral scratch directory destroyed on Pod restart.
+  #      Selected when both options above are empty. Use only for short
+  #      smoke tests because every restart loses the per-node `.env`.
+  # ---------------------------------------------------------------------------
+  dataVolume:
+    existingClaim: ""
+    hostPath: "/data/flock-client"
+
+  # ---------------------------------------------------------------------------
+  # Container resources
+  #
+  # Defaults are sized for FLock's reference small-model workloads so the
+  # Pod stays schedulable on `kind`/`k3d`/single-node dev clusters out of
+  # the box. Real LLM training (7B+ LoRA, MLX fine-tune, anything with a
+  # multi-GB tokenizer warm-up) blows past 2Gi instantly and the kubelet
+  # OOM-kills the container with exit 137 — bump these before running such
+  # tasks. The Makefile exposes MEMORY_REQUEST/MEMORY_LIMIT/CPU_REQUEST/
+  # CPU_LIMIT for per-deploy overrides; the values below are the fallback.
+  #
+  # Sizing reference (host RAM only — VRAM is governed by the GPU variant):
+  #   7B  LoRA  on GPU : requests {cpu: 2,  memory: 8Gi}  limits {cpu: 4,  memory: 24Gi}
+  #   13B LoRA  on GPU : requests {cpu: 2,  memory: 16Gi} limits {cpu: 4,  memory: 48Gi}
+  #   7B  MLX   on CPU : requests {cpu: 4,  memory: 24Gi} limits {cpu: 16, memory: 64Gi}
+  # ---------------------------------------------------------------------------
+  resources:
+    flockAlliance:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+# -----------------------------------------------------------------------------
+# addon
+# -----------------------------------------------------------------------------
+addon:
+  name: flock-addon
+  namespace: open-cluster-management
+  displayName: FLock Addon
+  description: |
+    FLock addon deploys FLockAlliance as a direct client workload on managed
+    clusters. FLockAlliance handles blockchain/protocol orchestration and
+    local model execution; training runs inside the same container process
+    via FLocKit, so no separate FLocKit addon workload is required.
+  # Manual: no automatic rollout — operators run `make enable-addon
+  # CLUSTER=...` per cluster. Use this when the operator wants to opt
+  # individual clusters in (most production setups).
+  # Placements: the OCM addon-manager installs the addon on every cluster
+  # matched by the referenced Placement(s); requires at least one of
+  # placement.gpu / placement.all to be enabled, otherwise the chart emits
+  # a `helm template` error rather than producing a Placement-less manifest.
+  installStrategy: Manual
+
+# -----------------------------------------------------------------------------
+# deploymentConfig
+#
+# Authority rule: hub values win when non-empty; empty hub values fall back
+# to whatever the per-node `.env` file provides. This split lets operators
+# centrally pin shared chain config (token/task addresses on testnet, RPC +
+# addresses on hub-managed local-chain) while leaving per-node secrets
+# (PRIVATE_KEY, HF_TOKEN) on each node.
+# -----------------------------------------------------------------------------
+deploymentConfig:
+  # Two AddOnDeploymentConfig objects are rendered with these names. They
+  # exist so the GPU variant can carry a different USE_GPU value while
+  # sharing every other customizedVariable with the CPU variant. The names
+  # are also referenced by `make enable-addon`'s GPU/CPU dispatcher, so
+  # changing them requires a matching change there.
+  name: flock-addon-config
+  gpuName: flock-addon-gpu-config
+
+  # ---------------------------------------------------------------------------
+  # Blockchain
+  # ---------------------------------------------------------------------------
+  blockchain:
+    # Empty in testnet mode (each node's `.env` provides BLOCKCHAIN_RPC).
+    # Set on the hub for hub-managed chain modes; the entrypoint will
+    # override any stale value the node's `.env` still has.
+    rpc: ""
+    # Token contract address for the FlockToken ERC20 used in incentives.
+    # Empty -> read from node `.env`. Required at runtime; the entrypoint
+    # logs a warning when both hub and `.env` leave it empty.
+    tokenAddress: ""
+    # Task contract address for the on-chain coordinator the FLockAlliance
+    # client polls. Empty -> read from node `.env`. Hub-set values are
+    # what `make update-task` rotates.
+    taskAddress: ""
+    # Stake amount (string for compatibility with FLockAlliance YAML
+    # overrides). "0" means "no stake required"; useful for unfunded
+    # local-chain runs paired with training.noIncentive=true below.
+    stake: "0"
+
+  # ---------------------------------------------------------------------------
+  # Training
+  # ---------------------------------------------------------------------------
+  training:
+    # "true" disables on-chain incentive submission so unfunded signers can
+    # complete a local-chain smoke test without reverting on `submitScore`.
+    # Set "false" for testnet / production.
+    noIncentive: "false"
+    # Number of participants the local-chain coordinator waits for before
+    # advancing each round. Used ONLY by the `local` storage backend (where
+    # FLockAlliance plays both client and coordinator). Both `s3` and `nami`
+    # backends ignore this and use the on-chain task contract's value.
+    numParticipants: "1"
+
+  # ---------------------------------------------------------------------------
+  # Runtime
+  # ---------------------------------------------------------------------------
+  runtime:
+    # USE_GPU value injected into the CPU AddOnDeploymentConfig. FLockAlliance
+    # reads this as `runtime.gpu` and uses it to decide whether to load the
+    # CUDA backend; setting "true" without a real nvidia.com/gpu request will
+    # fail at training time, so keep it "false" here and rely on the GPU
+    # variant below for GPU clusters.
+    useGpu: "false"
+    # USE_GPU value injected into the GPU AddOnDeploymentConfig. Always
+    # "true" — the GPU variant is the only path that requests nvidia.com/gpu.
+    gpuUseGpu: "true"
+    # Absolute path (inside the container) of the `.env` file that supplies
+    # per-node secrets (PRIVATE_KEY, HF_TOKEN, optionally BLOCKCHAIN_RPC for
+    # testnet mode). The path MUST resolve under agent.dataPath because the
+    # only volume mounted in the Pod is the shared-data volume; placing the
+    # file outside that mount means the entrypoint will log "env file not
+    # found" and the FLockAlliance signer will be uninitialised.
+    flockAllianceEnvFile: "/data/.env"
+
+  # ---------------------------------------------------------------------------
+  # Storage
+  #
+  # FLockAlliance supports three model/storage workflows:
+  #   s3    - the original signer-authenticated S3 path used by FLock's
+  #           public testnet. The signer derives request signatures from
+  #           PRIVATE_KEY in the node `.env`; no extra credentials needed.
+  #   local - shared-directory backend for tests; clients exchange weights
+  #           through deploymentConfig.storage.localSharedDir mounted into
+  #           /data on every Pod. Selected automatically by the
+  #           deploy-local-chain-s3 flow when it omits S3 credentials.
+  #   nami  - direct S3-compatible backend (MinIO, Cloudflare R2, ...).
+  #           Used by deploy-local-chain-s3-compatible to point clients at
+  #           the hub-side MinIO container; the *Compat values below are
+  #           required in this mode.
+  #
+  # The chart guards against typos: the cluster-management-addon template
+  # `fail`s if backend is anything other than s3|local|nami.
+  # ---------------------------------------------------------------------------
+  storage:
+    backend: "s3"
+    localSharedDir: "/data/shared"
+    s3Compat:
+      # endpointUrl, bucket, accessKey and secretKey are required when
+      # backend=nami; the hub typically points all managed clusters at a
+      # single MinIO instance reachable via the hub's IP/hostname.
+      #
+      # ## SECURITY MODEL — read before populating accessKey/secretKey
+      #
+      # Both `accessKey` and `secretKey` are forwarded verbatim into the
+      # generated AddOnDeploymentConfig.spec.customizedVariables (see
+      # `templates/addon-deployment-config.yaml`). That object is a plain
+      # cluster-scoped CR: any hub principal with `get`/`list` on
+      # `addondeploymentconfigs.addon.open-cluster-management.io` in the
+      # `open-cluster-management` namespace can read the values back.
+      # There is no Kubernetes Secret indirection on this path because
+      # OCM AddOnTemplate `customizedVariables` is a key/value mechanism
+      # and does not support `valueFrom: secretKeyRef`.
+      #
+      # The threat model the chart was designed for:
+      #
+      #   * Use the make recipe `deploy-local-chain-s3-compatible`,
+      #     which generates `accessKey`/`secretKey` per task with
+      #     `openssl rand -hex` and scopes them to a `flock-task-<sha>`
+      #     bucket. Credentials live for one training task and are
+      #     destroyed by `make undeploy-local-chain`.
+      #
+      # What you should NEVER do here:
+      #
+      #   * Paste long-lived signer-S3 credentials, AWS access keys,
+      #     Cloudflare R2 tokens, or anything you would normally store
+      #     in a Kubernetes Secret. Those belong in a Secret on the
+      #     managed cluster + a custom env layer, not in a chart value.
+      #
+      # Recommended hardening on the hub:
+      #
+      #   * Restrict `get`/`list`/`watch` on `addondeploymentconfigs`
+      #     in `open-cluster-management` to the OCM addon-manager
+      #     ServiceAccount and a small set of operator humans.
+      #   * Enable Kubernetes audit logging for that namespace so
+      #     credential reads are observable.
+      endpointUrl: ""
+      bucket: ""
+      accessKey: ""
+      secretKey: ""
+      # FLockAlliance signs S3 requests using the SigV4 algorithm even for
+      # MinIO; region must be set even when the backing store ignores it.
+      # us-east-1 is the historical SigV4 default and works against every
+      # S3-compatible implementation we have tested.
+      region: "us-east-1"
+      # MinIO and most local S3 deployments only support path-style URLs
+      # (host/bucket/key) because they have no DNS for virtual-host style
+      # (bucket.host/key). Set "virtual" for AWS S3 proper.
+      addressingStyle: "path"
+      # "false" because the MinIO container above serves plain HTTP; flip
+      # to "true" against any S3 endpoint with a valid TLS certificate.
+      verifySsl: "false"
+
+# -----------------------------------------------------------------------------
+# placement
+#
+# Rendered only when addon.installStrategy=Placements AND at least one
+# placement.* block is enabled. The two placements partition the fleet so a
+# cluster is bound to exactly one of them: `gpu` selects clusters labelled
+# gpu=true, and `all` selects everything else in its clusterSet. Each enabled
+# placement is paired with a ManagedClusterSetBinding in the same template
+# so the Placement can actually pick members from its clusterSet without
+# extra manual setup on the hub.
+# -----------------------------------------------------------------------------
+placement:
+  gpu:
+    enabled: false
+    name: flock-addon-gpu-placement
+    # Defaults to the OCM-shipped `default` ClusterSet, which contains every
+    # cluster not explicitly assigned elsewhere. Override per environment.
+    clusterSet: default
+
+  all:
+    enabled: false
+    name: flock-addon-all-placement
+    # `global` is the OCM well-known ClusterSet that contains every managed
+    # cluster regardless of other ClusterSet membership; it is the right
+    # default for an "install everywhere" placement. The matchExpressions
+    # in placement.yaml exclude gpu=true from this set when both placements
+    # are enabled, preserving the partition.
+    clusterSet: global

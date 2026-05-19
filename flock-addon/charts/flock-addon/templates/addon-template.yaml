@@ -1,0 +1,591 @@
+{{- /*
+-----------------------------------------------------------------------------
+AddOnTemplate (CPU + GPU variants)
+-----------------------------------------------------------------------------
+Two AddOnTemplate variants are rendered from a shared spec list. The CPU
+and GPU paths share every field except the resources block — the GPU
+variant additionally requests and limits nvidia.com/gpu — so generating
+both from one Go template eliminates the risk of CPU/GPU drift in labels,
+env, or volumes when fields are added later. Operators select which
+template a cluster uses by referencing the variant's name in the
+ManagedClusterAddOn (`make enable-addon` does this automatically based on
+the gpu=true label).
+
+The Deployment's container `command` is rendered as a single POSIX-shell
+script literal. We embed the script in the AddOnTemplate (rather than
+shipping it inside the container image) for two reasons:
+
+  1. The image is built and published from FL-Alliance-Client and is the
+     same artefact used outside OCM. Patching its entrypoint would mean
+     forking the image; embedding the wrapper here keeps the upstream
+     image untouched.
+  2. The wrapper depends on OCM's customizedVariable substitution
+     (double-brace-NAME-double-brace markers in the env list below),
+     which is meaningful only inside an AddOnTemplate. Keeping the
+     wrapper here keeps the substitution contract local and reviewable
+     in one file.
+-----------------------------------------------------------------------------
+*/ -}}
+{{- $templates := list
+    (dict "name" (include "flock-addon.templateName" .) "gpu" false)
+    (dict "name" (include "flock-addon.gpuTemplateName" .) "gpu" true)
+-}}
+{{- range $index, $template := $templates }}
+{{- if gt $index 0 }}
+---
+{{- end }}
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: {{ $template.name }}
+spec:
+  addonName: {{ $.Values.addon.name }}
+  agentSpec:
+    workload:
+      manifests:
+        # ---------------------------------------------------------------------
+        # Namespace + ServiceAccount
+        # ---------------------------------------------------------------------
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ $.Values.agent.namespace }}
+            labels:
+              app.kubernetes.io/name: {{ $.Values.addon.name }}
+              app.kubernetes.io/managed-by: open-cluster-management
+
+        - apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: {{ $.Values.agent.serviceAccountName }}
+            namespace: {{ $.Values.agent.namespace }}
+
+        # ---------------------------------------------------------------------
+        # FLockAlliance Deployment
+        # ---------------------------------------------------------------------
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: flock-agent
+            namespace: {{ $.Values.agent.namespace }}
+            labels:
+              app.kubernetes.io/name: {{ $.Values.addon.name }}
+              app.kubernetes.io/component: agent
+              # `variant` distinguishes CPU and GPU Pods in metrics and in
+              # `kubectl get -l` selectors. The Pod template label below
+              # repeats it so the Deployment selector can match either
+              # variant on the same cluster (in case a future change
+              # places both Pods on overlapping clusters).
+              app.kubernetes.io/variant: {{ if $template.gpu }}gpu{{ else }}cpu{{ end }}
+            annotations:
+              # `{{`{{CLUSTER_NAME}}`}}` is OCM's customizedVariable
+              # substitution placeholder, replaced by addon-manager with
+              # the actual managed cluster name when the AddOnTemplate is
+              # materialised. Helm sees the literal string thanks to the
+              # `{{` `}}` raw-string trick.
+              cluster-name: "{{`{{CLUSTER_NAME}}`}}"
+          spec:
+            replicas: {{ $.Values.agent.replicas }}
+            # Bound revision history to keep the etcd footprint small on
+            # hub upgrades that touch every managed cluster. 3 is enough
+            # for one-step rollbacks while preventing unbounded growth on
+            # clusters that frequently rotate task addresses.
+            revisionHistoryLimit: 3
+            strategy:
+              # `Recreate` (not RollingUpdate): FLockAlliance writes round
+              # state under /data on a hostPath/PVC volume that supports
+              # ReadWriteOnce only. A rolling update would briefly run two
+              # Pods scheduled on the same node sharing the same hostPath,
+              # which causes corrupted training-state files. Recreate
+              # accepts a few seconds of downtime to keep the volume
+              # exclusively held by one Pod at a time.
+              type: Recreate
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: {{ $.Values.addon.name }}
+                app.kubernetes.io/component: agent
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: {{ $.Values.addon.name }}
+                  app.kubernetes.io/component: agent
+                  app.kubernetes.io/variant: {{ if $template.gpu }}gpu{{ else }}cpu{{ end }}
+                annotations:
+                  cluster-name: "{{`{{CLUSTER_NAME}}`}}"
+              spec:
+                serviceAccountName: {{ $.Values.agent.serviceAccountName }}
+                # 30 s gives FLockAlliance enough time to flush its
+                # current round's signed payload to S3/MinIO before the
+                # kubelet escalates SIGTERM to SIGKILL. Lower values
+                # frequently truncate the upload, and a partial round
+                # forces the on-chain coordinator to re-elect a leader.
+                terminationGracePeriodSeconds: 30
+                {{- with $.Values.agent.nodeSelector }}
+                nodeSelector:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with $.Values.agent.tolerations }}
+                tolerations:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- with $.Values.agent.affinity }}
+                affinity:
+                  {{- toYaml . | nindent 18 }}
+                {{- end }}
+                {{- if $.Values.image.pullSecrets }}
+                imagePullSecrets:
+                  {{- range $.Values.image.pullSecrets }}
+                  - name: {{ . | quote }}
+                  {{- end }}
+                {{- end }}
+                volumes:
+                  - name: shared-data
+                    {{- if $.Values.agent.dataVolume.existingClaim }}
+                    persistentVolumeClaim:
+                      claimName: {{ $.Values.agent.dataVolume.existingClaim }}
+                    {{- else if $.Values.agent.dataVolume.hostPath }}
+                    hostPath:
+                      path: "{{`{{HOST_DATA_PATH}}`}}"
+                      type: DirectoryOrCreate
+                    {{- else }}
+                    emptyDir: {}
+                    {{- end }}
+                containers:
+                  - name: flock-alliance-client
+                    image: "{{`{{FLOCK_ALLIANCE_IMAGE}}`}}"
+                    imagePullPolicy: {{ $.Values.image.pullPolicy }}
+                    # ---------------------------------------------------------
+                    # Container entrypoint
+                    #
+                    # POSIX-sh wrapper that resolves the hub-vs-.env
+                    # precedence rule, validates required config, builds
+                    # the python argv with quoting preserved, and execs
+                    # FLockAlliance as PID 1 so SIGTERM reaches it.
+                    # ---------------------------------------------------------
+                    command:
+                      - "/bin/sh"
+                      - "-ec"
+                      - |
+                        # ---------------------------------------------------------------------
+                        # Entrypoint helpers and startup banner
+                        #
+                        # /bin/sh -ec (set above): -c reads the script
+                        # from argv, -e aborts on the first uncaught
+                        # error so misconfigurations stop the Pod
+                        # immediately rather than running half-initialised.
+                        # ---------------------------------------------------------------------
+                        log() { printf '[flock-addon] %s\n' "$*"; }
+
+                        # presence_marker prints "<set>" when the argument is
+                        # a non-empty string and "<empty>" otherwise. We use
+                        # this — instead of the more concise but BUGGY idiom
+                        # `${VAR:+<set>}${VAR:-<empty>}` — because the
+                        # latter concatenates to `<set>VALUE` when VAR is
+                        # non-empty (since `:-` falls through to VAR's value
+                        # when it is set), thereby printing the very value
+                        # we intended to redact. The function is the only
+                        # POSIX-portable way to map a value to a binary
+                        # presence marker without leaking the value itself.
+                        # All sensitive identifiers (chain RPC, task/token
+                        # addresses, S3 access/secret) MUST go through this
+                        # helper before being logged.
+                        presence_marker() {
+                          if [ -n "${1:-}" ]; then
+                            printf '<set>'
+                          else
+                            printf '<empty>'
+                          fi
+                        }
+
+                        log "startup: image entrypoint beginning"
+                        log "vars: USE_GPU=${USE_GPU:-} STORAGE_BACKEND=${STORAGE_BACKEND:-} NO_INCENTIVE=${NO_INCENTIVE:-} NUM_PARTICIPANTS=${NUM_PARTICIPANTS:-}"
+                        # Sensitive identifiers (chain task/token addresses and RPC URL)
+                        # are reported as <set>/<empty> markers only — the same
+                        # redaction policy as the post-precedence "effective:" line
+                        # below — so the startup log can be shared verbatim with
+                        # operators without leaking onchain identity or RPC tokens.
+                        log "vars: TASK_ADDRESS=$(presence_marker "${TASK_ADDRESS:-}") TOKEN_ADDRESS=$(presence_marker "${TOKEN_ADDRESS:-}") BLOCKCHAIN_RPC=$(presence_marker "${BLOCKCHAIN_RPC:-}")"
+                        log "vars: DATA_PATH=${DATA_PATH:-} LOCAL_STORAGE_DIR=${LOCAL_STORAGE_DIR:-} FLOCK_ALLIANCE_ENV_FILE=${FLOCK_ALLIANCE_ENV_FILE:-}"
+
+                        # ---------------------------------------------------------------------
+                        # GPU runtime probe
+                        #
+                        # Probe regardless of variant. On CPU clusters
+                        # this confirms (in the Pod log) that no GPU was
+                        # expected, which prevents wasted hours debugging
+                        # a "missing GPU" theory when the real bug lies
+                        # elsewhere. On GPU clusters this catches the
+                        # most common rollout failure: the cluster has
+                        # the nvidia-device-plugin DaemonSet running but
+                        # the underlying node lacks /dev/nvidia* (driver
+                        # not installed, NVIDIA container runtime not
+                        # configured, etc.). `|| true` keeps the script
+                        # going when nvidia-smi exits non-zero on a
+                        # half-broken setup.
+                        # ---------------------------------------------------------------------
+                        if ls /dev/nvidia* >/dev/null 2>&1; then
+                          log "NVIDIA device files detected:"
+                          ls -l /dev/nvidia* || true
+                        else
+                          log "no NVIDIA device files detected in container"
+                        fi
+                        if command -v nvidia-smi >/dev/null 2>&1; then
+                          log "nvidia-smi:"
+                          nvidia-smi || true
+                        else
+                          log "nvidia-smi not available in image"
+                        fi
+
+                        # ---------------------------------------------------------------------
+                        # OCM snapshot (must happen BEFORE sourcing .env)
+                        #
+                        # The OCM_* snapshot below is the heart of the
+                        # hub-vs-.env precedence rule. We capture every
+                        # hub-pushed value into a parallel variable
+                        # BEFORE sourcing the node .env, then re-export
+                        # each captured value AFTER sourcing if (and
+                        # only if) the hub provided a non-empty string.
+                        # This gives us:
+                        #
+                        #   * Hub non-empty -> hub wins (operator-driven
+                        #     fleet config like task address, storage
+                        #     backend, hub-managed RPC).
+                        #   * Hub empty -> .env wins (per-node secrets
+                        #     like PRIVATE_KEY, HF_TOKEN, and
+                        #     BLOCKCHAIN_RPC when running against a
+                        #     node-local testnet).
+                        #
+                        # The naive alternative — source .env first and
+                        # then re-export only when "hub is set" — fails
+                        # because by the time we re-check, the hub-pushed
+                        # value may already have been clobbered by the
+                        # `set -a; .env; set +a` block. Snapshotting
+                        # first is the cleanest way to preserve the
+                        # original injected value without copying every
+                        # variable name into a sentinel.
+                        # ---------------------------------------------------------------------
+                        OCM_BLOCKCHAIN_RPC="${BLOCKCHAIN_RPC:-}"
+                        OCM_TOKEN_ADDRESS="${TOKEN_ADDRESS:-}"
+                        OCM_TASK_ADDRESS="${TASK_ADDRESS:-}"
+                        OCM_STAKE="${STAKE:-}"
+                        OCM_LOCAL_STORAGE_DIR="${LOCAL_STORAGE_DIR:-}"
+                        OCM_S3_COMPAT_ENDPOINT_URL="${S3_COMPAT_ENDPOINT_URL:-}"
+                        OCM_S3_COMPAT_BUCKET="${S3_COMPAT_BUCKET:-}"
+                        OCM_S3_COMPAT_ACCESS_KEY="${S3_COMPAT_ACCESS_KEY:-}"
+                        OCM_S3_COMPAT_SECRET_KEY="${S3_COMPAT_SECRET_KEY:-}"
+                        OCM_S3_COMPAT_REGION="${S3_COMPAT_REGION:-}"
+                        OCM_S3_COMPAT_ADDRESSING_STYLE="${S3_COMPAT_ADDRESSING_STYLE:-}"
+                        OCM_S3_COMPAT_VERIFY_SSL="${S3_COMPAT_VERIFY_SSL:-}"
+                        OCM_USE_GPU="${USE_GPU:-}"
+                        OCM_STORAGE_BACKEND="${STORAGE_BACKEND:-}"
+                        OCM_NO_INCENTIVE="${NO_INCENTIVE:-}"
+                        OCM_NUM_PARTICIPANTS="${NUM_PARTICIPANTS:-}"
+                        # DATA_PATH is hub-pushed via the env list below
+                        # (see `name: DATA_PATH`) and consumed downstream as
+                        # `--override data.inputs=...`. Snapshot it here so a
+                        # stale node `.env` cannot silently retarget the
+                        # training inputs path away from the hub-managed value.
+                        OCM_DATA_PATH="${DATA_PATH:-}"
+
+                        # ---------------------------------------------------------------------
+                        # Source the per-node .env (if present)
+                        #
+                        # `set -a` exports every variable assigned while
+                        # it is in effect. We use it around the dot-source
+                        # so the .env's `KEY=VALUE` lines (no `export`
+                        # prefix in upstream FLockAlliance examples)
+                        # become real env vars visible to the python
+                        # subprocess. `set +a` restores normal scoping
+                        # immediately after to avoid surprising future
+                        # assignments.
+                        # ---------------------------------------------------------------------
+                        if [ -n "${FLOCK_ALLIANCE_ENV_FILE:-}" ]; then
+                          if [ -f "${FLOCK_ALLIANCE_ENV_FILE}" ]; then
+                            log "loading env file: ${FLOCK_ALLIANCE_ENV_FILE}"
+                            set -a
+                            # shellcheck disable=SC1090
+                            . "${FLOCK_ALLIANCE_ENV_FILE}"
+                            set +a
+                          else
+                            log "env file not found: ${FLOCK_ALLIANCE_ENV_FILE} (continuing; hub-pushed values and container env will be used)"
+                          fi
+                        else
+                          log "FLOCK_ALLIANCE_ENV_FILE is empty; skipping node env load"
+                        fi
+
+                        # ---------------------------------------------------------------------
+                        # Apply hub-vs-.env precedence
+                        #
+                        # ocm_wins: restore the hub's value if it was
+                        # non-empty before .env was loaded. Encapsulating
+                        # the test+export keeps each variable on a single
+                        # line below and makes the precedence rule
+                        # auditable: every variable we want
+                        # hub-authoritative appears exactly once as
+                        # `ocm_wins NAME "$OCM_NAME"`. Forgetting an
+                        # entry is a visible omission rather than an
+                        # inverted condition buried in an if-tree.
+                        # ---------------------------------------------------------------------
+                        ocm_wins() {
+                          if [ -n "${2:-}" ]; then
+                            export "$1=$2"
+                          fi
+                        }
+
+                        ocm_wins TASK_ADDRESS              "$OCM_TASK_ADDRESS"
+                        ocm_wins USE_GPU                   "$OCM_USE_GPU"
+                        ocm_wins STORAGE_BACKEND           "$OCM_STORAGE_BACKEND"
+                        ocm_wins NO_INCENTIVE              "$OCM_NO_INCENTIVE"
+                        ocm_wins NUM_PARTICIPANTS          "$OCM_NUM_PARTICIPANTS"
+                        ocm_wins STAKE                     "$OCM_STAKE"
+                        ocm_wins BLOCKCHAIN_RPC            "$OCM_BLOCKCHAIN_RPC"
+                        ocm_wins TOKEN_ADDRESS             "$OCM_TOKEN_ADDRESS"
+                        ocm_wins LOCAL_STORAGE_DIR         "$OCM_LOCAL_STORAGE_DIR"
+                        ocm_wins DATA_PATH                 "$OCM_DATA_PATH"
+                        ocm_wins S3_COMPAT_ENDPOINT_URL    "$OCM_S3_COMPAT_ENDPOINT_URL"
+                        ocm_wins S3_COMPAT_BUCKET          "$OCM_S3_COMPAT_BUCKET"
+                        ocm_wins S3_COMPAT_ACCESS_KEY      "$OCM_S3_COMPAT_ACCESS_KEY"
+                        ocm_wins S3_COMPAT_SECRET_KEY      "$OCM_S3_COMPAT_SECRET_KEY"
+                        ocm_wins S3_COMPAT_REGION          "$OCM_S3_COMPAT_REGION"
+                        ocm_wins S3_COMPAT_ADDRESSING_STYLE "$OCM_S3_COMPAT_ADDRESSING_STYLE"
+                        ocm_wins S3_COMPAT_VERIFY_SSL      "$OCM_S3_COMPAT_VERIFY_SSL"
+
+                        # ---------------------------------------------------------------------
+                        # Effective config (post-precedence)
+                        #
+                        # `presence_marker` (defined near `log()`) prints
+                        # "<set>" when the value is non-empty and "<empty>"
+                        # otherwise. We never log the value of TOKEN_ADDRESS
+                        # or RPC in cleartext alongside the marker because
+                        # these may be addresses operators consider
+                        # sensitive on private chains; the marker is enough
+                        # to confirm the precedence pipeline picked the
+                        # right source.
+                        # ---------------------------------------------------------------------
+                        log "effective: STORAGE_BACKEND=${STORAGE_BACKEND:-} USE_GPU=${USE_GPU:-} NO_INCENTIVE=${NO_INCENTIVE:-} NUM_PARTICIPANTS=${NUM_PARTICIPANTS:-}"
+                        log "effective: BLOCKCHAIN_RPC=$(presence_marker "${BLOCKCHAIN_RPC:-}") TOKEN_ADDRESS=$(presence_marker "${TOKEN_ADDRESS:-}") TASK_ADDRESS=$(presence_marker "${TASK_ADDRESS:-}")"
+                        if [ "${STORAGE_BACKEND:-}" = "nami" ]; then
+                          log "effective: S3_COMPAT_ENDPOINT_URL=${S3_COMPAT_ENDPOINT_URL:-} S3_COMPAT_BUCKET=${S3_COMPAT_BUCKET:-} S3_COMPAT_REGION=${S3_COMPAT_REGION:-}"
+                        fi
+
+                        # ---------------------------------------------------------------------
+                        # Fail-fast preconditions
+                        #
+                        # An invalid backend would otherwise surface as a
+                        # Python KeyError several seconds into FLockAlliance
+                        # initialisation, with a stack trace mentioning
+                        # internal storage adapter names. Failing here
+                        # gives the operator the exact misconfigured
+                        # value in the first 100ms of the Pod log. Exit
+                        # code 2 is used (not 1) so CrashLoopBackoff
+                        # alerts can distinguish configuration faults
+                        # from runtime crashes downstream.
+                        # ---------------------------------------------------------------------
+                        case "${STORAGE_BACKEND:-}" in
+                          s3|local|nami)
+                            ;;
+                          "")
+                            log "ERROR: STORAGE_BACKEND is empty; expected one of s3|local|nami"
+                            exit 2
+                            ;;
+                          *)
+                            log "ERROR: unsupported STORAGE_BACKEND=${STORAGE_BACKEND}; expected one of s3|local|nami"
+                            exit 2
+                            ;;
+                        esac
+
+                        if [ -z "${TASK_ADDRESS:-}" ]; then
+                          log "WARN: TASK_ADDRESS is empty; FLockAlliance will refuse to start if the onchain task cannot be resolved"
+                        fi
+
+                        # ---------------------------------------------------------------------
+                        # Build python argv
+                        #
+                        # `set --` makes each --override flag a separate
+                        # argv element. Building a single string and
+                        # passing it to `exec sh -c` would re-interpret
+                        # quoting in BLOCKCHAIN_RPC and the contract
+                        # addresses (some testnet RPCs contain
+                        # query-string `?` characters that the shell
+                        # would expand as glob patterns).
+                        #
+                        # `runtime.mode=local` is the only override that is
+                        # truly unconditional — every FLockAlliance pod we
+                        # ship runs in the local runtime mode by design.
+                        # All other AddOnDeploymentConfig-backed overrides
+                        # (USE_GPU, STAKE, STORAGE_BACKEND, NO_INCENTIVE,
+                        # DATA_PATH) ship with chart defaults in
+                        # values.yaml, but we still guard each one with a
+                        # presence check so that an operator who blanks a
+                        # field via `kubectl edit addondeploymentconfig`
+                        # falls through to the FLockAlliance YAML default
+                        # instead of receiving `--override key=` (which
+                        # FLockAlliance interprets as "set the key to the
+                        # empty string" and silently breaks at runtime).
+                        # STORAGE_BACKEND is also guarded by the
+                        # fail-fast block above, so this guard here is
+                        # defence-in-depth for the other four.
+                        # ---------------------------------------------------------------------
+                        set -- python -u main.py \
+                          --config config/conf.yaml \
+                          --override "runtime.mode=local"
+
+                        # Use `if`, not `[ -n "$x" ] && set --`, because the
+                        # latter returns non-zero whenever the test fails
+                        # (variable empty) and `set -e` would then abort
+                        # the entrypoint before we could even build the
+                        # python argv.
+                        if [ -n "${USE_GPU:-}" ];         then set -- "$@" --override "runtime.gpu=${USE_GPU}"; fi
+                        if [ -n "${STAKE:-}" ];           then set -- "$@" --override "blockchain.stake=${STAKE}"; fi
+                        if [ -n "${STORAGE_BACKEND:-}" ]; then set -- "$@" --override "storage.backend=${STORAGE_BACKEND}"; fi
+                        if [ -n "${NO_INCENTIVE:-}" ];    then set -- "$@" --override "training.no_incentive=${NO_INCENTIVE}"; fi
+                        if [ -n "${DATA_PATH:-}" ];       then set -- "$@" --override "data.inputs=${DATA_PATH}"; fi
+
+                        if [ -n "${LOCAL_STORAGE_DIR:-}" ]; then
+                          set -- "$@" --override "storage.local.shared_dir=${LOCAL_STORAGE_DIR}"
+                        fi
+                        if [ -n "${NUM_PARTICIPANTS:-}" ]; then
+                          set -- "$@" --override "training.num_participants=${NUM_PARTICIPANTS}"
+                        fi
+                        if [ -n "${BLOCKCHAIN_RPC:-}" ]; then
+                          set -- "$@" --override "blockchain.rpc=${BLOCKCHAIN_RPC}"
+                        fi
+                        if [ -n "${TOKEN_ADDRESS:-}" ]; then
+                          set -- "$@" --override "blockchain.token_address=${TOKEN_ADDRESS}"
+                        fi
+                        if [ -n "${TASK_ADDRESS:-}" ]; then
+                          set -- "$@" --override "blockchain.task_address=${TASK_ADDRESS}"
+                        fi
+
+                        # ---------------------------------------------------------------------
+                        # Hand off to FLockAlliance (PID 1)
+                        #
+                        # `exec` replaces the shell with python so the
+                        # Python process becomes PID 1 in the container
+                        # and receives SIGTERM directly from the kubelet
+                        # (otherwise the wrapper sh would receive the
+                        # signal and python would not see it within
+                        # terminationGracePeriodSeconds, leading to
+                        # SIGKILL and partial round uploads).
+                        #
+                        # The exec banner below redacts every
+                        # `--override KEY=VALUE` token to
+                        # `--override KEY=<set>` before printing. The raw
+                        # values include `blockchain.rpc` (often a tokened
+                        # provider URL), `blockchain.task_address` /
+                        # `blockchain.token_address` (onchain identifiers
+                        # operators may consider sensitive on private
+                        # chains), `data.inputs` (which can encode a
+                        # task-private path), and — when future overrides
+                        # forward S3_COMPAT_* into the python argv —
+                        # storage credentials. Logging only the override
+                        # *keys* gives operators a complete picture of
+                        # which knobs were applied without leaking any
+                        # value into Pod stdout / kubectl logs / log
+                        # aggregators. Non-override tokens (`python`,
+                        # `-u`, `main.py`, `--config`, `config/conf.yaml`)
+                        # are emitted verbatim.
+                        # ---------------------------------------------------------------------
+                        prev=""
+                        redacted=""
+                        for tok in "$@"; do
+                          if [ "$prev" = "--override" ]; then
+                            # Current token is the value of the previous
+                            # `--override` flag (KEY=VALUE form). Emit
+                            # `--override KEY=<set>` instead of letting
+                            # VALUE land in stdout.
+                            key="${tok%%=*}"
+                            redacted="$redacted --override ${key}=<set>"
+                          elif [ "$tok" = "--override" ]; then
+                            # Suppress the bare `--override` token here;
+                            # it is re-emitted in redacted form when the
+                            # next iteration processes its KEY=VALUE
+                            # operand. Emitting it twice would produce
+                            # `--override --override KEY=<set>`.
+                            :
+                          else
+                            redacted="$redacted $tok"
+                          fi
+                          prev="$tok"
+                        done
+                        log "exec:$redacted"
+                        exec "$@"
+                    # ---------------------------------------------------------
+                    # OCM customizedVariable env list
+                    #
+                    # Each value below is an OCM placeholder of the form
+                    # double-brace-NAME-double-brace; the addon-manager
+                    # substitutes it from the matching
+                    # AddOnDeploymentConfig customizedVariable when it
+                    # materialises the workload on a managed cluster.
+                    # The {{`...`}} raw-string trick stops Helm from
+                    # trying to evaluate the placeholder itself.
+                    # ---------------------------------------------------------
+                    env:
+                      - name: DATA_PATH
+                        value: "{{`{{DATA_PATH}}`}}"
+                      - name: BLOCKCHAIN_RPC
+                        value: "{{`{{BLOCKCHAIN_RPC}}`}}"
+                      - name: TOKEN_ADDRESS
+                        value: "{{`{{TOKEN_ADDRESS}}`}}"
+                      - name: TASK_ADDRESS
+                        value: "{{`{{TASK_ADDRESS}}`}}"
+                      - name: STAKE
+                        value: "{{`{{STAKE}}`}}"
+                      - name: STORAGE_BACKEND
+                        value: "{{`{{STORAGE_BACKEND}}`}}"
+                      - name: LOCAL_STORAGE_DIR
+                        value: "{{`{{LOCAL_STORAGE_DIR}}`}}"
+                      - name: S3_COMPAT_ENDPOINT_URL
+                        value: "{{`{{S3_COMPAT_ENDPOINT_URL}}`}}"
+                      - name: S3_COMPAT_BUCKET
+                        value: "{{`{{S3_COMPAT_BUCKET}}`}}"
+                      - name: S3_COMPAT_ACCESS_KEY
+                        value: "{{`{{S3_COMPAT_ACCESS_KEY}}`}}"
+                      - name: S3_COMPAT_SECRET_KEY
+                        value: "{{`{{S3_COMPAT_SECRET_KEY}}`}}"
+                      - name: S3_COMPAT_REGION
+                        value: "{{`{{S3_COMPAT_REGION}}`}}"
+                      - name: S3_COMPAT_ADDRESSING_STYLE
+                        value: "{{`{{S3_COMPAT_ADDRESSING_STYLE}}`}}"
+                      - name: S3_COMPAT_VERIFY_SSL
+                        value: "{{`{{S3_COMPAT_VERIFY_SSL}}`}}"
+                      - name: USE_GPU
+                        value: "{{`{{USE_GPU}}`}}"
+                      - name: NO_INCENTIVE
+                        value: "{{`{{NO_INCENTIVE}}`}}"
+                      - name: NUM_PARTICIPANTS
+                        value: "{{`{{NUM_PARTICIPANTS}}`}}"
+                      - name: FLOCK_ALLIANCE_ENV_FILE
+                        value: "{{`{{FLOCK_ALLIANCE_ENV_FILE}}`}}"
+                    volumeMounts:
+                      - name: shared-data
+                        mountPath: /data
+                    {{- /*
+                    -----------------------------------------------------------
+                    Resources block (CPU + GPU)
+                    -----------------------------------------------------------
+                    Build from values.agent.resources.flockAlliance and,
+                    for the GPU variant, splice in nvidia.com/gpu
+                    requests/limits using deepCopy + set so the
+                    user-supplied values map is not mutated in place.
+                    `nvidia.com/gpu` is a non-overcommittable extended
+                    resource: the API server requires request and limit
+                    to be equal, so both are set from the same
+                    agent.gpuResource.count value.
+                    -----------------------------------------------------------
+                    */ -}}
+                    {{- $resources := deepCopy $.Values.agent.resources.flockAlliance }}
+                    {{- if $template.gpu }}
+                    {{- if not (hasKey $resources "requests") }}
+                    {{- $_ := set $resources "requests" (dict) }}
+                    {{- end }}
+                    {{- if not (hasKey $resources "limits") }}
+                    {{- $_ := set $resources "limits" (dict) }}
+                    {{- end }}
+                    {{- $_ := set $resources.requests "nvidia.com/gpu" $.Values.agent.gpuResource.count }}
+                    {{- $_ := set $resources.limits "nvidia.com/gpu" $.Values.agent.gpuResource.count }}
+                    {{- end }}
+                    resources:
+                      {{- toYaml $resources | nindent 22 }}
+{{- end }}
