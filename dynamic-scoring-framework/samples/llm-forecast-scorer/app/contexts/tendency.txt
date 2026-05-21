@@ -1,0 +1,3 @@
+Test scripts such as “cpu-test-gen” operate with some form of periodic behavior.
+In contrast, other applications do not exhibit periodicity,
+so the model needs to infer increasing or decreasing trends directly from the given time series data.

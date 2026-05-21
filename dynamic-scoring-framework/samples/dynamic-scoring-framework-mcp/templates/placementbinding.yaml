@@ -1,0 +1,15 @@
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: {{name}}
+  namespace: {{namespace}}
+  labels:
+    "dynamic-scoring-framework-mcp/generated": "true"
+placementRef:
+  name: {{placement_name}}
+  kind: Placement
+  apiGroup: cluster.open-cluster-management.io
+subjects:
+- name: {{policy_name}}
+  kind: Policy
+  apiGroup: policy.open-cluster-management.io

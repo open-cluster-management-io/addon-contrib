@@ -1,0 +1,16 @@
+[project]
+name = "policy-watcher"
+version = "0.1.0"
+description = "Watch policy specific namespace"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0.3",
+    "kubernetes>=31.0.0",
+    "jinja2"
+]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250915",
+]

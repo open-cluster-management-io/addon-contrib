@@ -4,5 +4,5 @@ metadata:
   name: dynamic-scoring-config
 spec:
   masks:
-    - clusterName: "worker02"
+    - clusterName: "cluster2"
       scoreName: "llm_forecast_score"

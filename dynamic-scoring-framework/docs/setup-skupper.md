@@ -15,12 +15,12 @@ Before setting up Skupper, ensure you have the following command-line tools inst
 When using Kind clusters with Podman, each Kind cluster runs in its own isolated network. To enable communication between these clusters using Skupper, you need to create a shared Podman network and connect each Kind cluster's control plane container to this network.
 
 ```bash
-kubectl create namespace skupper-site-controller --context kind-hub01
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-hub01
-kubectl create namespace skupper-site-controller --context kind-worker01
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker01
-kubectl create namespace skupper-site-controller --context kind-worker02
-kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-worker02
+kubectl create namespace skupper-site-controller --context kind-hub
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-hub
+kubectl create namespace skupper-site-controller --context kind-cluster1
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-cluster1
+kubectl create namespace skupper-site-controller --context kind-cluster2
+kubectl apply -f deploy/skupper/deploy-watch-all-ns.yaml --context kind-cluster2
 ```
 
 ## Configure Podman Network for Kind Clusters
@@ -29,16 +29,16 @@ For kind clusters to communicate via Skupper, create a shared podman network:
 
 ```bash
 podman network create my-kind-net
-podman network connect my-kind-net hub01-control-plane
-podman network connect my-kind-net worker01-control-plane
-podman network connect my-kind-net worker02-control-plane
+podman network connect my-kind-net hub-control-plane
+podman network connect my-kind-net cluster1-control-plane
+podman network connect my-kind-net cluster2-control-plane
 podman network inspect my-kind-net # Check connected clusters
 ```
 
 Get the hub cluster IP address.
 
 ```bash
-HUB_NODE_IP=$(podman inspect hub01-control-plane | jq -r '.[0].NetworkSettings.Networks["my-kind-net"].IPAddress')
+HUB_NODE_IP=$(podman inspect hub-control-plane | jq -r '.[0].NetworkSettings.Networks["my-kind-net"].IPAddress')
 echo $HUB_NODE_IP
 ```
 
@@ -54,13 +54,13 @@ NOTE: the namespace must exist in all clusters before running the script.
 Then verify the Skupper setup by checking the sites and connections:
 
 ```bash
-skupper status -n dynamic-scoring --context kind-hub01
-skupper status -n dynamic-scoring --context kind-worker01
-skupper status -n dynamic-scoring --context kind-worker02
+skupper status -n dynamic-scoring --context kind-hub
+skupper status -n dynamic-scoring --context kind-cluster1
+skupper status -n dynamic-scoring --context kind-cluster2
 ```
 This should show that the sites are connected successfully.
 
 ```bash
-$ skupper status -n dynamic-scoring --context kind-hub01
-Skupper is enabled for namespace "dynamic-scoring" with site name "hub01". It is connected to 2 other sites. It has no exposed services.
+$ skupper status -n dynamic-scoring --context kind-hub
+Skupper is enabled for namespace "dynamic-scoring" with site name "hub". It is connected to 2 other sites. It has no exposed services.
 ```

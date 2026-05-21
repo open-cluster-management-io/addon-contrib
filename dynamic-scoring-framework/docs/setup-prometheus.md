@@ -38,7 +38,7 @@ To centralize scoring results, VictoriaMetrics is a one of the solutions compati
 ```bash
 helm repo add vm https://victoriametrics.github.io/helm-charts/
 helm repo update
-helm install victoria-metrics vm/victoria-metrics-single -n monitoring --kube-context kind-hub01
+helm install victoria-metrics vm/victoria-metrics-single -n monitoring --kube-context kind-hub
 ```
 
 ### Expose VictoriaMetrics via Skupper
@@ -47,7 +47,7 @@ If it is necessary to connect to hub VictoriaMetrics from managed clusters, expo
 
 ```bash
 HUB_NODE_IP=$HUB_NODE_IP NAMESPACE=monitoring ./hack/reset_skupper.sh
-skupper expose service victoria-metrics-victoria-metrics-single-server --address=vm-hub --port=8428 --namespace monitoring --context kind-hub01
+skupper expose service victoria-metrics-victoria-metrics-single-server --address=vm-hub --port=8428 --namespace monitoring --context kind-hub
 ```
 
 ### Configure managed cluster Prometheus to Send Metrics to Hub
@@ -55,8 +55,8 @@ skupper expose service victoria-metrics-victoria-metrics-single-server --address
 Update Prometheus on worker clusters to remote-write metrics to the hub's VictoriaMetrics:
 
 ```bash
-helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-worker01
-helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-worker02
+helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-cluster1
+helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring -f deploy/prometheus/values.yaml --kube-context kind-cluster2
 ```
 
 The `values.yaml` file contains remote_write configuration pointing to `vm-hub:8428` and send scoring results.
@@ -68,8 +68,8 @@ If you are using another remote write receiver, modify the `remote_write` sectio
 Deploy Prometheus recording rules to pre-aggregate metrics. Apply the rules to each managed cluster:
 
 ```bash
-CLUSTER_NAME=worker01 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-worker01
-CLUSTER_NAME=worker02 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-worker02
+CLUSTER_NAME=cluster1 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-cluster1
+CLUSTER_NAME=cluster2 envsubst < deploy/prometheus/cluster-resource-summary/prometheusrule.yaml | kubectl apply -f - --context kind-cluster2
 ```
 
 
@@ -80,14 +80,14 @@ Access Grafana to verify that metrics are being collected:
 1. Get the Grafana admin password:
 
 ```bash
-kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" --context kind-hub01 | base64 --decode ; echo
+kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" --context kind-hub | base64 --decode ; echo
 ```
 
 2. Set up port forwarding to access Grafana:
 
 ```bash
-export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=kube-prometheus" -oname --context kind-hub01)
-kubectl --namespace monitoring port-forward $POD_NAME 3000 --context kind-hub01
+export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=kube-prometheus" -oname --context kind-hub)
+kubectl --namespace monitoring port-forward $POD_NAME 3000 --context kind-hub
 ```
 
 3. Open your browser and navigate to `http://localhost:3000`

@@ -1,0 +1,116 @@
+{
+  "applications": [
+    {
+      "name": "app01",
+      "device_candidates": [
+        "all",
+        "2g.24gb",
+        "3g.48gb"
+      ],
+      "pod_alias": [
+        "app01*"
+      ]
+    },
+    {
+      "name": "app02",
+      "device_candidates": [
+        "all",
+        "2g.24gb",
+        "3g.48gb"
+      ],
+      "pod_alias": [
+        "app02*"
+      ]
+    }
+  ],
+  "static_score": {
+    "performance": [
+      {
+        "metric": {
+          "app": "app01",
+          "device": "all"
+        },
+        "score": 80
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "all"
+        },
+        "score": 80
+      },
+      {
+        "metric": {
+          "app": "app01",
+          "device": "3g.48gb"
+        },
+        "score": 60
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "3g.48gb"
+        },
+        "score": 55
+      },
+      {
+        "metric": {
+          "app": "app01",
+          "device": "2g.24gb"
+        },
+        "score": 10
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "2g.24gb"
+        },
+        "score": 15
+      }
+    ],
+    "power": [
+      {
+        "metric": {
+          "app": "app01",
+          "device": "all"
+        },
+        "score": 80
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "all"
+        },
+        "score": 80
+      },
+      {
+        "metric": {
+          "app": "app01",
+          "device": "3g.48gb"
+        },
+        "score": 60
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "3g.48gb"
+        },
+        "score": 55
+      },
+      {
+        "metric": {
+          "app": "app01",
+          "device": "2g.24gb"
+        },
+        "score": 10
+      },
+      {
+        "metric": {
+          "app": "app02",
+          "device": "2g.24gb"
+        },
+        "score": 15
+      }
+    ]
+  }
+}
