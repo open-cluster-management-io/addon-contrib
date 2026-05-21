@@ -1,0 +1,19 @@
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  annotations:
+    addon.open-cluster-management.io/lifecycle: addon-manager
+  name: otel
+spec:
+  installStrategy:
+    type: Manual
+  supportedConfigs:
+    - defaultConfig:
+        name: otel-0.0.1
+      group: addon.open-cluster-management.io
+      resource: addontemplates
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
+      defaultConfig:
+        name: otel-config
+        namespace: open-cluster-management-hub
