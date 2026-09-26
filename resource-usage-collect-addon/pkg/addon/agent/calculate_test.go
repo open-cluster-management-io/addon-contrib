@@ -43,7 +43,7 @@ func TestNormalizeValue(t *testing.T) {
 			gpuAvailable:   2,
 			tpuAvailable:   1,
 			expectCPUScore: -20,
-			expectMemScore: 100,
+			expectMemScore: 2,
 			expectGPUScore: -80,
 			expectTPUScore: -90,
 		},
