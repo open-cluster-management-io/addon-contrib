@@ -147,7 +147,7 @@ func (s *Score) normalizeScore(scope string, cpuAvailable, memAvailable, gpuAvai
 		return 0, 0, 0, 0, err
 	}
 
-	availableMem := memAvailable / 1024 * 1024 // MB
+	availableMem := memAvailable / (1024 * 1024) // MB
 	memScoreNormalizer := clustersdkv1alpha1.NewScoreNormalizer(MINMEMCOUNT, MAXMEMCOUNT)
 	memScore, err = memScoreNormalizer.Normalize(availableMem)
 	if err != nil {
