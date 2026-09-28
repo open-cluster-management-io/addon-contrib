@@ -1,0 +1,38 @@
+# ClusterManagementAddOn for cert-manager
+# Uses a single AddOnTemplate with embedded CRD installation Job
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: ClusterManagementAddOn
+metadata:
+  annotations:
+    addon.open-cluster-management.io/lifecycle: addon-manager
+  name: cert-manager-addon
+spec:
+  addOnMeta:
+    description: Deploys cert-manager to manage TLS certificates on managed clusters.
+    displayName: Cert-Manager Addon
+  supportedConfigs:
+    # AddOnTemplate containing CRD Job + components
+    - group: addon.open-cluster-management.io
+      resource: addontemplates
+      defaultConfig:
+        name: cert-manager-addon
+    # Configuration for customization (image registry, versions, replicas)
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
+      defaultConfig:
+        name: cert-manager-addon-config
+        namespace: open-cluster-management
+  installStrategy:
+    # Automatic deployment to clusters with matching label
+    type: Placements
+    placements:
+      - name: cert-manager-addon-placement
+        namespace: open-cluster-management
+        configs:
+          - group: addon.open-cluster-management.io
+            resource: addontemplates
+            name: cert-manager-addon
+          - group: addon.open-cluster-management.io
+            resource: addondeploymentconfigs
+            name: cert-manager-addon-config
+            namespace: open-cluster-management
