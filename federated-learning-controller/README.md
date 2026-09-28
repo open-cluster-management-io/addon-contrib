@@ -295,7 +295,7 @@ flwr run --insecure --run-config 'num-server-rounds=3' \
 
 The reference [Flower PyTorch MNIST app](./examples/flower/app-torch/) is a
 SuperExec-compatible Flower app — its `Dockerfile` uses
-`flwr/superexec:1.26.1` as the base image and registers
+`flwr/superexec:1.32.1` as the base image and registers
 `ServerApp` / `ClientApp` via `[tool.flwr.app.components]` in
 `pyproject.toml`. Dependencies are baked into the image at build time so pods
 start without re-downloading PyTorch on every restart.
