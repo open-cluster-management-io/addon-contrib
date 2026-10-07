@@ -44,18 +44,6 @@ spec:
           - kind: ServiceAccount
             name: klusterlet-work-sa
             namespace: open-cluster-management-agent
-        - apiVersion: rbac.authorization.k8s.io/v1
-          kind: ClusterRoleBinding
-          metadata:
-            name: kueue-admissioncheck-ocm-rolebinding
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: ClusterRole
-            name: kueue-admissioncheck-editor-role
-          subjects:
-          - kind: ServiceAccount
-            name: klusterlet-work-sa
-            namespace: open-cluster-management-agent
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ResourceFlavor
           metadata:
@@ -76,6 +64,26 @@ spec:
           spec:
             clusterQueue: {{ .Values.clusterQueue.name }}
 {{- if .Values.multiKueue.enabled }}
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: kueue-admissioncheck-ocm-editor-role
+          rules:
+          - apiGroups: ["kueue.x-k8s.io"]
+            resources: ["admissionchecks"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: kueue-admissioncheck-ocm-rolebinding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kueue-admissioncheck-ocm-editor-role
+          subjects:
+          - kind: ServiceAccount
+            name: klusterlet-work-sa
+            namespace: open-cluster-management-agent
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: AdmissionCheck
           metadata:
@@ -87,13 +95,24 @@ spec:
               kind: Placement
               name: {{ .Values.placement.name | default .Release.Name }}
         - apiVersion: kueue.x-k8s.io/v1beta2
+          kind: AdmissionCheck
+          metadata:
+            name: {{ .Values.multiKueue.queueName }}-dispatch
+          spec:
+            controllerName: kueue.x-k8s.io/multikueue
+            parameters:
+              apiGroup: kueue.x-k8s.io
+              kind: MultiKueueConfig
+              name: {{ .Values.placement.name | default .Release.Name }}
+        - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ClusterQueue
           metadata:
             name: {{ .Values.multiKueue.queueName }}
           spec:
             namespaceSelector: {{ .Values.clusterQueue.namespaceSelector }}
-            admissionChecks:
-            - {{ .Values.multiKueue.admissionCheckName }}
+            admissionChecksStrategy:
+              admissionChecks:
+              - name: {{ .Values.multiKueue.queueName }}-dispatch
             resourceGroups:
             {{- toYaml .Values.clusterQueue.resourceGroups | nindent 12 }}
         - apiVersion: kueue.x-k8s.io/v1beta2
