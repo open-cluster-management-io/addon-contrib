@@ -84,8 +84,19 @@ installKueueViaOperator: false
 
 # Namespaces to label with kueue.openshift.io/managed: "true" so RHBOK manages them.
 # Only applicable when installKueueViaOperator is true.
-# The LocalQueue name below should match the hub-side queue name used for MultiKueue.
 managedNamespaces: []
+
+# MultiKueue configuration
+# When enabled, generates hub-specific AdmissionCheck/ClusterQueue/LocalQueue manifests and
+# a matching spoke-side LocalQueue so shadow workloads can land on worker clusters.
+multiKueue:
+  enabled: false
+  # Name used for the hub AdmissionCheck, hub ClusterQueue/LocalQueue, and matching spoke LocalQueue
+  queueName: mk-hub-queue
+  # Namespace for the hub LocalQueue
+  namespace: default
+  # Name of the AdmissionCheck; must match what the hub ClusterQueue references
+  admissionCheckName: multikueue-check
 
 # Operator Lifecycle Manager RBAC configuration (uncomment when installKueueViaOperator enabled)
 # operatorLifecycleManager:

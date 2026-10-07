@@ -1,7 +1,8 @@
+{{- if .Values.hubTargeting.enabled }}
 apiVersion: addon.open-cluster-management.io/v1alpha1
 kind: AddOnTemplate
 metadata:
-  name: kueue-addon-{{ .Chart.Version }}
+  name: kueue-addon-hub-{{ .Chart.Version }}
 spec:
   addonName: multicluster-kueue-manager
   agentSpec:
@@ -43,33 +44,65 @@ spec:
           - kind: ServiceAccount
             name: klusterlet-work-sa
             namespace: open-cluster-management-agent
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: kueue-admissioncheck-ocm-rolebinding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kueue-admissioncheck-editor-role
+          subjects:
+          - kind: ServiceAccount
+            name: klusterlet-work-sa
+            namespace: open-cluster-management-agent
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ResourceFlavor
           metadata:
-            name: {{ .Values.resourceFlavor.name}}
+            name: {{ .Values.resourceFlavor.name }}
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ClusterQueue
           metadata:
-            name: {{ .Values.clusterQueue.name}}
+            name: {{ .Values.clusterQueue.name }}
           spec:
-            namespaceSelector: {{ .Values.clusterQueue.namespaceSelector  }}
-            resourceGroups: 
+            namespaceSelector: {{ .Values.clusterQueue.namespaceSelector }}
+            resourceGroups:
             {{- toYaml .Values.clusterQueue.resourceGroups | nindent 12 }}
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: LocalQueue
           metadata:
-            namespace: {{ .Values.localQueue.namespace}}
-            name: {{ .Values.localQueue.name}}
+            namespace: {{ .Values.localQueue.namespace }}
+            name: {{ .Values.localQueue.name }}
           spec:
-            clusterQueue: {{ .Values.clusterQueue.name}}
+            clusterQueue: {{ .Values.clusterQueue.name }}
 {{- if .Values.multiKueue.enabled }}
+        - apiVersion: kueue.x-k8s.io/v1beta2
+          kind: AdmissionCheck
+          metadata:
+            name: {{ .Values.multiKueue.admissionCheckName }}
+          spec:
+            controllerName: open-cluster-management.io/placement
+            parameters:
+              apiGroup: cluster.open-cluster-management.io
+              kind: Placement
+              name: {{ .Values.placement.name | default .Release.Name }}
+        - apiVersion: kueue.x-k8s.io/v1beta2
+          kind: ClusterQueue
+          metadata:
+            name: {{ .Values.multiKueue.queueName }}
+          spec:
+            namespaceSelector: {{ .Values.clusterQueue.namespaceSelector }}
+            admissionChecks:
+            - {{ .Values.multiKueue.admissionCheckName }}
+            resourceGroups:
+            {{- toYaml .Values.clusterQueue.resourceGroups | nindent 12 }}
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: LocalQueue
           metadata:
-            namespace: {{ .Values.localQueue.namespace }}
+            namespace: {{ .Values.multiKueue.namespace }}
             name: {{ .Values.multiKueue.queueName }}
           spec:
-            clusterQueue: {{ .Values.clusterQueue.name }}
+            clusterQueue: {{ .Values.multiKueue.queueName }}
 {{- end }}
 {{- if .Values.installKueueViaOperator }}
 {{- range .Values.managedNamespaces }}
@@ -82,4 +115,4 @@ spec:
 {{- end }}
 {{- include "kueue-addon.operatorResources" . | nindent 8 }}
 {{- end }}
-
+{{- end }}

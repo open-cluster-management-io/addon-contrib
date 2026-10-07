@@ -22,7 +22,7 @@ spec:
     - name: {{ .Values.placement.name | default .Release.Name }}-hub
       namespace: {{ .Values.kueue.namespace }}
       configs:
-      - name: kueue-addon-{{ .Chart.Version }}
+      - name: kueue-addon-hub-{{ .Chart.Version }}
         group: addon.open-cluster-management.io
         resource: addontemplates
     {{- end }}
