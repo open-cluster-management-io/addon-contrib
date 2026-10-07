@@ -62,7 +62,24 @@ spec:
             name: {{ .Values.localQueue.name}}
           spec:
             clusterQueue: {{ .Values.clusterQueue.name}}
+{{- if .Values.multiKueue.enabled }}
+        - apiVersion: kueue.x-k8s.io/v1beta2
+          kind: LocalQueue
+          metadata:
+            namespace: {{ .Values.localQueue.namespace }}
+            name: {{ .Values.multiKueue.queueName }}
+          spec:
+            clusterQueue: {{ .Values.clusterQueue.name }}
+{{- end }}
 {{- if .Values.installKueueViaOperator }}
+{{- range .Values.managedNamespaces }}
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ . }}
+            labels:
+              kueue.openshift.io/managed: "true"
+{{- end }}
 {{- include "kueue-addon.operatorResources" . | nindent 8 }}
 {{- end }}
 
