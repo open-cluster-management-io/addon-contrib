@@ -14,6 +14,11 @@ skipClusterSetBinding: false
 placement:
   name: default
 
+# Hub targeting — when enabled, a second Placement (local-cluster: Exists) is created so the hub
+# is treated as a managed cluster and receives the same AddOnTemplate delivery as spokes
+hubTargeting:
+  enabled: false
+
 # Resource flavor
 resourceFlavor:
   name: default-flavor
@@ -43,6 +48,9 @@ localQueue:
 # Default is kueue-system
 kueue:
   namespace: "kueue-system"
+  # createNamespace creates the kueue namespace on the hub at helm install time so Placement and
+  # ManagedClusterSetBinding can be created in it without requiring it to pre-exist
+  createNamespace: true
 
 # Cluster proxy configuration (optional)
 clusterProxy:
@@ -60,6 +68,7 @@ clusterProxy:
 # ClusterProfile feature gate configuration
 # When enabled (true), uses ClusterProfile API for MultiKueueCluster management
 # When disabled (false, default), uses legacy secret-copy approach with ManagedServiceAccount
+# NOTE: ClusterProfile requires Kueue >= v0.16 and is not yet supported by RHBOK — do not enable for ACM
 clusterProfile:
   enabled: false
 
@@ -72,6 +81,11 @@ clusterProfile:
 
 # Enable Kueue installation via operator
 installKueueViaOperator: false
+
+# Namespaces to label with kueue.openshift.io/managed: "true" so RHBOK manages them.
+# Only applicable when installKueueViaOperator is true.
+# The LocalQueue name below should match the hub-side queue name used for MultiKueue.
+managedNamespaces: []
 
 # Operator Lifecycle Manager RBAC configuration (uncomment when installKueueViaOperator enabled)
 # operatorLifecycleManager:

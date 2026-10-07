@@ -18,3 +18,11 @@ spec:
       - name: kueue-addon-{{ .Chart.Version }}
         group: addon.open-cluster-management.io
         resource: addontemplates
+    {{- if .Values.hubTargeting.enabled }}
+    - name: {{ .Values.placement.name | default .Release.Name }}-hub
+      namespace: {{ .Values.kueue.namespace }}
+      configs:
+      - name: kueue-addon-{{ .Chart.Version }}
+        group: addon.open-cluster-management.io
+        resource: addontemplates
+    {{- end }}

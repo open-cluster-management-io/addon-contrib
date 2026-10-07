@@ -29,3 +29,26 @@ spec:
         matchExpressions:
           - key: local-cluster
             operator: DoesNotExist
+
+{{- if .Values.hubTargeting.enabled }}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: {{ .Values.placement.name | default .Release.Name }}-hub
+  namespace: {{ .Values.kueue.namespace }}
+spec:
+  clusterSets:
+    - global
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Equal
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Equal
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+          - key: local-cluster
+            operator: Exists
+{{- end }}

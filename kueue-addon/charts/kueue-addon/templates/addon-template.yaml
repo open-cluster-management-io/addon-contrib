@@ -63,6 +63,14 @@ spec:
           spec:
             clusterQueue: {{ .Values.clusterQueue.name}}
 {{- if .Values.installKueueViaOperator }}
+{{- range .Values.managedNamespaces }}
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ . }}
+            labels:
+              kueue.openshift.io/managed: "true"
+{{- end }}
 {{- include "kueue-addon.operatorResources" . | nindent 8 }}
 {{- end }}
 
