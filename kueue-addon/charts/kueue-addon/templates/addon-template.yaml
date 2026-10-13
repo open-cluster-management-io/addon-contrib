@@ -62,11 +62,11 @@ spec:
             name: {{ .Values.localQueue.name}}
           spec:
             clusterQueue: {{ .Values.clusterQueue.name}}
-{{- if .Values.multiKueue.enabled }}
+{{- if and .Values.multiKueue.enabled .Values.hubTargeting.enabled }}
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: LocalQueue
           metadata:
-            namespace: {{ .Values.localQueue.namespace }}
+            namespace: {{ .Values.multiKueue.namespace }}
             name: {{ .Values.multiKueue.queueName }}
           spec:
             clusterQueue: {{ .Values.clusterQueue.name }}
@@ -77,6 +77,8 @@ spec:
           kind: Namespace
           metadata:
             name: {{ . }}
+            annotations:
+              addon.open-cluster-management.io/deletion-orphan: ""
             labels:
               kueue.openshift.io/managed: "true"
 {{- end }}

@@ -129,6 +129,8 @@ spec:
           kind: Namespace
           metadata:
             name: {{ . }}
+            annotations:
+              addon.open-cluster-management.io/deletion-orphan: ""
             labels:
               kueue.openshift.io/managed: "true"
 {{- end }}
