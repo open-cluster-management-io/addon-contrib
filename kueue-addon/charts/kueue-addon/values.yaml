@@ -50,9 +50,10 @@ kueue:
   namespace: "kueue-system"
   # createNamespace creates the kueue namespace on the hub at helm install time so Placement and
   # ManagedClusterSetBinding can be created in it without requiring it to pre-exist.
-  # Set to false if the namespace already exists and was not created by this chart — Helm will
-  # fail with an ownership error if you leave this true on a pre-existing unowned namespace.
-  createNamespace: true
+  # Set to true only on a clean hub where the namespace does not yet exist and is not owned by
+  # another tool. If the namespace already exists (e.g. kueue was pre-installed), leave this
+  # false to avoid Helm ownership conflicts.
+  createNamespace: false
 
 # Cluster proxy configuration (optional)
 clusterProxy:
