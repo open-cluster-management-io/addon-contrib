@@ -71,7 +71,7 @@ clusterProxy:
 # ClusterProfile feature gate configuration
 # When enabled (true), uses ClusterProfile API for MultiKueueCluster management
 # When disabled (false, default), uses legacy secret-copy approach with ManagedServiceAccount
-# NOTE: ClusterProfile requires Kueue >= v0.16 and is not yet supported by RHBOK — do not enable for ACM
+# NOTE: ClusterProfile requires Kueue >= v0.16 and is not yet supported by the Kueue operator — do not enable when using operator-based installation
 clusterProfile:
   enabled: false
 
@@ -85,7 +85,7 @@ clusterProfile:
 # Enable Kueue installation via operator
 installKueueViaOperator: false
 
-# Namespaces to label with kueue.openshift.io/managed: "true" so RHBOK manages them.
+# Namespaces to label with kueue.openshift.io/managed: "true" so the Kueue operator manages them.
 # Only applicable when installKueueViaOperator is true.
 managedNamespaces: []
 
@@ -127,7 +127,7 @@ multiKueue:
 #   startingCSV: <cert-manager-starting-csv>
 
 # Kueue CR customization (used when installKueueViaOperator: true)
-# spec.config is required by RHBOK v1.4+ — default below works for BatchJob workloads
+# spec.config is required by the Kueue operator — default below works for BatchJob workloads
 kueueCR:
   spec:
     managementState: Managed
