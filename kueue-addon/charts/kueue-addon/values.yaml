@@ -49,7 +49,9 @@ localQueue:
 kueue:
   namespace: "kueue-system"
   # createNamespace creates the kueue namespace on the hub at helm install time so Placement and
-  # ManagedClusterSetBinding can be created in it without requiring it to pre-exist
+  # ManagedClusterSetBinding can be created in it without requiring it to pre-exist.
+  # Set to false if the namespace already exists and was not created by this chart — Helm will
+  # fail with an ownership error if you leave this true on a pre-existing unowned namespace.
   createNamespace: true
 
 # Cluster proxy configuration (optional)
@@ -123,11 +125,12 @@ multiKueue:
 #   sourceNamespace: <cert-manager-source-namespace>
 #   startingCSV: <cert-manager-starting-csv>
 
-# Kueue CR customization (uncomment when installKueueViaOperator enabled)
-# kueueCR:
-#   spec:
-#     config:
-#       integrations:
-#         frameworks:
-#         - BatchJob
-#     managementState: Managed
+# Kueue CR customization (used when installKueueViaOperator: true)
+# spec.config is required by RHBOK v1.4+ — default below works for BatchJob workloads
+kueueCR:
+  spec:
+    managementState: Managed
+    config:
+      integrations:
+        frameworks:
+        - BatchJob
