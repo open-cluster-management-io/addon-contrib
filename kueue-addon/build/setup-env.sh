@@ -230,7 +230,7 @@ EOF
       "value": {
         "name": "cp-creds-plugin",
         "image": {
-          "reference": "quay.io/open-cluster-management/managed-serviceaccount:latest",
+          "reference": "quay.io/open-cluster-management/cp-creds:latest",
           "pullPolicy": "IfNotPresent"
         }
       }
@@ -292,16 +292,24 @@ install_ocm_addons() {
   kubectl config use-context ${hubctx}
 
   echo "Add ocm helm repo"
-  helm repo add ocm https://open-cluster-management.io/helm-charts/
+  helm repo add ocm https://open-cluster-management.io/helm-charts/ --force-update
   helm repo update
 
   if [[ "$CLUSTERPROFILE" == "true" ]]; then
+    echo "Waiting for AddOnTemplate CRD to be available (required by managed-serviceaccount)..."
+    until kubectl get crd addontemplates.addon.open-cluster-management.io \
+          --context "${hubctx}" >/dev/null 2>&1; do
+      echo "  AddOnTemplate CRD not yet ready, retrying in 5s..."
+      sleep 5
+    done
+    echo "AddOnTemplate CRD is available"
+
     echo "Install managed-serviceaccount with ClusterProfile support"
     helm upgrade --install \
        -n open-cluster-management-addon --create-namespace \
        managed-serviceaccount ocm/managed-serviceaccount \
        --set featureGates.ephemeralIdentity=true \
-       --set featureGates.clusterProfileCredSyncer=true \
+       --set featureGates.clusterProfile=true \
        --set enableAddOnDeploymentConfig=true \
        --set hubDeployMode=AddOnTemplate
 
@@ -309,7 +317,7 @@ install_ocm_addons() {
     helm upgrade --install \
       -n open-cluster-management-addon --create-namespace \
       cluster-proxy ocm/cluster-proxy \
-      --set featureGates.clusterProfileAccessProvider=true \
+      --set featureGates.clusterProfile=true \
       --set userServer.enabled=true \
       --set enableServiceProxy=true \
       --set installByPlacement.placementName=global \
@@ -395,6 +403,69 @@ load_e2e_images() {
   fi
 }
 
+# Function to wait for the ClusterProfile pipeline to be ready before tests run.
+# The pipeline requires all three to be in place before MultiKueueClusters are created:
+#   1. ClusterProfile in kueue-system with at least one access provider (set by cluster-proxy)
+#   2. Synced secret <cluster>-multikueue in kueue-system (set by managed-serviceaccount)
+#   3. ClusterPermission multikueue in the cluster namespace (set by kueue-addon-controller)
+# Items 1 and 2 depend on cluster-proxy and managed-serviceaccount controllers which are
+# installed just before kueue-addon-controller; they need additional time to deploy and reconcile.
+wait_for_clusterprofile_pipeline() {
+  if [[ "$CLUSTERPROFILE" != "true" ]]; then
+    return
+  fi
+
+  echo ""
+  echo "Waiting for ClusterProfile pipeline to be fully ready (ClusterProfiles + synced secrets)..."
+
+  for cluster in ${hub} ${c1} ${c2} ${c3}; do
+    echo "  Waiting for cluster-proxy ManagedClusterAddOn to be Available on '${cluster}'..."
+    kubectl wait managedclusteraddon/cluster-proxy -n "${cluster}" \
+      --for=condition=Available --timeout=300s --context "${hubctx}" || {
+      echo "  WARNING: cluster-proxy addon not Available on ${cluster} after 300s, continuing..."
+    }
+
+    echo "  Waiting for ClusterProfile '${cluster}' in kueue-system to have an access provider..."
+    start=$(date +%s)
+    while true; do
+      access_count=$(kubectl get clusterprofile "${cluster}" -n kueue-system \
+        --context "${hubctx}" -o json 2>/dev/null \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('status',{}).get('accessProviders',[])))" 2>/dev/null || echo "0")
+      if [[ "${access_count}" -ge 1 ]]; then
+        echo "    ClusterProfile '${cluster}' has ${access_count} access provider(s)"
+        break
+      fi
+      elapsed=$(( $(date +%s) - start ))
+      if [[ $elapsed -ge 300 ]]; then
+        echo "ERROR: Timed out after 300s waiting for ClusterProfile '${cluster}' access provider"
+        kubectl get clusterprofile -n kueue-system --context "${hubctx}" 2>&1 || true
+        exit 1
+      fi
+      echo "    still waiting for ClusterProfile '${cluster}' access provider (${elapsed}s)..."
+      sleep 10
+    done
+
+    secret_name="${cluster}-multikueue"
+    echo "  Waiting for synced secret '${secret_name}' in kueue-system..."
+    start=$(date +%s)
+    while ! kubectl get secret "${secret_name}" -n kueue-system \
+          --context "${hubctx}" >/dev/null 2>&1; do
+      elapsed=$(( $(date +%s) - start ))
+      if [[ $elapsed -ge 300 ]]; then
+        echo "ERROR: Timed out after 300s waiting for synced secret '${secret_name}'"
+        kubectl get secret -n kueue-system --context "${hubctx}" 2>&1 || true
+        exit 1
+      fi
+      echo "    still waiting for synced secret '${secret_name}' (${elapsed}s)..."
+      sleep 10
+    done
+    echo "    Synced secret '${secret_name}' is ready"
+  done
+
+  echo "ClusterProfile pipeline is fully ready — all ClusterProfiles and synced secrets exist"
+  echo ""
+}
+
 # Main execution
 create_clusters
 setup_ocm
@@ -404,4 +475,5 @@ if [[ "$CLUSTERPROFILE" == "true" ]]; then
   patch_kueue_controller
 fi
 install_ocm_addons
+wait_for_clusterprofile_pipeline
 setup_fake_gpu
