@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
 )
 
@@ -26,6 +28,7 @@ var (
 	hubClient        kubernetes.Interface
 	hubClusterClient clusterv1client.Interface
 	hubKueueClient   kueueclientset.Interface
+	hubPermClient    permissionclientset.Interface
 
 	// test context
 	ctx context.Context
@@ -69,6 +72,9 @@ var _ = BeforeSuite(func() {
 	hubKueueClient, err = kueueclientset.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred())
 
+	hubPermClient, err = permissionclientset.NewForConfig(config)
+	Expect(err).NotTo(HaveOccurred())
+
 	By("Check Kueue System Ready")
 	// Wait for kueue-system namespace to be ready
 	Eventually(func() error {
@@ -94,6 +100,34 @@ var _ = BeforeSuite(func() {
 		}
 		return nil
 	}).Should(Succeed())
+
+	By("Wait for kueue-addon-controller ClusterPermissions to be reconciled for all clusters")
+	// This confirms the kueue-addon controller is up and has started the
+	// kueuesecretgen reconcile loop, which is a prerequisite for the
+	// multikueuecluster controller to create MultiKueueClusters.
+	managedClusters := []string{"local-cluster", "cluster1", "cluster2", "cluster3"}
+	if value := os.Getenv("HUB"); value != "" {
+		managedClusters[0] = value
+	}
+	if value := os.Getenv("CLUSTER1"); value != "" {
+		managedClusters[1] = value
+	}
+	if value := os.Getenv("CLUSTER2"); value != "" {
+		managedClusters[2] = value
+	}
+	if value := os.Getenv("CLUSTER3"); value != "" {
+		managedClusters[3] = value
+	}
+	Eventually(func() error {
+		for _, clusterName := range managedClusters {
+			_, err := hubPermClient.ApiV1alpha1().ClusterPermissions(clusterName).Get(
+				ctx, "multikueue", metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("ClusterPermission multikueue not yet created in namespace %s: %v", clusterName, err)
+			}
+		}
+		return nil
+	}, 5*time.Minute, 10*time.Second).Should(Succeed())
 })
 
 var _ = AfterSuite(func() {

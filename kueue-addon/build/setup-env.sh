@@ -281,6 +281,10 @@ install_kueue_addon() {
     -n open-cluster-management-addon --create-namespace \
     kueue-addon "$CHART_SOURCE" \
     $EXTRA_ARGS
+
+  echo "Waiting for kueue-addon-controller to be ready..."
+  kubectl wait --for=condition=Available deployment/kueue-addon-controller \
+    -n open-cluster-management-addon --timeout=120s --context ${hubctx}
 }
 
 # Function to install OCM addons
