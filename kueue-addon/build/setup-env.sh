@@ -297,9 +297,16 @@ install_ocm_addons() {
 
   if [[ "$CLUSTERPROFILE" == "true" ]]; then
     echo "Waiting for AddOnTemplate CRD to be available (required by managed-serviceaccount)..."
+    _addon_template_start=$(date +%s)
     until kubectl get crd addontemplates.addon.open-cluster-management.io \
           --context "${hubctx}" >/dev/null 2>&1; do
-      echo "  AddOnTemplate CRD not yet ready, retrying in 5s..."
+      _addon_template_elapsed=$(( $(date +%s) - _addon_template_start ))
+      if [[ $_addon_template_elapsed -ge 300 ]]; then
+        echo "ERROR: Timed out after 300s waiting for AddOnTemplate CRD"
+        kubectl get crd --context "${hubctx}" | grep addon || true
+        exit 1
+      fi
+      echo "  AddOnTemplate CRD not yet ready, retrying in 5s (${_addon_template_elapsed}s)..."
       sleep 5
     done
     echo "AddOnTemplate CRD is available"
