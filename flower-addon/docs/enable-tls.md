@@ -1,6 +1,6 @@
 # Enable TLS
 
-By default, SuperLink and SuperNode communicate over insecure gRPC. This guide enables TLS-secured connections between them.
+By default, SuperLink and SuperNode communicate over HTTP. This guide enables TLS-secured connections between them.
 
 **What gets configured:**
 - **SuperLink** on hub cluster starts with `--ssl-certfile`/`--ssl-keyfile` for server-side TLS
@@ -48,8 +48,7 @@ When submitting FL jobs via `flwr run`, configure TLS in `~/.flwr/config.toml`:
 
 ```toml
 [superlink.ocm-deployment]
-address = "<HUB_NODE_IP>:30093"
-insecure = false
+address = "https://<HUB_NODE_IP>:30093"
 root-certificates = "/path/to/ca.crt"
 ```
 
@@ -63,5 +62,5 @@ kubectl get secret flower-tls-ca -n flower-system -o jsonpath='{.data.ca\.crt}' 
 Then run:
 
 ```bash
-flwr run . ocm-deployment --stream
+flwr run cifar10 ocm-deployment --stream
 ```

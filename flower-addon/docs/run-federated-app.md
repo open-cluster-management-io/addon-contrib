@@ -62,11 +62,21 @@ kubectl --context kind-cluster1 get pods -n flower-addon -l app.kubernetes.io/co
 
 ```bash
 # Setup Python environment
-uv venv && uv pip install -e .
+uv venv && uv pip install -e ./cifar10
+
+# Add this connection to ~/.flwr/config.toml first:
+# [superlink.ocm-deployment]
+# address = "http://<HUB_NODE_IP>:30093"
 
 # Submit FL app
 make run-app
 ```
+
+Flower 1.40 uses one HTTP listener for Fleet, Control, and Runtime APIs.
+The chart keeps the existing service ports and routes them to that listener.
+Use `https://` and `root-certificates` for TLS, as described in
+[Enable TLS](enable-tls.md). Connection settings belong in
+`~/.flwr/config.toml`, not the app's `pyproject.toml`.
 
 ## Monitor
 

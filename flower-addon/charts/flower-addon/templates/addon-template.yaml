@@ -55,7 +55,8 @@ spec:
                       - "--node-config"
                       - 'cluster-name="{{`{{CLUSTER_NAME}}`}}" num-partitions={{`{{NUM_PARTITIONS}}`}}'
                       - "--isolation=process"
-                      - "--clientappio-api-address=0.0.0.0:9094"
+                      - "--host=0.0.0.0"
+                      - "--port=9094"
                     {{- if .Values.tls.enabled }}
                     volumeMounts:
                       - name: tls-ca
