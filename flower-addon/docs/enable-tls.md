@@ -42,13 +42,44 @@ When `tls.enabled=true`:
 - The CA certificate is read from the `flower-tls-ca` Secret (via Helm `lookup`) and embedded in the AddOnTemplate
 - SuperNodes on managed clusters receive the CA cert as a Secret and start with `--root-certificates`
 
-## 3. Run FL Jobs with TLS
+## 3. Configure the ServerApp Runtime connection
+
+Flower 1.40 uses the same TLS listener for Fleet, Control, and Runtime APIs.
+After `make deploy-app`, configure the CIFAR-10 ServerApp SuperExec to trust it:
+
+```bash
+kubectl patch deployment superexec-serverapp -n flower-system --type=strategic --patch '
+spec:
+  template:
+    spec:
+      containers:
+        - name: superexec
+          args:
+            - "--runtime-api-address=superlink:9091"
+            - "--root-certificates=/etc/flower/tls/ca.crt"
+          volumeMounts:
+            - name: tls-ca
+              mountPath: /etc/flower/tls
+              readOnly: true
+      volumes:
+        - name: tls-ca
+          secret:
+            secretName: flower-tls-ca
+'
+```
+
+Apply this patch again after `make deploy-app`, or keep it in your deployment
+customization. The ClientApp SuperExec still connects to the SuperNode's HTTP
+Runtime listener inside the managed cluster.
+
+## 4. Run FL Jobs with TLS
 
 When submitting FL jobs via `flwr run`, configure TLS in `~/.flwr/config.toml`:
 
 ```toml
 [superlink.ocm-deployment]
-address = "https://<HUB_NODE_IP>:30093"
+address = "<HUB_NODE_IP>:30093"
+insecure = false
 root-certificates = "/path/to/ca.crt"
 ```
 

@@ -286,11 +286,13 @@ in `~/.flwr/config.toml`. Use the hub address and the exposed Control service po
 
 ```toml
 [superlink.ocm-deployment]
-address = "http://<HUB_NODE_IP>:30093"
+address = "<HUB_NODE_IP>:30093"
+insecure = true
 ```
 
-Use `https://` and `root-certificates` when TLS is enabled. Then use `flwr run`
-against that connection to start training:
+The controller currently generates HTTP SuperExec connections. Use the default
+HTTP SuperLink deployment for this example. Then use `flwr run` against that
+connection to start training:
 
 ```bash
 flwr run --run-config 'num-server-rounds=3' \
