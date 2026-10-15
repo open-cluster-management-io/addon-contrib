@@ -1,0 +1,19 @@
+# Placement for automatic addon deployment to matching clusters.
+# Clusters with label "addon.open-cluster-management.io/cert-manager=enabled" 
+# will automatically get the cert-manager addon installed.
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: cert-manager-addon-placement
+  namespace: open-cluster-management
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            addon.open-cluster-management.io/cert-manager: "enabled"
+  tolerations:
+    # Include clusters that are not yet fully joined
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists

@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-{{- if eq .AddonInstallNamespace "open-cluster-management-agent-addon" }}
-  annotations:
-    addon.open-cluster-management.io/deletion-orphan: ""
-{{- end }}
-  name: {{ .AddonInstallNamespace }}

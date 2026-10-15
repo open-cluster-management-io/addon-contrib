@@ -18,7 +18,6 @@ This repository contains the following OCM addons:
 - **argocd-agent-addon**: Integrates Argo CD Agent for highly scalable application deployment across managed clusters
 - **clusternet-addon**: Provides Clusternet integration for enhanced cluster networking capabilities
 - **device-addon**: Enables device management functionality within the OCM ecosystem
-- **dynamic-scoring-framework**: A framework for distributed evaluation across multiclusters and centralized aggregation
 - **federated-learning-controller**: Implements federated learning capabilities across distributed clusters
 - **flock-addon**: Deploys FLockAlliance direct client workloads to managed clusters via OCM
 - **fluid-addon**: Integrates Fluid for data orchestration and management in multicluster environments
@@ -28,6 +27,13 @@ This repository contains the following OCM addons:
 - **resource-usage-collect-addon**: Collects and aggregates resource usage metrics across managed clusters
 
 Each addon directory contains its own README with specific installation and usage instructions.
+
+## Graduated Projects
+
+These addons have moved to standalone repositories. A stub README remains at the
+former path for discoverability.
+
+- **dynamic-scoring-framework**: [open-cluster-management-io/dynamic-scoring-framework](https://github.com/open-cluster-management-io/dynamic-scoring-framework)
 
 ## Onboarding a New Project
 

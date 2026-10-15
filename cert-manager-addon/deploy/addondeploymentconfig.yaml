@@ -1,0 +1,37 @@
+# AddOnDeploymentConfig provides per-cluster configuration variables.
+# The AddOnTemplate references these using {{VARIABLE_NAME}} syntax.
+# 
+# To use different configs per cluster, create additional AddOnDeploymentConfig
+# resources and reference them in the ManagedClusterAddOn spec.
+#
+# Note: OCM customizedVariables are strings. Integer fields like Deployment
+# replicas cannot use {{VAR}} templates — unquoted braces are invalid YAML and
+# quoted values are rejected by Kubernetes as strings.
+---
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnDeploymentConfig
+metadata:
+  name: cert-manager-addon-config
+  namespace: open-cluster-management
+spec:
+  # Use namespaces defined in AddOnTemplate (cert-manager), not the OCM default.
+  agentInstallNamespace: ""
+  customizedVariables:
+    # cert-manager version (used for image tags)
+    - name: certManagerVersion
+      value: "v1.21.1"
+    # URL to download cert-manager CRDs
+    # Default: official GitHub release (must match certManagerVersion)
+    # Disconnected: change to internal mirror URL
+    - name: certManagerCrdsUrl
+      value: "https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.crds.yaml"
+    # Image registry prefix for cert-manager components
+    # Default: quay.io/jetstack
+    # Disconnected: change to internal registry
+    - name: imageRegistry
+      value: "quay.io/jetstack"
+    # kubectl image used by the CRD installation Job
+    # Default: official Kubernetes image
+    # Disconnected: mirror to internal registry and update this value
+    - name: kubectlImage
+      value: "registry.k8s.io/kubectl:v1.31.4"
