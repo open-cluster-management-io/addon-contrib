@@ -31,8 +31,7 @@ patches:
         path: /spec/template/spec/containers/0/args
         value:
           - "--insecure"
-          - "--appio-api-address=superlink:9091"
-          - "--plugin-type=serverapp"
+          - "--runtime-api-address=superlink:9091"
 
   # SuperExec-ClientApp configuration (inside ManifestWorkReplicaSet)
   - target:
@@ -46,5 +45,4 @@ patches:
         path: /spec/manifestWorkTemplate/workload/manifests/0/spec/template/spec/containers/0/args
         value:
           - "--insecure"
-          - "--appio-api-address=flower-supernode:9094"
-          - "--plugin-type=clientapp"
+          - "--runtime-api-address=flower-supernode:9094"

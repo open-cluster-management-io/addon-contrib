@@ -281,10 +281,21 @@ flower-supernode                      1/1     1            1           10m
 
 #### 3. Trigger Training
 
-With SuperExec-ServerApp and SuperExec-ClientApp running, use `flwr run` against the SuperLink to trigger a training round:
+With SuperExec-ServerApp and SuperExec-ClientApp running, configure a connection
+in `~/.flwr/config.toml`. Use the hub address and the exposed Control service port:
+
+```toml
+[superlink.ocm-deployment]
+address = "<HUB_NODE_IP>:30093"
+insecure = true
+```
+
+The controller currently generates HTTP SuperExec connections. Use the default
+HTTP SuperLink deployment for this example. Then use `flwr run` against that
+connection to start training:
 
 ```bash
-flwr run --insecure --run-config 'num-server-rounds=3' \
+flwr run --run-config 'num-server-rounds=3' \
   <your-flower-app> \
   <superlink-connection>
 ```
@@ -295,7 +306,7 @@ flwr run --insecure --run-config 'num-server-rounds=3' \
 
 The reference [Flower PyTorch MNIST app](./examples/flower/app-torch/) is a
 SuperExec-compatible Flower app — its `Dockerfile` uses
-`flwr/superexec:1.26.1` as the base image and registers
+`flwr/superexec:1.40.0` as the base image and registers
 `ServerApp` / `ClientApp` via `[tool.flwr.app.components]` in
 `pyproject.toml`. Dependencies are baked into the image at build time so pods
 start without re-downloading PyTorch on every restart.

@@ -6,7 +6,7 @@ superlink:
   namespace: flower-system
   image:
     repository: flwr/superlink
-    tag: "1.26.1-py3.13-ubuntu24.04"
+    tag: "1.40.0-py3.13-ubuntu24.04"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -16,12 +16,15 @@ superlink:
       cpu: 2000m
       memory: 2Gi
   nodePort:
+    # All three service ports route to the shared HTTP listener.
     exec: 30091
     fleet: 30092
     control: 30093
   args:
     - "--insecure"
     - "--isolation=process"
+    - "--host=0.0.0.0"
+    - "--port=9091"
 
 # TLS configuration
 tls:
@@ -35,7 +38,7 @@ tls:
 supernode:
   image:
     repository: flwr/supernode
-    tag: "1.26.1-py3.13-ubuntu24.04"
+    tag: "1.40.0-py3.13-ubuntu24.04"
     pullPolicy: IfNotPresent
   resources:
     requests:

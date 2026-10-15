@@ -32,5 +32,4 @@ spec:
                     imagePullPolicy: Always
                     args:
                       - "--insecure"
-                      - "--appio-api-address={{ .SuperNodeAddress }}"
-                      - "--plugin-type=clientapp"
+                      - "--runtime-api-address={{ .SuperNodeAddress }}"

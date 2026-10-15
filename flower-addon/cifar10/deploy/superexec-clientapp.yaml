@@ -40,8 +40,7 @@ spec:
                     imagePullPolicy: IfNotPresent
                     args:
                       - "--insecure"
-                      - "--appio-api-address=flower-supernode:9094"
-                      - "--plugin-type=clientapp"
+                      - "--runtime-api-address=flower-supernode:9094"
 ---
 # Placement to select clusters with flower-addon enabled
 apiVersion: cluster.open-cluster-management.io/v1beta1

@@ -6,8 +6,8 @@ RELEASE_NAME ?= flower-addon
 CHART_PATH ?= charts/flower-addon
 
 # Image configuration (default: official Flower images)
-SUPERLINK_IMAGE ?= flwr/superlink:1.26.1-py3.13-ubuntu24.04
-SUPERNODE_IMAGE ?= flwr/supernode:1.26.1-py3.13-ubuntu24.04
+SUPERLINK_IMAGE ?= flwr/superlink:1.40.0-py3.13-ubuntu24.04
+SUPERNODE_IMAGE ?= flwr/supernode:1.40.0-py3.13-ubuntu24.04
 APP_IMAGE ?= flower-app:1.0.0
 
 .PHONY: all
@@ -18,7 +18,7 @@ all: help
 .PHONY: build-app
 build-app: ## Build application image for process mode (single image for serverapp and clientapp)
 	@echo "Building application image for process mode..."
-	docker build -t $(APP_IMAGE) -f cifar10/Containerfile .
+	docker build -t $(APP_IMAGE) -f cifar10/Containerfile cifar10
 	@echo ""
 	@echo "Image built successfully: $(APP_IMAGE)"
 
@@ -192,9 +192,7 @@ undeploy-app: ## Remove SuperExec app deployments
 
 .PHONY: run-app
 run-app: ## Run federated learning app on OCM federation
-	@HUB_IP=$$($(KUBECTL) get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'); \
-	echo "Submitting FL app to SuperLink at $$HUB_IP:30093..."; \
-	flwr run . ocm-deployment --federation-config 'address="'"$$HUB_IP"':30093"' --stream
+	flwr run cifar10 ocm-deployment --stream
 
 .PHONY: app-logs
 app-logs: ## Show FL app logs (SuperExec components)
@@ -243,8 +241,8 @@ build: ## Build target (no-op for Helm-only addon)
 	@echo "No build required for Helm-only addon"
 
 .PHONY: test-unit
-test-unit: ## Run unit tests (no-op for Helm-only addon)
-	@echo "No unit tests for Helm-only addon"
+test-unit: ## Check deployment commands and app bundles against Flower
+	python3 hack/test_flower.py
 
 .PHONY: test-integration
 test-integration: ## Run integration tests (no-op for Helm-only addon)

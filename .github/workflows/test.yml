@@ -39,6 +39,16 @@ jobs:
           # go-version-file: go.work
           cache-dependency-path: "**/go.sum"
 
+      - name: Set up Python for Flower compatibility tests
+        if: inputs.repo == 'flower-addon'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Flower for compatibility tests
+        if: inputs.repo == 'flower-addon'
+        run: python3 -m pip install 'flwr==1.40.0'
+
       - name: Verify
         id: verify
         run: cd ${{ inputs.repo }} && make verify
