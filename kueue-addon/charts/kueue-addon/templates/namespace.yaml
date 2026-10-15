@@ -1,0 +1,8 @@
+{{- if .Values.kueue.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.kueue.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- end }}

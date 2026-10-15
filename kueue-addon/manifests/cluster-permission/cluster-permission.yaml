@@ -258,6 +258,55 @@ spec:
       - appwrappers/status
       verbs:
       - get
+    - apiGroups:
+      - kueue.x-k8s.io
+      resources:
+      - workloads
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+      - update
+      - patch
+    - apiGroups:
+      - kueue.x-k8s.io
+      resources:
+      - clusterqueues
+      - localqueues
+      verbs:
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayclusters
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+      - update
+      - patch
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayservices
+      verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+    - apiGroups:
+      - ray.io
+      resources:
+      - rayservices/status
+      verbs:
+      - get
   clusterRoleBinding:
     subject:
       apiGroup: placeholder
