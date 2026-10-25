@@ -1,0 +1,25 @@
+# The 'istio-mesh' addon: installed automatically on every cluster selected by the
+# istio-mesh Placement.
+apiVersion: addon.open-cluster-management.io/v1beta1
+kind: ClusterManagementAddOn
+metadata:
+  name: istio-mesh
+  annotations:
+    addon.open-cluster-management.io/lifecycle: addon-manager
+spec:
+  addOnMeta:
+    displayName: Istio multi-primary mesh
+    description: Istio control plane (via Sail Operator) and east-west gateway per managed cluster
+  defaultConfigs:
+    - group: addon.open-cluster-management.io
+      resource: addontemplates
+      name: istio-mesh-v1
+    - group: addon.open-cluster-management.io
+      resource: addondeploymentconfigs
+      name: istio-mesh-config
+      namespace: istio-mesh-system
+  installStrategy:
+    type: Placements
+    placements:
+      - name: istio-mesh
+        namespace: istio-mesh-system

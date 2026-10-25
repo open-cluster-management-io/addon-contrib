@@ -1,0 +1,19 @@
+# Extra permissions for the OCM work agent on every mesh cluster.
+# The work agent is bound to the built-in 'admin' ClusterRole, which does not cover
+# custom resources such as the Sail Operator 'Istio' CR or Istio's networking APIs.
+# ClusterRoles labelled open-cluster-management.io/aggregate-to-work are aggregated
+# into the work agent's permissions. Apply this on each managed cluster before
+# enabling the addon.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: open-cluster-management:istio-mesh:work
+  labels:
+    open-cluster-management.io/aggregate-to-work: "true"
+rules:
+- apiGroups: ["sailoperator.io"]
+  resources: ["istios"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["networking.istio.io"]
+  resources: ["gateways"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

@@ -1,0 +1,18 @@
+# Shared settings for the istio-mesh addon. The AddOnTemplate reads them as
+# {{ISTIO_VERSION}} and {{MESH_ID}}; {{CLUSTER_NAME}} is built in.
+apiVersion: addon.open-cluster-management.io/v1beta1
+kind: AddOnDeploymentConfig
+metadata:
+  name: istio-mesh-config
+  namespace: istio-mesh-system
+spec:
+  # Template addons default to 'open-cluster-management-agent-addon' (CRD default), and the
+  # template agent then moves every namespaced object of the AddOnTemplate there.
+  # All our objects belong in istio-system.
+  agentInstallNamespace: istio-system
+  customizedVariables:
+    # Istio version the Sail Operator installs; must be supported by the installed Sail Operator
+    - name: ISTIO_VERSION
+      value: v1.31.1
+    - name: MESH_ID
+      value: mesh1
