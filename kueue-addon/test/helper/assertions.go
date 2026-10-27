@@ -13,17 +13,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
-	clientcmdv1 "k8s.io/client-go/tools/clientcmd/api/v1"
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	v1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
 	msaclientset "open-cluster-management.io/managed-serviceaccount/pkg/generated/clientset/versioned"
 	cpcontroller "open-cluster-management.io/ocm/pkg/registration/hub/clusterprofile"
-	cpv1alpha1 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha1"
+	cpv1alpha2 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha2"
 	cpclientset "sigs.k8s.io/cluster-inventory-api/client/clientset/versioned"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclientset "sigs.k8s.io/kueue/client-go/clientset/versioned"
@@ -392,40 +390,40 @@ func AssertMultiKueueClusterUsesClusterProfile(ctx context.Context, client kueue
 
 // CreateClusterProfile creates a ClusterProfile for testing
 func CreateClusterProfile(ctx context.Context, cpClient cpclientset.Interface, clusterName, namespace string) {
-	cp := &cpv1alpha1.ClusterProfile{
+	cp := &cpv1alpha2.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
-				v1.ClusterNameLabelKey:            clusterName,
+				cpv1alpha2.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
+				clusterv1.ClusterNameLabelKey:            clusterName,
 			},
 		},
-		Spec: cpv1alpha1.ClusterProfileSpec{
+		Spec: cpv1alpha2.ClusterProfileSpec{
 			DisplayName: clusterName,
-			ClusterManager: cpv1alpha1.ClusterManager{
+			ClusterManager: cpv1alpha2.ClusterManager{
 				Name: cpcontroller.ClusterProfileManagerName,
 			},
 		},
 	}
 
-	createdCp, err := cpClient.ApisV1alpha1().ClusterProfiles(namespace).Create(ctx, cp, metav1.CreateOptions{})
+	createdCp, err := cpClient.ApisV1alpha2().ClusterProfiles(namespace).Create(ctx, cp, metav1.CreateOptions{})
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 	if createdCp.Status.AccessProviders == nil {
-		createdCp.Status.AccessProviders = []cpv1alpha1.AccessProvider{}
+		createdCp.Status.AccessProviders = []cpv1alpha2.AccessProvider{}
 	}
 
-	accessProvider := cpv1alpha1.AccessProvider{
+	accessProvider := cpv1alpha2.AccessProvider{
 		Name: cpcontroller.ClusterProfileManagerName,
-		Cluster: clientcmdv1.Cluster{
+		Cluster: cpv1alpha2.Cluster{
 			Server:                   "https://test-cluster:6443",
 			CertificateAuthorityData: []byte("test-ca-data"),
 		},
 	}
 
 	createdCp.Status.AccessProviders = append(createdCp.Status.AccessProviders, accessProvider)
-	_, err = cpClient.ApisV1alpha1().ClusterProfiles(namespace).UpdateStatus(ctx, createdCp, metav1.UpdateOptions{})
+	_, err = cpClient.ApisV1alpha2().ClusterProfiles(namespace).UpdateStatus(ctx, createdCp, metav1.UpdateOptions{})
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 }
 
@@ -441,8 +439,8 @@ func CreateClusterProfileSecret(ctx context.Context, hubKubeClient kubernetes.In
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: cpv1alpha1.GroupVersion.String(),
-					Kind:       cpv1alpha1.Kind,
+					APIVersion: cpv1alpha2.GroupVersion.String(),
+					Kind:       cpv1alpha2.Kind,
 					Name:       clusterName,
 					UID:        types.UID("fake-uid"),
 				},
@@ -459,7 +457,7 @@ func CreateClusterProfileSecret(ctx context.Context, hubKubeClient kubernetes.In
 
 // RemoveClusterProfile removes a ClusterProfile
 func RemoveClusterProfile(ctx context.Context, cpClient cpclientset.Interface, clusterName, namespace string) {
-	err := cpClient.ApisV1alpha1().ClusterProfiles(namespace).Delete(ctx, clusterName, metav1.DeleteOptions{})
+	err := cpClient.ApisV1alpha2().ClusterProfiles(namespace).Delete(ctx, clusterName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		ginkgo.GinkgoWriter.Printf("Failed to delete ClusterProfile %s: %v", clusterName, err)
 	}
