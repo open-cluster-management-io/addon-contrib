@@ -19,7 +19,7 @@ require (
 	open-cluster-management.io/managed-serviceaccount v0.10.0
 	open-cluster-management.io/ocm v1.0.0
 	open-cluster-management.io/sdk-go v1.2.0
-	sigs.k8s.io/cluster-inventory-api v0.1.3
+	sigs.k8s.io/cluster-inventory-api v0.2.0
 	sigs.k8s.io/controller-runtime v0.25.1
 	sigs.k8s.io/kueue v0.20.7
 )
