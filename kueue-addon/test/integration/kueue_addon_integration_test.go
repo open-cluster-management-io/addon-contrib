@@ -401,7 +401,7 @@ var _ = ginkgo.Describe("Kueue AdmissionCheck Integration", func() {
 			helper.AssertMultiKueueClustersExists(ctx, hubKueueClient, []string{cluster1})
 
 			// Delete ClusterProfile
-			err := hubCPClient.ApisV1alpha1().ClusterProfiles(kueueNamespace).Delete(ctx, cluster1, metav1.DeleteOptions{})
+			err := hubCPClient.ApisV1alpha2().ClusterProfiles(kueueNamespace).Delete(ctx, cluster1, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			// Assert MultiKueueCluster is deleted
