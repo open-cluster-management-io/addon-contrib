@@ -1,0 +1,118 @@
+# AddOnTemplate for the per-cluster Istio configuration (work agent RBAC, Sail Operator
+# 'Istio' CR, east-west gateway).
+# Placeholders: {{CLUSTER_NAME}} is built in; {{ISTIO_VERSION}}, {{MESH_ID}} and
+# {{TRUST_DOMAIN}} come from the AddOnDeploymentConfig 'istio-mesh-config'.
+# Expected on each managed cluster beforehand (see README "Prerequisites"):
+#   the Sail Operator, the Gateway API CRDs, and the istio-system namespace with its
+#   network label and the cacerts secret.
+apiVersion: addon.open-cluster-management.io/v1alpha1
+kind: AddOnTemplate
+metadata:
+  name: istio-mesh-v1
+spec:
+  addonName: istio-mesh
+  agentSpec:
+    workload:
+      manifests:
+      # The work agent is bound to the built-in 'admin' ClusterRole, which does not cover
+      # the Sail Operator 'Istio' CR or the Gateway API. ClusterRoles labelled
+      # open-cluster-management.io/aggregate-to-work are aggregated into its permissions.
+      # Until the aggregation lands, applying the Istio CR and Gateway fails and the work
+      # agent retries.
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: open-cluster-management:istio-mesh:work
+          labels:
+            open-cluster-management.io/aggregate-to-work: "true"
+        rules:
+        - apiGroups: ["sailoperator.io"]
+          resources: ["istios"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["gateway.networking.k8s.io"]
+          resources: ["gateways"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiVersion: sailoperator.io/v1
+        kind: Istio
+        metadata:
+          name: default
+        spec:
+          version: '{{ISTIO_VERSION}}'
+          namespace: istio-system
+          values:
+            meshConfig:
+              # Must be the same on every cluster of the mesh.
+              trustDomain: '{{TRUST_DOMAIN}}'
+            global:
+              meshID: '{{MESH_ID}}'
+              multiCluster:
+                clusterName: '{{CLUSTER_NAME}}'
+              network: network-{{CLUSTER_NAME}}
+      # Overlays for the gateway objects istiod renders (strategic merge patches). istiod
+      # only creates the HorizontalPodAutoscaler and PodDisruptionBudget when they are set.
+      - apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: istio-eastwestgateway-options
+          namespace: istio-system
+        data:
+          # Run the replicas on separate nodes, so a node drain evicts at most one and the
+          # PodDisruptionBudget (minAvailable: 1) does not block it.
+          deployment: |
+            spec:
+              template:
+                spec:
+                  affinity:
+                    podAntiAffinity:
+                      requiredDuringSchedulingIgnoredDuringExecution:
+                      - topologyKey: kubernetes.io/hostname
+                        labelSelector:
+                          matchLabels:
+                            gateway.networking.k8s.io/gateway-name: istio-eastwestgateway
+          # At least two replicas, so the PodDisruptionBudget allows an eviction.
+          horizontalPodAutoscaler: |
+            spec:
+              minReplicas: 2
+              maxReplicas: 5
+              metrics:
+              - type: Resource
+                resource:
+                  name: cpu
+                  target:
+                    type: Utilization
+                    averageUtilization: 80
+          podDisruptionBudget: |
+            spec:
+              minAvailable: 1
+      # istiod creates the gateway Deployment and LoadBalancer Service from this Gateway
+      # once it is running, with an explicit proxy image and no sidecar injection, so the
+      # gateway pod cannot be created before the injection webhook exists. Placeholders
+      # cannot be used in metadata.labels (the AddOnTemplate API validates them), so the
+      # network label is set in spec.infrastructure.labels: istiod copies it to the
+      # Service, where it identifies the gateway of the network, and to the pods.
+      - apiVersion: gateway.networking.k8s.io/v1
+        kind: Gateway
+        metadata:
+          name: istio-eastwestgateway
+          namespace: istio-system
+        spec:
+          gatewayClassName: istio
+          infrastructure:
+            labels:
+              topology.istio.io/network: network-{{CLUSTER_NAME}}
+            parametersRef:
+              group: ""
+              kind: ConfigMap
+              name: istio-eastwestgateway-options
+          listeners:
+          # Exposes *.local services to the other networks, passing mTLS through.
+          - name: cross-network
+            port: 15443
+            protocol: TLS
+            tls:
+              mode: Passthrough
+              options:
+                gateway.istio.io/listener-protocol: auto-passthrough
+            allowedRoutes:
+              namespaces:
+                from: Same

@@ -1,0 +1,32 @@
+# Hub-side scaffolding: a namespace for the addon's hub objects, a binding to the
+# 'global' ManagedClusterSet, and a Placement that selects mesh members: clusters
+# labelled addon.open-cluster-management.io/istio-mesh=enabled.
+# OCM creates and maintains 'global' (it contains every cluster) only while the
+# DefaultClusterSet feature gate is enabled, which is the default. If the gate is
+# disabled, replace 'global' below with a ManagedClusterSet that holds the mesh clusters.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-mesh-system
+---
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: istio-mesh-system
+spec:
+  clusterSet: global
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: istio-mesh
+  namespace: istio-mesh-system
+spec:
+  clusterSets:
+    - global
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            addon.open-cluster-management.io/istio-mesh: enabled
