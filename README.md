@@ -35,6 +35,15 @@ former path for discoverability.
 
 - **dynamic-scoring-framework**: [open-cluster-management-io/dynamic-scoring-framework](https://github.com/open-cluster-management-io/dynamic-scoring-framework)
 
+## Building a New Add-on with AI Assistance
+
+Vendor-neutral AI guides and prompts for OCM live in
+[lab/ai-assistance](https://github.com/open-cluster-management-io/lab/tree/main/ai-assistance).
+To turn an existing Deployment or DaemonSet into an add-on, start with:
+
+- [Build an add-on with AddOnTemplate](https://github.com/open-cluster-management-io/lab/blob/main/ai-assistance/guides/getting-started/build-an-addon-with-addontemplate.md): a step-by-step guide
+- [scaffold-template-addon](https://github.com/open-cluster-management-io/lab/blob/main/ai-assistance/prompts/addon-development/scaffold-template-addon.md): a prompt that generates the add-on YAML
+
 ## Onboarding a New Project
 
 To onboard a new addon-contrib project:
