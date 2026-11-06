@@ -9,7 +9,7 @@ CLEAN=false
 E2E_MODE=false
 IMPERSONATION=false
 CLUSTERPROFILE=false
-KUEUE_VERSION="v0.16.0"
+KUEUE_VERSION="v0.20.5"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --clean)
@@ -56,12 +56,17 @@ spoke_ctx=(${c1ctx} ${c2ctx} ${c3ctx})
 all_ctx=(${hubctx} ${spoke_ctx[@]})
 
 kueue_manifest="https://github.com/kubernetes-sigs/kueue/releases/download/${KUEUE_VERSION}/manifests.yaml"
-jobset_manifest="https://github.com/kubernetes-sigs/jobset/releases/download/v0.7.1/manifests.yaml"
+jobset_manifest="https://github.com/kubernetes-sigs/jobset/releases/download/v0.13.0/manifests.yaml"
 mpi_operator_manifest="https://raw.githubusercontent.com/kubeflow/mpi-operator/master/deploy/v2beta1/mpi-operator.yaml"
 training_operator_kustomize="github.com/kubeflow/training-operator.git/manifests/overlays/standalone?ref=v1.9.3"
 trainer_controlplane_kustomize="https://github.com/kubeflow/trainer.git/manifests/overlays/manager?ref=v2.1.0"
 ray_operator_crd_manifest="github.com/ray-project/kuberay/ray-operator/config/crd?ref=v1.3.0"
 appwrapper_manifest="https://github.com/project-codeflare/appwrapper/releases/download/v1.1.2/install.yaml"
+# Kueue v0.20+ MultiKueue watches LeaderWorkerSets on worker clusters.
+lws_version="v1.0.0"
+lws_manifest="https://github.com/kubernetes-sigs/lws/releases/download/${lws_version}/manifests.yaml"
+# The hub (MultiKueue manager) only needs the LWS CRD, not the LWS controller.
+lws_crd_manifest="https://raw.githubusercontent.com/kubernetes-sigs/lws/${lws_version}/config/crd/bases/leaderworkerset.x-k8s.io_leaderworkersets.yaml"
 
 # Function to create kind clusters
 create_clusters() {
@@ -115,8 +120,12 @@ install_kueue() {
       kubectl apply --server-side -f "$jobset_manifest" --context "$ctx"
   done
 
+  echo "Install LeaderWorkerSet CRD on hub $hubctx"
+  kubectl apply --server-side -f "$lws_crd_manifest" --context "$hubctx"
+
   for ctx in "${spoke_ctx[@]}"; do
-      echo "Install Kubeflow MPI Operator, Training Operator on $ctx"
+      echo "Install Kubeflow MPI Operator, Training Operator, LeaderWorkerSet on $ctx"
+      kubectl apply --server-side -f "$lws_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$mpi_operator_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$appwrapper_manifest" --context "$ctx" || true
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true
@@ -256,13 +265,15 @@ EOF
 install_kueue_addon() {
   echo "Install kueue-addon"
 
-  # Determine chart source
+  # Install the chart from this repo so the add-on matches the Kueue version
+  # installed above. The published ocm/kueue-addon chart can lag behind and
+  # miss RBAC rules newer Kueue releases need on the spoke clusters.
+  CHART_SOURCE="../charts/kueue-addon"
   if [[ "$E2E_MODE" == "true" ]]; then
-    CHART_SOURCE="../charts/kueue-addon"
     EXTRA_ARGS="--set image.tag=e2e"
   else
-    CHART_SOURCE="ocm/kueue-addon"
-    EXTRA_ARGS=""
+    # "latest" is published from main on every merge.
+    EXTRA_ARGS="--set image.tag=${KUEUE_ADDON_IMAGE_TAG:-latest}"
   fi
 
   # Add impersonation settings if enabled (legacy mode with impersonation)
