@@ -67,6 +67,8 @@ appwrapper_manifest="https://github.com/project-codeflare/appwrapper/releases/do
 # not installed: it runs 2 replicas requesting 1 CPU each, which leaves no room
 # on a 4-CPU CI runner for the e2e GPU job pods to schedule.
 lws_version="v1.0.0"
+lws_manifest="https://github.com/kubernetes-sigs/lws/releases/download/${lws_version}/manifests.yaml"
+# The hub (MultiKueue manager) only needs the LWS CRD, not the LWS controller.
 lws_crd_manifest="https://raw.githubusercontent.com/kubernetes-sigs/lws/${lws_version}/config/crd/bases/leaderworkerset.x-k8s.io_leaderworkersets.yaml"
 
 # Function to create kind clusters
@@ -127,7 +129,8 @@ install_kueue() {
   done
 
   for ctx in "${spoke_ctx[@]}"; do
-      echo "Install Kubeflow MPI Operator, Training Operator on $ctx"
+      echo "Install Kubeflow MPI Operator, Training Operator, LeaderWorkerSet on $ctx"
+      kubectl apply --server-side -f "$lws_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$mpi_operator_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$appwrapper_manifest" --context "$ctx" || true
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true

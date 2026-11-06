@@ -90,10 +90,6 @@ var _ = Describe("MultiKueue Scenarios", func() {
 							},
 						}},
 					}},
-					// Only the MultiKueue check gates admission. The OCM placement check
-					// (multikueue-config-e2e) just generates the MultiKueueConfig and never
-					// sets a per-workload state, and MultiKueue waits for every other check
-					// on the ClusterQueue to be Ready before dispatching.
 					AdmissionChecksStrategy: &kueuev1beta2.AdmissionChecksStrategy{
 						AdmissionChecks: []kueuev1beta2.AdmissionCheckStrategyRule{
 							{Name: "multikueue-e2e"},
