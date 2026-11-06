@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-Script to update cluster-permission.yaml with latest rules from Kueue repository.
+Script to update cluster-permission.yaml with rules from the Kueue repository.
+
+The Kueue git ref is read from the KUEUE_VERSION environment variable (set by
+the Makefile from go.mod) and defaults to "main".
 """
 
+import os
 import requests
 import yaml
 import re
@@ -10,8 +14,9 @@ import sys
 from pathlib import Path
 
 def fetch_kueue_rules():
-    """Fetch the latest multikueue script from Kueue repository."""
-    url = "https://raw.githubusercontent.com/kubernetes-sigs/kueue/main/site/static/examples/multikueue/create-multikueue-kubeconfig.sh"
+    """Fetch the multikueue script from the Kueue repository at KUEUE_VERSION."""
+    ref = os.environ.get("KUEUE_VERSION") or "main"
+    url = f"https://raw.githubusercontent.com/kubernetes-sigs/kueue/{ref}/site/static/examples/multikueue/create-multikueue-kubeconfig.sh"
     
     try:
         response = requests.get(url, timeout=30)

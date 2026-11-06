@@ -17,7 +17,6 @@ import (
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	v1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
@@ -398,7 +397,7 @@ func CreateClusterProfile(ctx context.Context, cpClient cpclientset.Interface, c
 			Namespace: namespace,
 			Labels: map[string]string{
 				cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
-				v1.ClusterNameLabelKey:            clusterName,
+				clusterv1.ClusterNameLabelKey:            clusterName,
 			},
 		},
 		Spec: cpv1alpha1.ClusterProfileSpec{

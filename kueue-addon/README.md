@@ -179,6 +179,10 @@ For a complete setup including all prerequisites on Kind:
 ./build/setup-env.sh --clusterprofile
 ```
 
+The script installs Kueue v0.20.5 (override with `--kueue-version`) and installs the add-on from this repository's chart (`charts/kueue-addon`) with the `latest` image built from `main`, so the add-on's RBAC matches the installed Kueue version. Set `KUEUE_ADDON_IMAGE_TAG` to use a different image tag.
+
+> **Note:** If you see `inotify_init: too many open files` errors while creating the Kind clusters, raise the limit with `sudo sysctl fs.inotify.max_user_instances=512`.
+
 ## Installation
 
 ### Step 1: Add Helm Repository
