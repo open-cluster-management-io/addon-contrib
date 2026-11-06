@@ -1,0 +1,34 @@
+# One Placement per pod scheduler, keyed on the managed cluster label "scheduler".
+# The kueue-addon turns each one into a MultiKueueConfig with the same name.
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: kube-batch
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: scheduler, operator: In, values: [kube-scheduler]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: slurm
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: scheduler, operator: In, values: [slurm]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
