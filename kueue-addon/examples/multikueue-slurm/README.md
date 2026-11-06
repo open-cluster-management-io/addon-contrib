@@ -1,28 +1,27 @@
-# MultiKueue with other schedulers: Kubernetes and Slurm behind one queue
+# Two schedulers, one queue: MultiKueue meets Slurm
 
-> Submit the same Kubernetes Job to one hub. Send it to `kube-queue` and the default
-> kube-scheduler runs it. Send it to `slurm-queue` and **Slurm** decides where and when it
-> runs. Users never see a Slurm login node, and Slurm admins keep their scheduler.
+> Submit a plain Kubernetes Job to one hub. Put it on `kube-queue` and the Kubernetes
+> scheduler runs it. Put it on `slurm-queue` and **Slurm** decides where and when it runs,
+> with its queue, its time limits and its whole-node allocation. Same YAML, same `kubectl`.
 
-Many organizations run two worlds: Kubernetes clusters for services and newer AI workloads, and
-Slurm clusters for HPC and large training jobs. This example shows that MultiKueue doesn't care
-which scheduler places pods on a worker. The hub only decides *which cluster* gets a job. Each
-worker then places the pods with its own scheduler.
-
-| Layer | Who decides | Tool |
-|---|---|---|
-| Which cluster | Hub | OCM `Placement` + Kueue **MultiKueue** |
-| Whether it fits the team's quota | Hub and worker | Kueue `ClusterQueue` |
-| Which node, and when | Worker | kube-scheduler on `cluster1`, **Slurm** on `slurm-cluster` |
-
-On `slurm-cluster`, [slurm-bridge](https://github.com/SlinkyProject/slurm-bridge) is the pod
-scheduler. It turns each pod into a Slurm job, waits for Slurm to allocate a node, and then binds
-the pod there. [slurm-operator](https://github.com/SlinkyProject/slurm-operator) runs the Slurm
-control plane (`slurmctld` and `slurmrestd`) as pods in the same cluster.
+MultiKueue sends each job to a worker cluster. What happens inside that worker is up to the
+worker. This example puts that to the test with a worker where the pod scheduler isn't
+Kubernetes at all.
 
 ---
 
-## Architecture
+## The scenario
+
+Your organization has two kinds of compute:
+
+| | Cluster | Pods placed by | Run by |
+|---|---|---|---|
+| ☸️ | `cluster1` | the default **kube-scheduler** | the platform team |
+| 🖥️ | `slurm-cluster` | **Slurm**, through [slurm-bridge](https://github.com/SlinkyProject/slurm-bridge) | the HPC team, who has run Slurm for years |
+
+The researchers don't want to learn `sbatch`, and the HPC team doesn't want to give up Slurm. With
+MultiKueue, nobody has to switch: researchers submit Kubernetes Jobs to one hub, and the queue
+decides which scheduler gets the job.
 
 ```mermaid
 flowchart LR
@@ -37,11 +36,11 @@ flowchart LR
     P1 -- MultiKueue --> C1
     P2 -- MultiKueue --> C2
 
-    subgraph C1[cluster1]
+    subgraph C1[☸️ cluster1]
       KS[kube-scheduler] --> N1[(node)]
     end
 
-    subgraph C2[slurm-cluster]
+    subgraph C2[🖥️ slurm-cluster]
       direction TB
       KU[Kueue] --> SB[slurm-bridge<br/>scheduler]
       SB <--> SC[slurmctld<br/>+ slurmrestd]
@@ -50,40 +49,29 @@ flowchart LR
     end
 ```
 
-`slurm-cluster` is a 4-node kind cluster running Kubernetes v1.35.0:
+### Who decides what
 
-| Node | Role |
-|---|---|
-| `control-plane` | Kubernetes control plane |
-| `worker` | System node: slurmctld, slurmrestd, slurm-operator, slurm-bridge, Kueue, OCM agents |
-| `worker2`, `worker3` | Batch nodes. Labelled `scheduler.slinky.slurm.net/external-node=true`, so slurm-bridge registers them in Slurm, and tainted so that only slurm-bridge places pods there |
-
-The batch nodes run no `slurmd`. slurm-bridge registers them in Slurm as **external nodes**, with
-their real CPU and memory, in the `slurm-bridge` partition:
-
-```
-NODELIST PARTITION CPUS MEMORY STATE
-slurm-cluster-worker2 slurm-bridge* 16 63991 idle
-slurm-cluster-worker3 slurm-bridge* 16 63991 idle
-```
+| Question | Answered by | Where |
+|---|---|---|
+| Which cluster runs this job? | OCM `Placement` + Kueue **MultiKueue** | Hub |
+| Does it fit the team's quota? | Kueue `ClusterQueue` | Hub, then worker |
+| Which node runs it, and when? | kube-scheduler on `cluster1`, **Slurm** on `slurm-cluster` | Worker |
 
 ---
 
 ## Quick start
 
 You need the environment from [`build/setup-env.sh`](../../build/setup-env.sh). This example
-reuses its hub (`local-cluster`) and `cluster1`, and adds a new cluster.
+reuses its hub (`local-cluster`) and `cluster1`, and adds one new cluster.
 
 ```bash
-sudo sysctl fs.inotify.max_user_instances=2048   # kind nodes need inotify instances
+sudo sysctl fs.inotify.max_user_instances=2048   # each kind node needs inotify instances
 cd examples/multikueue-slurm
-./create-slurm-cluster.sh   # new kind cluster + Slurm + slurm-bridge + Kueue, joined to OCM
+./create-slurm-cluster.sh   # kind + Slurm + slurm-bridge + Kueue, joined to OCM (~4 min with cached images)
 ./setup.sh                  # hub queues, Placements and worker LocalQueues
 ./demo.sh                   # narrated live walk-through (PAUSE=6 ./demo.sh when presenting)
 ./teardown.sh               # remove everything this example added
 ```
-
-`create-slurm-cluster.sh` installs these versions:
 
 | Component | Version |
 |---|---|
@@ -92,20 +80,60 @@ cd examples/multikueue-slurm
 | cert-manager | v1.21.2 |
 | Kueue | v0.20.5 |
 
-### Onboarding is one `clusteradm join`
+---
 
-The script joins `slurm-cluster` to the hub with `clusteradm`. Within about a minute, the OCM
-addons have done the rest on their own:
+## Inside `slurm-cluster`
 
-- `managed-serviceaccount` creates the token MultiKueue uses, and rotates it.
-- `kueue-addon` creates the kubeconfig secret and the `MultiKueueCluster`, and deploys the
+[slurm-operator](https://github.com/SlinkyProject/slurm-operator) runs the Slurm control plane
+(`slurmctld` and `slurmrestd`) as ordinary pods. slurm-bridge then makes Slurm the scheduler
+for two of the Kubernetes nodes:
+
+| Node | Role |
+|---|---|
+| `control-plane` | Kubernetes control plane |
+| `worker` | System node: slurmctld, slurmrestd, slurm-operator, slurm-bridge, Kueue, OCM agents |
+| `worker2`, `worker3` | **Slurm nodes.** Labelled `scheduler.slinky.slurm.net/external-node=true` so slurm-bridge registers them in Slurm, and tainted so only slurm-bridge places pods there |
+
+These nodes run no `slurmd`. slurm-bridge registers them in Slurm with their real CPU and memory,
+and Slurm sees them like any other nodes:
+
+```
+NODELIST PARTITION CPUS MEMORY STATE
+slurm-cluster-worker2 slurm-bridge* 16 63991 idle
+slurm-cluster-worker3 slurm-bridge* 16 63991 idle
+```
+
+### The life of a job on `slurm-cluster`
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Hub as Hub (Kueue + MultiKueue)
+    participant WK as Worker Kueue
+    participant SB as slurm-bridge
+    participant S as slurmctld
+    participant K as kubelet (worker2/3)
+    Hub->>WK: copy Job + Workload (after hub quota check)
+    WK->>WK: admit against local quota, unsuspend Job
+    WK-->>SB: Job creates pod (webhook sets schedulerName)
+    SB->>S: submit a stand-in Slurm job (via slurmrestd)
+    S-->>SB: node allocated (or job waits in squeue)
+    SB->>K: bind pod to the allocated node
+    K-->>SB: pod finishes
+    SB->>S: cancel the stand-in job
+    Hub->>WK: MultiKueue syncs the Job status back to the hub
+```
+
+### Joining the hub is one `clusteradm join`
+
+`create-slurm-cluster.sh` joins the new cluster to the hub. About a minute later, the OCM
+addons have set up everything MultiKueue needs on their own:
+
+- **managed-serviceaccount** creates the token MultiKueue uses, and rotates it.
+- **kueue-addon** writes the kubeconfig secret, creates the `MultiKueueCluster`, and deploys the
   worker's `cluster-queue`.
-- The `hpc-workers` ManifestWorkReplicaSet pushes the `hpc` namespace and LocalQueues as soon as
-  `setup.sh` labels the cluster.
-
-The hub auto-approves the certificate request from a cluster name's first join, but not from a
-rejoin under the same name (for example after `teardown.sh`). The script approves the cluster's
-pending CSRs itself, which is what `clusteradm accept` does.
+- The **`hpc-workers` ManifestWorkReplicaSet** pushes the `hpc` namespace and LocalQueues as soon
+  as `setup.sh` labels the cluster `scheduler=slurm`.
 
 ---
 
@@ -113,7 +141,7 @@ pending CSRs itself, which is what `clusteradm accept` does.
 
 [`workloads/01-job-kube-scheduler.yaml`](workloads/01-job-kube-scheduler.yaml) and
 [`workloads/02-job-slurm.yaml`](workloads/02-job-slurm.yaml) are the same plain `batch/v1` Job.
-They differ only in name and queue:
+Apart from the name, one line differs:
 
 ```yaml
 apiVersion: batch/v1
@@ -137,20 +165,21 @@ spec:
           requests: {cpu: "1", memory: 256Mi}
 ```
 
-There is no `schedulerName` in the Job. On `slurm-cluster`, slurm-bridge's admission webhook
-sets `schedulerName: slurm-bridge-scheduler` on every pod in the `hpc` namespace. The
-`slurmjob.slinky.slurm.net/*` annotations become Slurm job options. MultiKueue copies the
-annotations to the worker, so users can set Slurm options from the hub. The default scheduler
-on `cluster1` ignores them.
+There's no `schedulerName` and no Slurm script:
+
+- **The webhook picks the scheduler.** slurm-bridge's admission webhook sets
+  `schedulerName: slurm-bridge-scheduler` on every pod in the `hpc` namespace of `slurm-cluster`.
+- **Slurm options are annotations.** MultiKueue copies them from the hub to the worker, where they
+  become Slurm job options. On `cluster1`, the default scheduler ignores them.
 
 ---
 
 ## What `demo.sh` shows
 
-### 1. The same Job, two schedulers
+### 1. Same Job, two schedulers ☸️ 🖥️
 
-One Job goes to each queue. The kube-scheduler places one pod on `cluster1`. On
-`slurm-cluster` the pod waits for Slurm, and `squeue` shows it as a Slurm job:
+One Job goes to each queue. On `cluster1`, the kube-scheduler places the pod. On `slurm-cluster`,
+the pod becomes Slurm job 1. This is real output from a run:
 
 ```
 [hub] Kueue workloads
@@ -166,11 +195,11 @@ One Job goes to each queue. The kube-scheduler places one pod on `cluster1`. On
        1  train-slurm   RUNNING  slurm-cluster-worker2     0:09 None
 ```
 
-### 2. Kueue admits, Slurm places
+### 2. Kueue admits, Slurm places 🧮
 
-Four Slurm jobs, but only two Slurm nodes. Kueue's quota allows all four, so the hub admits every
-workload. By default slurm-bridge gives each pod a whole node, so Slurm runs two and **queues the
-others in its own queue**:
+Four more Slurm jobs, but only two Slurm nodes. Kueue's quota allows all four, so the hub admits
+every one. slurm-bridge gives each pod a whole node by default, so **Slurm runs two and queues
+the rest in its own queue**:
 
 ```
 [hub] Kueue workloads
@@ -195,16 +224,54 @@ others in its own queue**:
        3  train-slurm   RUNNING  slurm-cluster-worker3     0:03 None
 ```
 
-All four workloads are admitted on the hub, but only two pods have a node. The two with
-`node=<none>` are the ones Slurm is holding as jobs 4 and 5. (The pod on worker3 already has its
-node and is still starting its container.) When the first two finish, Slurm starts jobs 4 and 5.
-The queueing shows in the hub's job durations: in one run, about 37 seconds for the jobs that
-started right away and 85 seconds for the ones that waited. Everything finishes, and the status
-syncs back to the Jobs on the hub.
+The two pods with `node=<none>` are Slurm jobs 4 and 5, waiting for a free node. (The pod on
+worker3 has its node and is still starting its container.) When the first two finish, Slurm
+starts the next two. The wait shows in the hub's job durations: in one run, about 37 seconds for
+the jobs that started right away and 85 seconds for the ones that waited.
 
-This is the split of responsibilities: **Kueue** enforces quotas and picks the cluster,
-**Slurm** applies its own policies (whole-node allocation, priority, time limits) to decide which
-node runs what, and when.
+### 3. The hub sees every result ✅
+
+Every Job on the hub ends `Complete`. MultiKueue syncs the status back from the worker, so users
+never need access to `slurm-cluster`.
+
+---
+
+## Try this next
+
+**Let Slurm enforce a time limit.** [`workloads/03-job-slurm-timelimit.yaml`](workloads/03-job-slurm-timelimit.yaml)
+asks Slurm for 1 minute but sleeps for 3:
+
+```bash
+kubectl --context kind-local-cluster create -f workloads/03-job-slurm-timelimit.yaml
+```
+
+Slurm stops the job when its time runs out, and the Job on the hub fails. In testing this took
+2m20s: the 1-minute limit plus Slurm's kill and cleanup time.
+
+```
+$ kubectl --context kind-local-cluster get jobs -n hpc
+NAME             STATUS   COMPLETIONS   DURATION   AGE
+too-long-hkkgs   Failed   0/1           2m20s      2m22s
+
+# on slurm-cluster
+JobId=14   JobState=TIMEOUT   Reason=TimeLimit
+```
+
+The file sets `backoffLimit: 0`. With the default `backoffLimit` of 6, the Job controller
+replaces the killed pod, which becomes a new Slurm job that times out again.
+
+**Ask Slurm about a job.** Slurm keeps finished jobs for 5 minutes (`MinJobAge=300`), so you
+can inspect what it decided. Take a job ID from `squeue` or from the end of `demo.sh`:
+
+```bash
+kubectl --context kind-slurm-cluster exec -n slurm slurm-controller-0 -c slurmctld -- squeue
+kubectl --context kind-slurm-cluster exec -n slurm slurm-controller-0 -c slurmctld -- scontrol show job <JOBID>
+```
+
+**Try other Slurm options.** slurm-bridge reads more `slurmjob.slinky.slurm.net/` annotations,
+such as `partition`, `qos`, `account`, `priority` and `gres`. The
+[workload docs](https://github.com/SlinkyProject/slurm-bridge/blob/v1.2.4/docs/workload.md) list
+them all. This example has tested only `job-name` and `timelimit`.
 
 ---
 
@@ -216,23 +283,27 @@ node runs what, and when.
   for kind "JobSet"`, even if that worker will never run one.
   [`slurm-cluster/install-integration-crds.sh`](slurm-cluster/install-integration-crds.sh)
   installs only the CRDs, without their controllers.
-- **Slurm's stand-in jobs end as `CANCELLED`.** slurm-bridge represents each pod as a Slurm job
-  and cancels it when the pod finishes, so `scontrol show job` lists finished pods as
-  `CANCELLED`. The Kubernetes Job still reports `Complete`.
+- **Kueue doesn't see Slurm's whole-node allocation.** Kueue's quota counts each pod's resource
+  requests (1 CPU here), not the whole node that Slurm gives it. That's why the hub admits four
+  jobs that Slurm then queues. Size quotas to match how Slurm allocates if you don't want work
+  waiting in Slurm.
+- **Whole-node allocation is the default.** slurm-bridge gives each pod an entire Slurm node.
+  Sharing nodes needs Slurm MCS and the `mcsLabel` setting in slurm-bridge.
+- **Stand-in jobs end as `CANCELLED`.** slurm-bridge cancels a pod's Slurm job when the pod
+  finishes, so `scontrol show job` lists finished pods as `CANCELLED` while the Kubernetes Job
+  reports `Complete`. A job that runs out of time shows `TIMEOUT` instead.
 - **No Slurm accounting.** The Slurm chart runs without `slurmdbd`, so `sacct` is unavailable.
   Use `squeue` and `scontrol show job`.
-- **Whole-node allocation.** slurm-bridge gives each pod an entire Slurm node by default. Shared
-  nodes need Slurm MCS and the `mcsLabel` setting in slurm-bridge.
-- **The hub doesn't know about Slurm.** Kueue's quota on the hub and on the worker counts the
-  Job's resource requests, not Slurm's whole-node allocation. That's why the hub admits four jobs
-  that Slurm then queues. Size quotas to match how Slurm allocates if you don't want work waiting
-  in Slurm.
-- **Effects on the other examples.** `slurm-cluster` joins the same hub, so any Placement that
-  selects "all workers" now includes it. For example, the `default` Placement adds it to
-  `MultiKueueConfig default`, and the LWS example's `lws-workers` ManifestWorkReplicaSet pushes
-  its LocalQueues to it. `teardown.sh` removes the cluster and all of these.
-- **Supported workloads.** slurm-bridge also schedules Pods, JobSets, PodGroups and
-  LeaderWorkerSets. This example uses a plain `batch/v1` Job to keep the comparison simple.
+- **Rejoining under the same name.** The hub auto-approves the certificate request from a
+  cluster name's first join, but not a rejoin, for example after `teardown.sh`.
+  `create-slurm-cluster.sh` approves the cluster's pending CSRs itself, which is what
+  `clusteradm accept` does.
+- **The other examples see this cluster too.** `slurm-cluster` joins the same hub, so any
+  Placement that selects every worker now includes it. For example, the `default` Placement adds
+  it to `MultiKueueConfig default`, and the LWS example's `lws-workers` ManifestWorkReplicaSet
+  pushes its LocalQueues to it. `teardown.sh` removes the cluster and all of these.
+- **Other workload kinds.** slurm-bridge also schedules Pods, JobSets, PodGroups and
+  LeaderWorkerSets. This example sticks to a plain `batch/v1` Job to keep the comparison simple.
 
 ## Files
 
@@ -254,7 +325,8 @@ multikueue-slurm/
 │   └── worker-queues.yaml             # ManifestWorkReplicaSet: hpc LocalQueues on workers
 └── workloads/
     ├── 01-job-kube-scheduler.yaml     # → kube-queue
-    └── 02-job-slurm.yaml              # → slurm-queue
+    ├── 02-job-slurm.yaml              # → slurm-queue
+    └── 03-job-slurm-timelimit.yaml    # try this: Slurm enforces a 1-minute limit
 ```
 
 The Slurm and slurm-bridge settings are based on `hack/` in
