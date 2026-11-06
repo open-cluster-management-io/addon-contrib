@@ -113,9 +113,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.24'
+          # go.mod/go.sum are in submodules, not the repo root
+          cache-dependency-path: "**/go.sum"
       - name: install imagebuilder
         run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.16
       - name: pull base image
