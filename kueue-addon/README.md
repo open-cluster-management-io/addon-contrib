@@ -345,6 +345,8 @@ For detailed usage examples and advanced scenarios, refer to the [Kueue Integrat
 
 For a provider-aware example that places LeaderWorkerSet and disaggregated-serving (prefill/decode) workloads on IBM Cloud, CoreWeave or on-prem clusters using `Placement` label selectors, see [examples/lws-multi-provider](examples/lws-multi-provider/README.md).
 
+To add Kueue Topology Aware Scheduling to that setup when every provider labels its racks differently (one `Topology` per provider, pushed to its clusters with a `ManifestWorkReplicaSet`), see [examples/lws-topology-aware](examples/lws-topology-aware/README.md).
+
 To see MultiKueue send the same Job to a cluster that uses the default kube-scheduler and to one where Slurm schedules the pods (through [slurm-bridge](https://github.com/SlinkyProject/slurm-bridge)), see [examples/multikueue-slurm](examples/multikueue-slurm/README.md).
 
 ## Design Details and Workflow

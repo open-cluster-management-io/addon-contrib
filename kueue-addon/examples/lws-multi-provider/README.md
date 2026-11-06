@@ -254,6 +254,10 @@ stops dispatching until a cluster has the label again. Run `./setup.sh` to resto
 [`hub/queues.yaml`](hub/queues.yaml) and [`hub/placements.yaml`](hub/placements.yaml), and add
 the new LocalQueue to [`hub/worker-queues.yaml`](hub/worker-queues.yaml).
 
+**Keep each LWS group in one rack.** The [topology-aware example](../lws-topology-aware/README.md)
+adds Kueue Topology Aware Scheduling to these providers, each of which labels its topology
+differently.
+
 ---
 
 ## How it works

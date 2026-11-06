@@ -1,0 +1,193 @@
+# Pushes each provider's Topology, TAS ResourceFlavor, ClusterQueue and LocalQueues to every
+# cluster that provider's Placement selects. The platform team describes a provider's topology
+# once; a cluster that gets the provider label later receives it automatically.
+#
+# MultiKueue creates each remote Workload in the same namespace with the same queue name, so a
+# worker needs a LocalQueue for every hub queue that can send work to it.
+---
+# IBM Cloud clusters (Placement tas-ibm)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: tas-ibm-worker-config
+  namespace: kueue-system
+spec:
+  placementRefs:
+  - name: tas-ibm
+  manifestWorkTemplate:
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: inference-tas
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: Topology
+        metadata:
+          name: ibm
+        spec:
+          levels:
+          - nodeLabel: ibm.example.com/zone
+          - nodeLabel: ibm.example.com/rack
+          - nodeLabel: kubernetes.io/hostname
+      # Only the provider's GPU nodes (simulated with KWOK in this demo). The toleration is
+      # added to every pod admitted with this flavor, so workloads don't need to know about it.
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ResourceFlavor
+        metadata:
+          name: ibm-tas
+        spec:
+          nodeLabels:
+            type: kwok
+          tolerations:
+          - {key: kwok.x-k8s.io/node, operator: Equal, value: fake, effect: NoSchedule}
+          topologyName: ibm
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ClusterQueue
+        metadata:
+          name: ibm-tas
+        spec:
+          namespaceSelector: {}
+          resourceGroups:
+          - coveredResources: [cpu, memory]
+            flavors:
+            - name: ibm-tas
+              resources:
+              - {name: cpu, nominalQuota: 16}
+              - {name: memory, nominalQuota: 64Gi}
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: ibm-queue
+          namespace: inference-tas
+        spec:
+          clusterQueue: ibm-tas
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: gpu-cloud-queue
+          namespace: inference-tas
+        spec:
+          clusterQueue: ibm-tas
+---
+# CoreWeave clusters (Placement tas-coreweave)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: tas-coreweave-worker-config
+  namespace: kueue-system
+spec:
+  placementRefs:
+  - name: tas-coreweave
+  manifestWorkTemplate:
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: inference-tas
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: Topology
+        metadata:
+          name: coreweave
+        spec:
+          levels:
+          - nodeLabel: coreweave.example.com/superpod
+          - nodeLabel: coreweave.example.com/ib-leaf
+          - nodeLabel: kubernetes.io/hostname
+      # Only the provider's GPU nodes (simulated with KWOK in this demo). The toleration is
+      # added to every pod admitted with this flavor, so workloads don't need to know about it.
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ResourceFlavor
+        metadata:
+          name: coreweave-tas
+        spec:
+          nodeLabels:
+            type: kwok
+          tolerations:
+          - {key: kwok.x-k8s.io/node, operator: Equal, value: fake, effect: NoSchedule}
+          topologyName: coreweave
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ClusterQueue
+        metadata:
+          name: coreweave-tas
+        spec:
+          namespaceSelector: {}
+          resourceGroups:
+          - coveredResources: [cpu, memory]
+            flavors:
+            - name: coreweave-tas
+              resources:
+              - {name: cpu, nominalQuota: 16}
+              - {name: memory, nominalQuota: 64Gi}
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: coreweave-queue
+          namespace: inference-tas
+        spec:
+          clusterQueue: coreweave-tas
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: gpu-cloud-queue
+          namespace: inference-tas
+        spec:
+          clusterQueue: coreweave-tas
+---
+# on-prem clusters (Placement tas-onprem)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: tas-onprem-worker-config
+  namespace: kueue-system
+spec:
+  placementRefs:
+  - name: tas-onprem
+  manifestWorkTemplate:
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: inference-tas
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: Topology
+        metadata:
+          name: onprem
+        spec:
+          levels:
+          - nodeLabel: dc.example.com/rack
+          - nodeLabel: kubernetes.io/hostname
+      # Only the provider's GPU nodes (simulated with KWOK in this demo). The toleration is
+      # added to every pod admitted with this flavor, so workloads don't need to know about it.
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ResourceFlavor
+        metadata:
+          name: onprem-tas
+        spec:
+          nodeLabels:
+            type: kwok
+          tolerations:
+          - {key: kwok.x-k8s.io/node, operator: Equal, value: fake, effect: NoSchedule}
+          topologyName: onprem
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: ClusterQueue
+        metadata:
+          name: onprem-tas
+        spec:
+          namespaceSelector: {}
+          resourceGroups:
+          - coveredResources: [cpu, memory]
+            flavors:
+            - name: onprem-tas
+              resources:
+              - {name: cpu, nominalQuota: 12}
+              - {name: memory, nominalQuota: 48Gi}
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: onprem-queue
+          namespace: inference-tas
+        spec:
+          clusterQueue: onprem-tas
