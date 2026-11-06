@@ -1,0 +1,38 @@
+# MultiKueue creates the remote Workload in the same namespace with the same queue name,
+# so every worker needs these LocalQueues (all backed by its local cluster-queue).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: ibm-queue
+  namespace: inference
+spec:
+  clusterQueue: cluster-queue
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: coreweave-queue
+  namespace: inference
+spec:
+  clusterQueue: cluster-queue
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: onprem-queue
+  namespace: inference
+spec:
+  clusterQueue: cluster-queue
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: gpu-cloud-queue
+  namespace: inference
+spec:
+  clusterQueue: cluster-queue

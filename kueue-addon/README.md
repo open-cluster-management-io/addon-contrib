@@ -343,6 +343,8 @@ default-flavor   4h28m
 
 For detailed usage examples and advanced scenarios, refer to the [Kueue Integration Solution](https://github.com/open-cluster-management-io/ocm/blob/main/solutions/kueue-admission-check).
 
+For a provider-aware example that places LeaderWorkerSet and disaggregated-serving (prefill/decode) workloads on IBM Cloud, CoreWeave or on-prem clusters using `Placement` label selectors, see [examples/lws-multi-provider](examples/lws-multi-provider/README.md).
+
 ## Design Details and Workflow
 
 ### OCM Admission Check Controller
