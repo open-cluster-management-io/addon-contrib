@@ -2,7 +2,6 @@ package kueuesecretgen
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -136,17 +135,10 @@ func TestSync(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			// Set test env vars
+			// Set test env vars; t.Setenv restores them when the subtest ends.
 			for key, value := range c.envVars {
-				os.Setenv(key, value)
+				t.Setenv(key, value)
 			}
-
-			// Restore env vars at the end
-			defer func() {
-				for key := range c.envVars {
-					os.Unsetenv(key)
-				}
-			}()
 
 			clusterClient := clusterfake.NewSimpleClientset(c.existingObjects...)
 			permissionClient := permissionfake.NewSimpleClientset(c.permissionObjects...)

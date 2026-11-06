@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     app.kubernetes.io/name: kueue
     control-plane: controller-manager
@@ -13,6 +13,8 @@ spec:
     kind: AdmissionCheck
     listKind: AdmissionCheckList
     plural: admissionchecks
+    shortNames:
+    - ac
     singular: admissioncheck
   scope: Cluster
   versions:
@@ -156,7 +158,7 @@ spec:
                 x-kubernetes-list-type: map
             type: object
         type: object
-    served: true
+    served: false
     storage: false
     subresources:
       status: {}
@@ -304,7 +306,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     app.kubernetes.io/name: kueue
     control-plane: controller-manager
@@ -325,6 +327,8 @@ spec:
     kind: MultiKueueCluster
     listKind: MultiKueueClusterList
     plural: multikueueclusters
+    shortNames:
+    - mkc
     singular: multikueuecluster
   scope: Cluster
   versions:
@@ -470,7 +474,7 @@ spec:
                 x-kubernetes-list-type: map
             type: object
         type: object
-    served: true
+    served: false
     storage: false
     subresources:
       status: {}
@@ -633,7 +637,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   labels:
     app.kubernetes.io/name: kueue
     control-plane: controller-manager
@@ -644,6 +648,8 @@ spec:
     kind: MultiKueueConfig
     listKind: MultiKueueConfigList
     plural: multikueueconfigs
+    shortNames:
+    - mkconf
     singular: multikueueconfig
   scope: Cluster
   versions:
@@ -685,7 +691,7 @@ spec:
             - clusters
             type: object
         type: object
-    served: true
+    served: false
     storage: false
   - name: v1beta2
     schema:
@@ -713,15 +719,33 @@ spec:
             description: spec is the specification of the MultiKueueConfig.
             properties:
               clusters:
-                description: clusters is a list of MultiKueueClusters names where
-                  the workloads from the ClusterQueue should be distributed.
+                description: |-
+                  clusters is a list of MultiKueueClusters names where the workloads from the ClusterQueue should be distributed.
+                  The order of the list is significant: the Incremental dispatcher nominates clusters
+                  following this order, so the most preferred clusters should be listed first.
                 items:
                   maxLength: 256
                   type: string
                 maxItems: 20
                 minItems: 1
                 type: array
-                x-kubernetes-list-type: set
+                x-kubernetes-list-type: atomic
+                x-kubernetes-validations:
+                - message: must be unique
+                  rule: size(self.filter(i, size(self.filter(j, j == i)) > 1)) ==
+                    0
+              quotaManagement:
+                description: |-
+                  quotaManagement specifies the management of ClusterQueue quotas
+                  in the manager cluster.
+                  Supported modes:
+                  - `Manual`: Quota automation is manual.
+                  - `Automated`: Quota automation is enabled (provided that the MultiKueueManagerQuotaAutomation feature gate is enabled).
+                  If unspecified, defaults to `Manual`.
+                enum:
+                - Manual
+                - Automated
+                type: string
             required:
             - clusters
             type: object

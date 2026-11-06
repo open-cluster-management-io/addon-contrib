@@ -29,11 +29,21 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.25
           # go.mod/go.sum are in submodules, not the repo root
+          go-version: "1.27"
           cache-dependency-path: "**/go.sum"
+      # Several add-ons start multiple kind clusters on one runner. The default
+      # inotify limits are too low for that, and nodes fail to boot with
+      # "could not find a log line that matches Reached target Multi-User System".
+      - name: Raise inotify limits
+        run: |
+          sudo sysctl -w fs.inotify.max_user_watches=524288
+          sudo sysctl -w fs.inotify.max_user_instances=512
 
+      # kueue-addon creates its own hub and spoke clusters in build/setup-env.sh,
+      # so the default cluster would only use up runner resources.
       - name: Setup kind
+        if: inputs.repo != 'kueue-addon'
         run: kind create cluster --wait 300s
 
       - name: Setup Kubectl
