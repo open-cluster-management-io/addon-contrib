@@ -1,0 +1,67 @@
+# Distributes the namespace and LocalQueues to every worker cluster.
+# MultiKueue creates each remote Workload in the same namespace with the same queue
+# name, so every worker needs every LocalQueue. The ManifestWorkReplicaSet follows the
+# Placement, so a cluster that joins later gets them automatically.
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: lws-workers
+  namespace: kueue-system
+spec:
+  clusterSets:
+  - global
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - key: local-cluster
+          operator: DoesNotExist
+  tolerations:
+  - key: cluster.open-cluster-management.io/unreachable
+    operator: Exists
+  - key: cluster.open-cluster-management.io/unavailable
+    operator: Exists
+---
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: lws-worker-queues
+  namespace: kueue-system
+spec:
+  placementRefs:
+  - name: lws-workers
+  manifestWorkTemplate:
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: inference
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: ibm-queue
+          namespace: inference
+        spec:
+          clusterQueue: cluster-queue
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: coreweave-queue
+          namespace: inference
+        spec:
+          clusterQueue: cluster-queue
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: onprem-queue
+          namespace: inference
+        spec:
+          clusterQueue: cluster-queue
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: gpu-cloud-queue
+          namespace: inference
+        spec:
+          clusterQueue: cluster-queue

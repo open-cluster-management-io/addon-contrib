@@ -1,20 +1,21 @@
 # One queue per cloud: LeaderWorkerSet across IBM Cloud, CoreWeave and on-prem
 
 > Submit an inference service once, to one hub. Its queue decides whether it runs on
-> **IBM Cloud**, **CoreWeave**, or your **own data center**. Change a cluster label and the
-> next workloads follow.
+> **IBM Cloud**, **CoreWeave**, or your **own data center**. Onboard a new cluster with one
+> label and the waiting work starts running there.
 
 This example combines three projects:
 
-- **[Open Cluster Management](https://open-cluster-management.io/)** `Placement` chooses
-  clusters by label.
+- **[Open Cluster Management](https://open-cluster-management.io/)** (OCM) registers the
+  clusters, chooses them by label with `Placement`, and pushes configuration to them.
 - **[Kueue MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/)** sends admitted
   workloads from the hub to a worker cluster.
 - **[LeaderWorkerSet](https://github.com/kubernetes-sigs/lws)** (LWS) runs multi-node
   inference as groups of pods: one leader and its workers.
 
-The **kueue-addon** connects them. It reads each `Placement` and writes the matching
-`MultiKueueConfig`, so you never maintain lists of clusters by hand.
+The **kueue-addon** connects them. It creates and rotates the credentials MultiKueue uses to
+reach each worker, and it turns each `Placement` into a `MultiKueueConfig`, so you never
+maintain lists of clusters or kubeconfigs by hand.
 
 ---
 
@@ -41,6 +42,7 @@ flowchart LR
       Q2[coreweave-queue] --> P2[Placement<br/>provider=coreweave]
       Q3[onprem-queue] --> P3[Placement<br/>provider=onprem]
       Q4[gpu-cloud-queue] --> P4[Placement<br/>provider in ibm,coreweave]
+      MW[ManifestWorkReplicaSet<br/>worker LocalQueues]
     end
 
     P1 --> C1[☁️ cluster1<br/>IBM Cloud]
@@ -48,6 +50,7 @@ flowchart LR
     P3 --> C3[🏢 cluster3<br/>on-prem]
     P4 -.-> C1
     P4 -.-> C2
+    MW -.-> C1 & C2 & C3
 ```
 
 Each arrow from a Placement is a `MultiKueueConfig` that the addon created. The hub only stores
@@ -58,8 +61,9 @@ the LWS objects. The pods run on the workers.
 ## Quick start
 
 You need the kind environment from [`build/setup-env.sh`](../../build/setup-env.sh): a hub plus
-three workers with Kueue v0.20+. The workers run the LWS controller, and the hub has only the LWS
-CRD.
+three workers with Kueue v0.20+. The workers run the LWS controller, the hub has only the LWS
+CRD, and the hub has the `ManifestWorkReplicaSet` feature enabled (`setup.sh` enables it if it
+is missing).
 
 ```bash
 cd examples/lws-multi-provider
@@ -70,6 +74,7 @@ cd examples/lws-multi-provider
 `setup.sh` ends by showing the `MultiKueueConfig`s that the addon generated from the Placements:
 
 ```
+LocalQueues available on 3/3 worker clusters
 MKCONFIG    CLUSTERS
 ibm         [cluster1]
 coreweave   [cluster2]
@@ -80,6 +85,8 @@ gpu-cloud   [cluster1 cluster2]
 ---
 
 ## What `demo.sh` shows
+
+The demo starts with `cluster3` registered with OCM but **not yet labelled** as on-prem.
 
 ### 1. Disaggregated serving on CoreWeave 🚀
 
@@ -101,15 +108,32 @@ spec:
     size: 2              # 1 leader + 1 worker per group
 ```
 
-### 2. The same app, kept on-prem 🏢
+### 2. Regulated work waits for an on-prem cluster 🏢
 
-`granite-ds` uses the same prefill/decode layout with `onprem-queue`. Nothing else changes.
+`granite-ds` is submitted to `onprem-queue` before any cluster has `provider=onprem`. The
+`onprem` Placement selects nothing, so there is no `MultiKueueConfig` and the queue holds the
+work:
 
-### 3. Multi-node serving on IBM Cloud ☁️
+```
+onprem-queue: Can't admit new workloads: references inactive AdmissionCheck(s): mk-onprem.
+```
+
+### 3. Onboard the on-prem cluster with one label
+
+```bash
+kubectl label managedcluster cluster3 provider=onprem
+```
+
+The addon creates `MultiKueueConfig onprem` with `[cluster3]`, and the waiting `granite-ds`
+workloads start running there. In testing this took about 7 seconds. Nothing on the queues
+changed, and cluster3 already had its LocalQueues because the ManifestWorkReplicaSet targets
+every worker.
+
+### 4. Multi-node serving on IBM Cloud ☁️
 
 `mixtral` runs 2 LWS groups on `ibm-queue`.
 
-### 4. Burst to any public cloud
+### 5. Burst to any public cloud
 
 `burst-a` and `burst-b` use `gpu-cloud-queue`, which allows IBM Cloud or CoreWeave but never
 on-prem. MultiKueue sends each one to whichever cluster admits it first.
@@ -160,9 +184,57 @@ LWS objects on the hub removes them from the workers.
 
 ---
 
+## Why OCM? The same setup without it
+
+MultiKueue can do the routing on its own. Here is what you would maintain by hand for the same
+three clusters:
+
+```bash
+# For EVERY worker: create a ServiceAccount, RBAC and a kubeconfig with Kueue's script,
+# then copy that kubeconfig to the hub. Repeat when the token expires.
+./create-multikueue-kubeconfig.sh cluster2.kubeconfig        # run against cluster2
+kubectl --context hub create secret generic cluster2-kubeconfig -n kueue-system \
+  --from-file=kubeconfig=cluster2.kubeconfig
+
+# For EVERY worker: apply the LocalQueues to it directly.
+kubectl --context cluster2 apply -f worker-localqueues.yaml
+```
+
+```yaml
+# For EVERY worker: a MultiKueueCluster on the hub
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: MultiKueueCluster
+metadata:
+  name: cluster2
+spec:
+  clusterSource:
+    kubeConfig: {locationType: Secret, location: cluster2-kubeconfig}
+---
+# For EVERY provider: a hand-written cluster list, edited whenever clusters change
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: MultiKueueConfig
+metadata:
+  name: coreweave
+spec:
+  clusters: [cluster2]
+```
+
+| Task | Plain MultiKueue | With OCM and the kueue-addon |
+|---|---|---|
+| Worker credentials | Run a script per cluster, copy the kubeconfig, rotate it yourself | `ManagedServiceAccount` creates and rotates the tokens |
+| Worker RBAC | Applied by the script | `ClusterPermission`, kept in sync with Kueue |
+| Which clusters a queue uses | Edit `MultiKueueConfig` by hand | Label the cluster; the `Placement` decides |
+| Onboarding a cluster | Credentials, secret, `MultiKueueCluster`, config edits, worker queues | `kubectl label managedcluster <name> provider=<p>` |
+| Worker LocalQueues | `kubectl apply` against each cluster | One `ManifestWorkReplicaSet` that follows a `Placement` |
+
+With three clusters that never change, plain MultiKueue is manageable. OCM pays off when
+clusters come and go, tokens need rotating, or the fleet grows.
+
+---
+
 ## Try this next
 
-**Move a provider to another cluster.** Label `cluster3` as CoreWeave too and watch the config
+**Move a provider to another cluster.** Label `cluster3` as CoreWeave too and watch the configs
 update:
 
 ```bash
@@ -178,14 +250,9 @@ matches no clusters, so the addon deletes the `onprem` MultiKueueConfig, and `on
 stops dispatching until a cluster has the label again. Run `./setup.sh` to restore the labels.
 
 **Add a region or GPU type.** A Placement can select on any cluster label, such as
-`accelerator=nvidia-h100` or `region=us-east`, and can combine several. Add a Placement, a pair of
-AdmissionChecks, a ClusterQueue and a LocalQueue: copy one block from
-[`hub/queues.yaml`](hub/queues.yaml) and [`hub/placements.yaml`](hub/placements.yaml), then add
-the LocalQueue name to [`workers/queues.yaml`](workers/queues.yaml).
-
-**Pick clusters by capacity instead of labels.** OCM Placements can rank clusters by
-`AddOnPlacementScore`, for example by free GPUs. See the kueue-addon
-[README](../../README.md#configuration-process-before-and-after-ocm-admission-check-controller).
+`accelerator=nvidia-h100` or `region=us-east`, and can combine several. Copy one block from
+[`hub/queues.yaml`](hub/queues.yaml) and [`hub/placements.yaml`](hub/placements.yaml), and add
+the new LocalQueue to [`hub/worker-queues.yaml`](hub/worker-queues.yaml).
 
 ---
 
@@ -212,11 +279,22 @@ Details to keep in mind:
 - **`DisaggregatedSet` is not used.** LWS v1.0 has a `DisaggregatedSet` API, but Kueue has no
   MultiKueue integration for it, so this example uses two plain LWS objects.
 - **Workers need the same LocalQueue names.** MultiKueue creates the remote Workload in the same
-  namespace with the same queue name, so every worker gets every LocalQueue.
+  namespace with the same queue name. [`hub/worker-queues.yaml`](hub/worker-queues.yaml) is a
+  `ManifestWorkReplicaSet` that puts every LocalQueue on every worker the `lws-workers`
+  Placement selects, including clusters that join later.
 - **Only the MultiKueue check goes on the ClusterQueue.** The `ocm-*` checks keep the
   `MultiKueueConfig`s up to date but are not listed on the ClusterQueues. Since Kueue v0.20,
   MultiKueue waits for every other check on a workload to be Ready before dispatching it, and the
   OCM check never marks workloads Ready. Listing it would leave workloads stuck in `Pending`.
+- **Changing a Placement moves running workloads.** When a cluster drops out of a
+  `MultiKueueConfig`, MultiKueue treats the copy there as lost and recreates the workload on a
+  remaining cluster. Changing a label is therefore a migration, not just a routing change for new
+  work.
+- **Don't rank clusters by live load with `numberOfClusters: 1`.** A Placement that keeps only the
+  cluster with the most free CPU (from the `resource-usage-score` `AddOnPlacementScore`) looks
+  like capacity-aware placement, but in testing it made a serving workload bounce between IBM
+  Cloud and CoreWeave every 30–60 seconds. Each move used up capacity on the new cluster, which
+  flipped the ranking back. Use labels, or scores that the workloads themselves don't change.
 - **The hub only needs the LWS CRD.** It is the MultiKueue manager and stores the objects, while
   the LWS controller on each worker creates the pods.
 - **No GPUs needed for the demo.** The containers are `busybox` and request only CPU. The "GPU
@@ -226,13 +304,12 @@ Details to keep in mind:
 
 ```
 lws-multi-provider/
-├── setup.sh                  # labels + hub/worker queue setup
+├── setup.sh                  # labels, hub queues, worker queues
 ├── demo.sh                   # narrated live demo
 ├── hub/
 │   ├── placements.yaml       # ibm, coreweave, onprem, gpu-cloud
-│   └── queues.yaml           # AdmissionChecks, ClusterQueues, LocalQueues
-├── workers/
-│   └── queues.yaml           # matching LocalQueues on every worker
+│   ├── queues.yaml           # AdmissionChecks, ClusterQueues, LocalQueues
+│   └── worker-queues.yaml    # ManifestWorkReplicaSet: LocalQueues on every worker
 └── workloads/
     ├── 01-ds-coreweave.yaml  # llama prefill + decode
     ├── 02-ds-onprem.yaml     # granite prefill + decode
@@ -244,8 +321,8 @@ lws-multi-provider/
 
 ```bash
 kubectl --context kind-local-cluster delete lws -n inference --all
+kubectl --context kind-local-cluster delete -f hub/worker-queues.yaml   # removes worker LocalQueues
 kubectl --context kind-local-cluster delete -f hub/queues.yaml -f hub/placements.yaml
-for c in cluster1 cluster2 cluster3; do kubectl --context kind-$c delete -f workers/queues.yaml; done
 ```
 
 `hub/queues.yaml` also creates the shared `default-flavor` ResourceFlavor. If other queues on the

@@ -96,6 +96,12 @@ setup_ocm() {
     echo "Initialize the ocm hub cluster"
     clusteradm init --wait --context ${hubctx}
   fi
+
+  # ManifestWorkReplicaSet lets examples push manifests to every cluster a Placement selects.
+  echo "Enable the ManifestWorkReplicaSet feature on the hub"
+  kubectl patch clustermanager cluster-manager --type=merge --context ${hubctx} \
+    -p '{"spec":{"workConfiguration":{"workDriver":"kube","featureGates":[{"feature":"ManifestWorkReplicaSet","mode":"Enable"}]}}}'
+
   joincmd=$(clusteradm get token --context ${hubctx} | grep clusteradm)
 
   echo "Join clusters to hub"
