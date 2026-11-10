@@ -12,9 +12,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/klog/v2"
-	cpv1alpha1 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha1"
-	cpinformers "sigs.k8s.io/cluster-inventory-api/client/informers/externalversions/apis/v1alpha1"
-	cplisterv1alpha1 "sigs.k8s.io/cluster-inventory-api/client/listers/apis/v1alpha1"
+	cpv1alpha2 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha2"
+	cpinformers "sigs.k8s.io/cluster-inventory-api/client/informers/externalversions/apis/v1alpha2"
+	cplisterv1alpha2 "sigs.k8s.io/cluster-inventory-api/client/listers/apis/v1alpha2"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	kueueclient "sigs.k8s.io/kueue/client-go/clientset/versioned"
 	kueueinformerv1beta2 "sigs.k8s.io/kueue/client-go/informers/externalversions/kueue/v1beta2"
@@ -31,7 +31,7 @@ import (
 // multiKueueClusterController reconciles MultiKueueCluster resources based on ClusterProfile objects
 type multiKueueClusterController struct {
 	kueueClient          kueueclient.Interface
-	clusterProfileLister cplisterv1alpha1.ClusterProfileLister
+	clusterProfileLister cplisterv1alpha2.ClusterProfileLister
 	permissionLister     permissionlisterv1alpha1.ClusterPermissionLister
 	secretInformer       corev1informers.SecretInformer
 	eventRecorder        events.Recorder
@@ -62,7 +62,7 @@ func NewMultiKueueClusterController(
 					return []string{}
 				}
 				cpowner := owners[0]
-				if cpowner.Kind != cpv1alpha1.Kind {
+				if cpowner.Kind != cpv1alpha2.Kind {
 					return []string{}
 				}
 				// Queue key is the name of the secret's owner (clusterprofile)
@@ -161,7 +161,7 @@ func (c *multiKueueClusterController) shouldCleanupCluster(ctx context.Context, 
 }
 
 // getClusterProfile retrieves and validates the ClusterProfile for the given cluster
-func (c *multiKueueClusterController) getClusterProfile(ctx context.Context, clusterName string) (*cpv1alpha1.ClusterProfile, error) {
+func (c *multiKueueClusterController) getClusterProfile(ctx context.Context, clusterName string) (*cpv1alpha2.ClusterProfile, error) {
 	clusterProfile, err := c.clusterProfileLister.ClusterProfiles(common.KueueNamespace).Get(clusterName)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -170,7 +170,7 @@ func (c *multiKueueClusterController) getClusterProfile(ctx context.Context, clu
 		return nil, err
 	}
 
-	clusterManager := clusterProfile.GetLabels()[cpv1alpha1.LabelClusterManagerKey]
+	clusterManager := clusterProfile.GetLabels()[cpv1alpha2.LabelClusterManagerKey]
 	if clusterManager != cpcontroller.ClusterProfileManagerName {
 		return nil, fmt.Errorf("cluster manager mismatch: expected %s, got %s from ClusterProfile", cpcontroller.ClusterProfileManagerName, clusterManager)
 	}
