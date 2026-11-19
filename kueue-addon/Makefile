@@ -17,16 +17,16 @@ KUEUE_VERSION := $(shell grep 'sigs.k8s.io/kueue' go.mod | awk '{print $$2}')
 update: update-manifests
 .PHONY: update
 
-# update cluster-permission.yaml with latest rules from Kueue repository
+# update cluster-permission.yaml with rules from Kueue $(KUEUE_VERSION)
 update-manifests:
-	@echo "Updating cluster-permission.yaml with latest rules from Kueue repository..."
-	@python3 scripts/update-cluster-permission.py
+	@echo "Updating cluster-permission.yaml with rules from Kueue $(KUEUE_VERSION)..."
+	@KUEUE_VERSION=$(KUEUE_VERSION) python3 scripts/update-cluster-permission.py
 .PHONY: update-manifests
 
 # verify
 verify-gocilint:
 	@echo "Running golangci-lint..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.6
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 	golangci-lint run --timeout=5m --modules-download-mode vendor ./...
 
 install-golang-gci:

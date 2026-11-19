@@ -179,6 +179,10 @@ For a complete setup including all prerequisites on Kind:
 ./build/setup-env.sh --clusterprofile
 ```
 
+The script installs Kueue v0.20.5 (override with `--kueue-version`) and installs the add-on from this repository's chart (`charts/kueue-addon`) with the `latest` image built from `main`, so the add-on's RBAC matches the installed Kueue version. Set `KUEUE_ADDON_IMAGE_TAG` to use a different image tag.
+
+> **Note:** If you see `inotify_init: too many open files` errors while creating the Kind clusters, raise the limit with `sudo sysctl fs.inotify.max_user_instances=512`.
+
 ## Installation
 
 ### Step 1: Add Helm Repository
@@ -435,7 +439,9 @@ spec:
 
 **After:**
 
-Admins only need to add `AdmissionChecks` to the `ClusterQueue`. The controller automates `MultiKueueConfig` and `MultiKueueCluster` creation based on `Placement` decisions.
+Admins only need to create the two `AdmissionChecks` and reference the MultiKueue one from the `ClusterQueue`. The controller automates `MultiKueueConfig` and `MultiKueueCluster` creation based on `Placement` decisions.
+
+> **Note:** Do not list the OCM placement `AdmissionCheck` (`multikueue-config-demo2`) in the `ClusterQueue`. It only generates the `MultiKueueConfig` and never sets a per-workload state. Since Kueue v0.20, MultiKueue waits for every other admission check on the `ClusterQueue` to be `Ready` before dispatching, so listing it blocks workloads forever.
 
 ```yaml
 apiVersion: kueue.x-k8s.io/v1beta2
@@ -447,7 +453,6 @@ spec:
   admissionChecksStrategy:
     admissionChecks:
     - name: multikueue-demo2
-    - name: multikueue-config-demo2
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: AdmissionCheck

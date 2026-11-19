@@ -17,7 +17,6 @@ import (
 	"open-cluster-management.io/addon-contrib/kueue-addon/pkg/hub/controllers/common"
 	clusterv1client "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	v1 "open-cluster-management.io/api/cluster/v1"
 	clusterv1beta1 "open-cluster-management.io/api/cluster/v1beta1"
 	permissionclientset "open-cluster-management.io/cluster-permission/client/clientset/versioned"
 	msacontroller "open-cluster-management.io/managed-serviceaccount/pkg/addon/manager/controller"
@@ -175,12 +174,23 @@ func AssertWorkloadAdmitted(ctx context.Context, client kueueclientset.Interface
 			return false
 		}
 		workload := workloads.Items[0]
-		if len(workload.Status.AdmissionChecks) != 2 {
-			fmt.Println("Workload should have 2 admission checks")
+		if len(workload.Status.AdmissionChecks) == 0 {
+			fmt.Println("Workload has no admission checks")
 			return false
 		}
-		expectedMessage := fmt.Sprintf("The workload got reservation on \"%s\"", expectedCluster)
-		return workload.Status.AdmissionChecks[1].Message == expectedMessage
+		// All admission checks must be Ready, and MultiKueue must have
+		// dispatched the workload to the expected cluster.
+		for _, check := range workload.Status.AdmissionChecks {
+			if check.State != kueuev1beta2.CheckStateReady {
+				fmt.Printf("Admission check %s is %s: %s\n", check.Name, check.State, check.Message)
+				return false
+			}
+		}
+		if workload.Status.ClusterName == nil || *workload.Status.ClusterName != expectedCluster {
+			fmt.Printf("Workload clusterName is %v, want %s\n", workload.Status.ClusterName, expectedCluster)
+			return false
+		}
+		return true
 	}, DefaultTimeout, DefaultInterval).Should(gomega.BeTrue(), fmt.Sprintf("Workload for job %s should be admitted on cluster %s", jobUID, expectedCluster))
 }
 
@@ -398,7 +408,7 @@ func CreateClusterProfile(ctx context.Context, cpClient cpclientset.Interface, c
 			Namespace: namespace,
 			Labels: map[string]string{
 				cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
-				v1.ClusterNameLabelKey:            clusterName,
+				clusterv1.ClusterNameLabelKey:     clusterName,
 			},
 		},
 		Spec: cpv1alpha1.ClusterProfileSpec{
