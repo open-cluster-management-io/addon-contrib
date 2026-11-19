@@ -19,11 +19,37 @@ if [ "$cp_mode" != "true" ]; then
   exit 1
 fi
 
+# Shared deadline (seconds) for every wait below. Normal startup delays stay within it;
+# expiry prints the relevant resource conditions and fails the setup.
+WAIT_TIMEOUT=${WAIT_TIMEOUT:-600}
+
+# wait_until <description> <check-cmd> [args...] -- <diagnostics-cmd> [args...]
+# Retries <check-cmd> until it succeeds or WAIT_TIMEOUT passes. On expiry runs the
+# diagnostics command (if given) and exits nonzero.
+wait_until() {
+  local desc=$1 check=() diag=()
+  shift
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do check+=("$1"); shift; done
+  if [ "${1:-}" = "--" ]; then shift; fi
+  diag=("$@")
+  local deadline=$(( $(date +%s) + WAIT_TIMEOUT ))
+  until "${check[@]}"; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "ERROR: timed out after ${WAIT_TIMEOUT}s waiting for $desc" >&2
+      if [ ${#diag[@]} -gt 0 ]; then "${diag[@]}" >&2 || true; fi
+      exit 1
+    fi
+    sleep 2
+  done
+}
+
 echo "Waiting for the ClusterProfile-backed MultiKueueClusters"
+mkc_active() { [ "$($H get multikueuecluster "$1" \
+  -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
+  2>/dev/null)" = "$1/True" ]; }
 for c in cluster1 cluster2 cluster3; do
-  until [ "$($H get multikueuecluster "$c" \
-    -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
-    2>/dev/null)" = "$c/True" ]; do sleep 2; done
+  wait_until "MultiKueueCluster $c to be Active" mkc_active "$c" -- \
+    $H get multikueuecluster "$c" -o yaml
 done
 $H get clusterprofile -n kueue-system cluster1 cluster2 cluster3
 
@@ -74,7 +100,9 @@ if ! $H get deploy -n open-cluster-management-hub cluster-manager-work-controlle
   echo "Enabling the ManifestWorkReplicaSet feature on the hub"
   $H patch clustermanager cluster-manager --type=merge \
     -p '{"spec":{"workConfiguration":{"workDriver":"kube","featureGates":[{"feature":"ManifestWorkReplicaSet","mode":"Enable"}]}}}'
-  until $H get deploy -n open-cluster-management-hub cluster-manager-work-controller >/dev/null 2>&1; do sleep 2; done
+  work_controller_deployed() { $H get deploy -n open-cluster-management-hub cluster-manager-work-controller >/dev/null 2>&1; }
+  wait_until "the cluster-manager-work-controller deployment" work_controller_deployed -- \
+    $H get deploy -n open-cluster-management-hub cluster-manager-work-controller -o yaml
   $H rollout status -n open-cluster-management-hub deploy/cluster-manager-work-controller --timeout=180s
 fi
 
@@ -98,14 +126,21 @@ $H apply -f "$DIR/hub/placements.yaml" -f "$DIR/hub/queues.yaml"
 
 echo "Pushing each provider's Topology and queues to its clusters with ManifestWorkReplicaSets"
 $H apply -f "$DIR/hub/worker-topology.yaml"
+# summary.available is the count of available ManifestWorks: all of them (one per selected
+# worker) must be available before the example can run.
 mwrs_ready() { local s; s=$($H get manifestworkreplicaset "tas-$1-worker-config" -n kueue-system \
   -o jsonpath='{.status.summary.available}/{.status.summary.total}' 2>/dev/null)
   [[ "$s" =~ ^[0-9]+/[0-9]+$ && "${s%/*}" -gt 0 && "${s%/*}" == "${s#*/}" ]]; }
-for p in ibm coreweave onprem; do until mwrs_ready "$p"; do sleep 2; done; done
+mwrs_diag() { $H get manifestworkreplicaset "tas-$1-worker-config" -n kueue-system -o yaml; }
+for p in ibm coreweave onprem; do
+  wait_until "ManifestWorkReplicaSet tas-$p-worker-config to be available on every selected worker" \
+    mwrs_ready "$p" -- mwrs_diag "$p"
+done
 
 echo "Waiting for the kueue-addon to generate the MultiKueueConfigs"
 for p in ibm coreweave onprem gpu-cloud; do
-  until $H get multikueueconfig "tas-$p" >/dev/null 2>&1; do sleep 2; done
+  wait_until "MultiKueueConfig tas-$p" $H get multikueueconfig "tas-$p" -- \
+    $H get placement -n kueue-system "tas-$p" -o yaml
 done
 $H get multikueueconfig tas-ibm tas-coreweave tas-onprem tas-gpu-cloud \
   -o 'custom-columns=MKCONFIG:.metadata.name,CLUSTERS:.spec.clusters'

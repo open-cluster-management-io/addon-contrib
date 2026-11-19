@@ -41,8 +41,33 @@ $H apply -f "$DIR/hub/placements.yaml" -f "$DIR/hub/queues.yaml"
 
 echo "Distributing the hpc LocalQueues to the workers with a ManifestWorkReplicaSet"
 $H apply -f "$DIR/hub/worker-queues.yaml"
-until [ "$($H get manifestworkreplicaset hpc-worker-queues -n kueue-system \
-  -o jsonpath='{.status.summary.available}' 2>/dev/null)" = "2" ]; do sleep 2; done
+# Readiness comes from the Placement's actual decisions, not a hardcoded count: the
+# hpc-workers Placement selects every cluster with a "scheduler" label, so a worker left
+# labelled from an earlier run (e.g. rerunning with KUBE_WORKER=cluster2) makes it select
+# more than two. summary.available is the count of available ManifestWorks: wait until
+# every selected worker's ManifestWork is available.
+selected_workers() {
+  $H get placementdecisions -n kueue-system -l cluster.open-cluster-management.io/placement=hpc-workers \
+    -o jsonpath='{range .items[*].status.decisions[*]}{.clusterName}{"\n"}{end}' 2>/dev/null | sort -u
+}
+mwrs_summary() { $H get manifestworkreplicaset hpc-worker-queues -n kueue-system \
+  -o jsonpath='{.status.summary.available}/{.status.summary.total}' 2>/dev/null; }
+mwrs_all_available() {
+  local n
+  n=$(selected_workers | wc -l)
+  [ "$n" -gt 0 ] && [ "$(mwrs_summary)" = "$n/$n" ]
+}
+deadline=$(( $(date +%s) + 300 ))
+until mwrs_all_available; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "ERROR: timed out waiting for the hpc-worker-queues ManifestWorks." >&2
+    echo "Selected workers: $(selected_workers | tr '\n' ' ')" >&2
+    echo "ManifestWorkReplicaSet summary (available/total): $(mwrs_summary)" >&2
+    $H get manifestworkreplicaset hpc-worker-queues -n kueue-system -o yaml >&2 || true
+    exit 1
+  fi
+  sleep 2
+done
 
 echo "Waiting for the kueue-addon to generate the MultiKueueConfigs"
 for p in kube-batch slurm; do

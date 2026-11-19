@@ -43,12 +43,26 @@ watch_admitted() {   # $1 = expected admitted workloads, $2 = title
     [ "$adm" -ge "$1" ] && [ "$ready" -ge $(( $1 * 2 )) ] && { echo; echo "${G}$adm workloads admitted, $ready pods running.${N}"; sleep "$PAUSE"; return; }
     sleep 3
   done
+  echo; echo "${R}Timed out waiting for $1 workloads to be admitted (only $adm admitted, $ready pods running).${N}" >&2
+  return 1
 }
 
 step "0. Clean slate: cluster3 is registered with OCM but not yet in the on-prem pool"
 run "$H delete lws -n inference --all --wait=true"
 run "$H label managedcluster cluster3 provider- 2>/dev/null || true"
-sleep 5
+# Wait for the addon to remove the onprem MultiKueueConfig and deactivate its AdmissionCheck:
+# MultiKueue reads the stored config, not the OCM provider label, so until both happen,
+# step 4 could still admit granite-ds on cluster3.
+onprem_drained() {
+  $H get multikueueconfig onprem >/dev/null 2>&1 && return 1
+  [ "$($H get admissioncheck mk-onprem -o jsonpath='{.status.conditions[?(@.type=="Active")].status}' 2>/dev/null)" = "True" ] && return 1
+  return 0
+}
+for i in $(seq 1 30); do onprem_drained && break; sleep 2; done
+onprem_drained || {
+  echo "${R}Timed out waiting for the onprem MultiKueueConfig removal / mk-onprem deactivation.${N}" >&2
+  exit 1
+}
 
 step "1. Clusters are labelled by provider (cluster3 has no label yet)"
 run "$H get managedclusters -L provider"
@@ -66,7 +80,7 @@ step "3. Disaggregated serving on CoreWeave (prefill LWS + decode LWS → corewe
 run "grep -E 'name:|queue-name|replicas:|size:' $DIR/workloads/01-ds-coreweave.yaml | head -12"
 sleep "$PAUSE"
 run "$H apply -f $DIR/workloads/01-ds-coreweave.yaml"
-watch_admitted 3 "Step 3: llama-ds (prefill + decode) → CoreWeave only"
+watch_admitted 3 "Step 3: llama-ds (prefill + decode) → CoreWeave only" || exit 1
 
 step "4. Submit regulated work to onprem-queue, but no cluster is on-prem yet"
 run "$H apply -f $DIR/workloads/02-ds-onprem.yaml"
@@ -82,15 +96,15 @@ for i in $(seq 1 10); do
   cl=$($H get multikueueconfig onprem -o jsonpath='{.spec.clusters}' 2>/dev/null)
   echo "  MultiKueueConfig onprem: ${cl:-<not found>}"; [ -n "$cl" ] && break; sleep 1
 done
-watch_admitted 5 "Step 5: cluster3 joined the on-prem pool → waiting granite-ds dispatched"
+watch_admitted 5 "Step 5: cluster3 joined the on-prem pool → waiting granite-ds dispatched" || exit 1
 
 step "6. Multi-node LWS serving on IBM Cloud (ibm-queue)"
 run "$H apply -f $DIR/workloads/03-lws-ibm.yaml"
-watch_admitted 7 "Step 6: mixtral → IBM only"
+watch_admitted 7 "Step 6: mixtral → IBM only" || exit 1
 
 step "7. Burst to ANY public cloud (gpu-cloud-queue = IBM or CoreWeave, never on-prem)"
 run "$H apply -f $DIR/workloads/04-lws-gpu-cloud.yaml"
-watch_admitted 9 "Step 7: burst-a / burst-b → IBM or CoreWeave (MultiKueue picks)"
+watch_admitted 9 "Step 7: burst-a / burst-b → IBM or CoreWeave (MultiKueue picks)" || exit 1
 
 step "8. What the hub sees"
 run "$H get lws -n inference"

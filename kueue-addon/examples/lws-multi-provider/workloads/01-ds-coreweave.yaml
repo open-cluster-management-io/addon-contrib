@@ -1,5 +1,8 @@
-# Disaggregated serving on CoreWeave: prefill + decode pinned to ONE provider so the
-# KV-cache transfer between them stays inside a single cluster.
+# Disaggregated serving on CoreWeave: prefill + decode share coreweave-queue, so the
+# KV-cache transfer between them stays inside a single cluster while that queue's
+# Placement selects only cluster2. If the Placement selected more than one cluster,
+# MultiKueue could place the two stages on different clusters: pin the Placement to
+# one cluster to guarantee locality.
 ---
 apiVersion: leaderworkerset.x-k8s.io/v1
 kind: LeaderWorkerSet

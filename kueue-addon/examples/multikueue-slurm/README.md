@@ -74,12 +74,15 @@ cd examples/multikueue-slurm
 ./teardown.sh               # remove everything this example added
 ```
 
+Run `./teardown.sh` only after the [Try this next](#try-this-next) examples: it deletes the
+Slurm cluster and the example resources they use.
+
 | Component | Version |
 |---|---|
 | Kubernetes (kind node image) | v1.35.0 (slurm-bridge 1.2.x needs 1.35 or newer) |
 | slurm-operator, Slurm chart, slurm-bridge | 1.2.4 (Slurm 26.05) |
 | cert-manager | v1.21.2 |
-| Kueue | v0.20.5 |
+| Kueue | v0.20.7 |
 
 ---
 
@@ -163,6 +166,7 @@ spec:
   suspend: true
   template:
     spec:
+      restartPolicy: Never
       containers:
       - name: train
         image: busybox:1.36

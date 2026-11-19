@@ -9,7 +9,7 @@ CLEAN=false
 E2E_MODE=false
 IMPERSONATION=false
 CLUSTERPROFILE=false
-KUEUE_VERSION="v0.20.5"
+KUEUE_VERSION="v0.20.7"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --clean)
@@ -135,8 +135,14 @@ install_kueue() {
   done
 
   for ctx in "${spoke_ctx[@]}"; do
-      echo "Install Kubeflow MPI Operator, Training Operator, LeaderWorkerSet on $ctx"
-      kubectl apply --server-side -f "$lws_manifest" --context "$ctx" || true
+      echo "Install Kubeflow MPI Operator, Training Operator on $ctx"
+      # The LWS controller is only installed outside e2e runs: it requests 1 CPU per
+      # replica, which on a 4-CPU CI runner would leave no room for the e2e GPU job
+      # pods to schedule (see the comment above lws_version).
+      if [[ "$E2E_MODE" != "true" ]]; then
+        echo "Install LeaderWorkerSet on $ctx"
+        kubectl apply --server-side -f "$lws_manifest" --context "$ctx" || true
+      fi
       kubectl apply --server-side -f "$mpi_operator_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$appwrapper_manifest" --context "$ctx" || true
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true

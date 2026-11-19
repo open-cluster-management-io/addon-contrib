@@ -8,7 +8,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 H="kubectl --context ${HUB_CTX:-kind-local-cluster}"
 KW="kubectl --context kind-${KUBE_WORKER:-cluster1}"
 SW="kubectl --context kind-${SLURM_CLUSTER_NAME:-slurm-cluster}"
-B=$'\e[1m'; C=$'\e[36m'; G=$'\e[32m'; Y=$'\e[33m'; N=$'\e[0m'
+B=$'\e[1m'; C=$'\e[36m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; N=$'\e[0m'
 PAUSE=${PAUSE:-3}
 
 step() { echo; echo "${B}${C}════ $* ════${N}"; sleep "$PAUSE"; }
@@ -39,6 +39,8 @@ watch_until_finished() {   # $1 = expected finished workloads, $2 = title
     [ "$done_n" -ge "$1" ] && { echo; echo "${G}All $1 workloads finished.${N}"; sleep "$PAUSE"; return; }
     sleep 3
   done
+  echo; echo "${R}Timed out waiting for $1 workloads to finish (only $done_n finished).${N}" >&2
+  return 1
 }
 
 step "0. Clean slate"
@@ -63,12 +65,12 @@ sleep "$PAUSE"
 step "4. Submit one Job to each queue on the hub"
 run "$H create -f $DIR/workloads/01-job-kube-scheduler.yaml"
 run "$H create -f $DIR/workloads/02-job-slurm.yaml"
-watch_until_finished 2 "Step 4: same Job → kube-scheduler on cluster1, Slurm on slurm-cluster"
+watch_until_finished 2 "Step 4: same Job → kube-scheduler on cluster1, Slurm on slurm-cluster" || exit 1
 
 step "5. Kueue admits, Slurm places: submit 4 more Slurm jobs for 2 Slurm nodes"
 echo "Kueue's quota allows all 4. Slurm gives each pod a whole node, so 2 wait in squeue."
 for i in 1 2 3 4; do run "$H create -f $DIR/workloads/02-job-slurm.yaml"; done
-watch_until_finished 6 "Step 5: Kueue admitted all 4; Slurm queues what doesn't fit"
+watch_until_finished 6 "Step 5: Kueue admitted all 4; Slurm queues what doesn't fit" || exit 1
 
 step "6. The hub saw every Job finish"
 run "$H get jobs -n hpc"

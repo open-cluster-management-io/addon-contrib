@@ -46,9 +46,21 @@ mwrs_ready() { local s; s=$(mwrs_summary); [[ "$s" =~ ^[0-9]+/[0-9]+$ && "${s%/*
 until mwrs_ready; do sleep 2; done
 echo "LocalQueues available on $(mwrs_summary) worker clusters"
 
-echo "Waiting for the kueue-addon to generate the MultiKueueConfigs"
+echo "Waiting for the kueue-addon to generate the MultiKueueConfigs with the expected clusters"
+# Wait for the expected cluster *membership*, not just existence: if this setup ran before
+# with different provider labels, the configs may still hold the old (stale) cluster lists.
+# Comparison is order-insensitive because neither the addon nor Placement guarantees order.
+mkc_clusters() { $H get multikueueconfig "$1" -o jsonpath='{range .spec.clusters[*]}{.}{"\n"}{end}' 2>/dev/null | sort; }
+expected_clusters() {   # the cluster set each config must hold after this setup
+  case "$1" in
+    ibm)        echo cluster1 ;;
+    coreweave)  echo cluster2 ;;
+    onprem)     echo cluster3 ;;
+    gpu-cloud)  printf '%s\n' cluster1 cluster2 ;;
+  esac
+}
 for p in ibm coreweave onprem gpu-cloud; do
-  until $H get multikueueconfig "$p" >/dev/null 2>&1; do sleep 2; done
+  until [ "$(mkc_clusters "$p")" = "$(expected_clusters "$p")" ]; do sleep 2; done
 done
 $H get multikueueconfig ibm coreweave onprem gpu-cloud \
   -o 'custom-columns=MKCONFIG:.metadata.name,CLUSTERS:.spec.clusters'

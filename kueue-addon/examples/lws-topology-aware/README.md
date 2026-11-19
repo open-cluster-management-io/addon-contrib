@@ -57,7 +57,13 @@ Each provider `Placement` does two jobs:
    `ClusterQueue` and `LocalQueue`s to the same clusters.
 
 The platform team describes a provider's topology once. Every cluster that gets the
-`provider=<name>` label receives it, with no per-cluster setup.
+`provider=<name>` label receives it, with no per-cluster setup. The label distributes the
+configuration, but does not configure the nodes: the workers still need nodes carrying the
+topology labels (and enough allocatable CPU/GPU) that the provider's `ResourceFlavor` selects
+— see [`hub/worker-topology.yaml`](hub/worker-topology.yaml). On the kind clusters `setup.sh`
+creates the KWOK fake nodes; on a real cluster, label your GPU nodes the same way (an IBM
+worker without `type=kwok` and the `ibm.example.com/*` labels has no nodes eligible for the
+distributed flavor, for example).
 
 ---
 
@@ -74,6 +80,10 @@ cd examples/lws-topology-aware
 ./demo.sh       # narrated live walk-through (PAUSE=6 ./demo.sh when presenting)
 ./teardown.sh   # remove everything this example added
 ```
+
+`teardown.sh` deletes **every** node labelled `type=kwok` and the KWOK controller manifests
+on the workers. If a worker also runs KWOK resources from another example, either remove them
+first or run this example on dedicated workers.
 
 The kind workers have a single real node each, which can't show racks. `setup.sh` installs
 [KWOK](https://kwok.sigs.k8s.io/) v0.8.0 on each worker and adds fake GPU nodes (2 CPU, 8Gi)
@@ -199,8 +209,10 @@ kueue.x-k8s.io/podset-group-name: burst-a
 ```
 
 A preferred request means "on one node if possible". If a group doesn't fit, Kueue widens to the
-next level of whichever cluster runs it: an IBM rack or a CoreWeave leaf. One manifest gets
-compact placement on both clouds.
+next level of whichever cluster runs it: an IBM rack or a CoreWeave leaf. The rack or leaf is a
+preference, not a limit — if a group fits neither one node nor one rack or leaf, Kueue can widen
+further and spread it across top-level domains. One manifest gets compact placement on both
+clouds while the groups fit.
 
 ### The result
 
@@ -269,10 +281,13 @@ LeaderWorkerSet ──► Workload per group ──► hub ClusterQueue cq-tas-<
 
 Details to keep in mind:
 
-- **Keep the hub and worker Topologies the same.** The hub copy is in
+- **Keep the requested topology level on both the hub and the worker.** The hub copy is in
   [`hub/queues.yaml`](hub/queues.yaml), and the worker copy is in
   [`hub/worker-topology.yaml`](hub/worker-topology.yaml). The hub copy only validates requests,
-  so if the two disagree, a workload can pass the hub and then never schedule on the worker.
+  so if a requested level is missing on either side, a workload can pass the hub and then never
+  schedule on the worker. The two don't have to be identical, though: the `gpu-cloud` hub Topology
+  lists only `kubernetes.io/hostname` while its workers keep the deeper IBM or CoreWeave levels,
+  which Kueue can still use when widening a placement.
 - **The hub flavor still needs `nodeLabels`.** Kueue requires a node selector on any flavor with a
   `topologyName`. The hub flavors use `type: kwok`, which matches no hub node, and that's fine
   because the hub never computes placements.

@@ -2,8 +2,8 @@ apiVersion: v2
 name: kueue-addon
 description: A Helm chart for Open Cluster Management Kueue Addon
 type: application
-version: 0.1.4
-appVersion: "0.20.5"
+version: 0.1.5
+appVersion: "0.20.7"
 maintainers:
   - name: haoqing0110
     email: qhao@redhat.com

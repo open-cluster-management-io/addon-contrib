@@ -279,9 +279,12 @@ Details to keep in mind:
 
 - **One Workload per LWS group.** Kueue admits each group separately. MultiKueue keeps all groups
   of one LWS on the same worker, so a 2-replica LWS is never split across clouds.
-- **Put prefill and decode on a single-provider queue.** They are two separate LWS objects, and
-  MultiKueue places each one on its own. On a multi-cluster queue such as `gpu-cloud` they could
-  land on different clusters and break the KV-cache transfer between them.
+- **Put prefill and decode on a single-cluster queue for KV-cache locality.** They are two
+  separate LWS objects, and MultiKueue places each one on its own. A single-provider queue
+  keeps them together only while that provider's Placement selects one cluster — after the
+  relabelling in [Try this next](#try-this-next), `coreweave-queue` spans two clusters and the
+  two stages could land on different ones. For guaranteed KV-cache locality, use a Placement
+  that pins both stages to one fixed cluster.
 - **`DisaggregatedSet` is not used.** LWS v1.0 has a `DisaggregatedSet` API, but Kueue has no
   MultiKueue integration for it, so this example uses two plain LWS objects.
 - **Workers need the same LocalQueue names.** MultiKueue creates the remote Workload in the same

@@ -6,7 +6,7 @@
 #   cluster3 = onprem     rack -> node   (starts unlabelled and joins halfway through)
 set -uo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
-H="kubectl --context kind-local-cluster"
+H="kubectl --context ${HUB_CTX:-kind-local-cluster}"
 NS=inference-tas
 declare -A KEYS=(
   [cluster1]="ibm.example.com/zone ibm.example.com/rack"
@@ -59,12 +59,22 @@ watch_admitted() {   # $1 = expected admitted workloads, $2 = expected running p
     [ "$adm" -ge "$1" ] && [ "$ready" -ge "$2" ] && { echo; echo "${G}$adm workloads admitted, $ready pods running.${N}"; sleep "$PAUSE"; return; }
     sleep 3
   done
+  echo; echo "${R}Timed out waiting for $1 workloads to be admitted (only $adm admitted, $ready pods running).${N}" >&2
+  return 1
 }
 
 step "0. Clean slate: cluster3 is registered with OCM but not yet in the on-prem pool"
 run "$H delete lws -n $NS --all --wait=true"
 run "$H label managedcluster cluster3 provider- 2>/dev/null || true"
-sleep 5
+# Wait for the addon to remove the onprem MultiKueueConfig: MultiKueue reads the stored
+# config, not the OCM provider label, so until it is gone, step 6 could still admit granite
+# on cluster3.
+tas_onprem_drained() { ! $H get multikueueconfig tas-onprem >/dev/null 2>&1; }
+for i in $(seq 1 30); do tas_onprem_drained && break; sleep 2; done
+tas_onprem_drained || {
+  echo "${R}Timed out waiting for the tas-onprem MultiKueueConfig removal.${N}" >&2
+  exit 1
+}
 
 step "1. Three providers, three ways of labelling topology"
 for c in cluster1 cluster2 cluster3; do
@@ -86,12 +96,12 @@ step "3. Multi-node serving on IBM Cloud: each group of 4 pods must share one IB
 run "grep -E 'name: mixtral|queue-name|replicas:|size:|required-topology' $DIR/workloads/01-lws-ibm.yaml | head -6"
 sleep "$PAUSE"
 run "$H apply -f $DIR/workloads/01-lws-ibm.yaml"
-watch_admitted 2 8 "Step 3: mixtral → IBM, one rack per group"
+watch_admitted 2 8 "Step 3: mixtral → IBM, one rack per group" || exit 1
 
 step "4. Disaggregated serving on CoreWeave: each group behind one InfiniBand leaf"
 run "grep -E 'required-topology' $DIR/workloads/02-ds-coreweave.yaml | sort -u"
 run "$H apply -f $DIR/workloads/02-ds-coreweave.yaml"
-watch_admitted 5 16 "Step 4: llama prefill + decode → CoreWeave, one ib-leaf per group"
+watch_admitted 5 16 "Step 4: llama prefill + decode → CoreWeave, one ib-leaf per group" || exit 1
 
 step "5. A mistake: IBM's rack label on the CoreWeave queue"
 run "grep -E 'queue-name|required-topology' $DIR/workloads/03-wrong-label.yaml | sort -u"
@@ -119,12 +129,12 @@ for i in $(seq 1 30); do
   echo "  MultiKueueConfig tas-onprem: ${cl:-<not found>}   cluster3 Topology onprem: ${tp:-<not yet>}"
   [ -n "$cl" ] && [ -n "$tp" ] && break; sleep 2
 done
-watch_admitted 6 20 "Step 7: cluster3 joined the on-prem pool → granite placed in one data-center rack"
+watch_admitted 6 20 "Step 7: cluster3 joined the on-prem pool → granite placed in one data-center rack" || exit 1
 
 step "8. Burst to any public cloud: no shared rack label, so prefer the level they share (the node)"
 run "grep -E 'queue-name|preferred-topology' $DIR/workloads/05-lws-gpu-cloud.yaml | sort -u"
 run "$H apply -f $DIR/workloads/05-lws-gpu-cloud.yaml"
-watch_admitted 8 24 "Step 8: burst-a / burst-b → IBM or CoreWeave, each group on one node"
+watch_admitted 8 24 "Step 8: burst-a / burst-b → IBM or CoreWeave, each group on one node" || exit 1
 
 step "9. Delete on the hub → MultiKueue removes the copies from the workers"
 run "$H delete lws -n $NS --all --wait=true"
