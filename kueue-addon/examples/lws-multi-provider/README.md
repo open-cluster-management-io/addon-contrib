@@ -60,15 +60,17 @@ the LWS objects. The pods run on the workers.
 
 ## Quick start
 
-You need the kind environment from [`build/setup-env.sh`](../../build/setup-env.sh): a hub plus
-three workers with Kueue v0.20+. The workers run the LWS controller, the hub has only the LWS
-CRD, and the hub has the `ManifestWorkReplicaSet` feature enabled (`setup.sh` enables it if it
-is missing).
+You need the ClusterProfile kind environment from
+[`build/setup-env.sh --clusterprofile`](../../build/setup-env.sh): a hub plus three workers
+with Kueue v0.20+. The workers run the LWS controller, the hub has only the LWS CRD, and the hub
+has the `ManifestWorkReplicaSet` feature enabled (`setup.sh` enables it if it is missing).
+`setup.sh` stops if the kueue-addon is not in ClusterProfile mode.
 
 ```bash
 cd examples/lws-multi-provider
 ./setup.sh     # label clusters, create Placements, queues and AdmissionChecks
 ./demo.sh      # narrated live walk-through (PAUSE=6 ./demo.sh when presenting)
+./teardown.sh  # remove everything this example added
 ```
 
 `setup.sh` ends by showing the `MultiKueueConfig`s that the addon generated from the Placements:
@@ -310,6 +312,7 @@ Details to keep in mind:
 lws-multi-provider/
 ├── setup.sh                  # labels, hub queues, worker queues
 ├── demo.sh                   # narrated live demo
+├── teardown.sh               # removes what setup.sh added (keeps provider labels)
 ├── hub/
 │   ├── placements.yaml       # ibm, coreweave, onprem, gpu-cloud
 │   ├── queues.yaml           # AdmissionChecks, ClusterQueues, LocalQueues
@@ -324,10 +327,9 @@ lws-multi-provider/
 ## Clean up
 
 ```bash
-kubectl --context kind-local-cluster delete lws -n inference --all
-kubectl --context kind-local-cluster delete -f hub/worker-queues.yaml   # removes worker LocalQueues
-kubectl --context kind-local-cluster delete -f hub/queues.yaml -f hub/placements.yaml
+./teardown.sh
 ```
 
-`hub/queues.yaml` also creates the shared `default-flavor` ResourceFlavor. If other queues on the
-hub use it, recreate it after cleaning up.
+This deletes the LWS objects, the worker LocalQueues, and the hub Placements, queues and
+AdmissionChecks. It keeps the shared `default-flavor` ResourceFlavor and the `provider` labels
+on the managed clusters, because the other examples use them.

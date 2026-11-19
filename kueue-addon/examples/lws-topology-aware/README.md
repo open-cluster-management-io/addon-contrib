@@ -63,8 +63,10 @@ The platform team describes a provider's topology once. Every cluster that gets 
 
 ## Quick start
 
-You need the kind environment from [`build/setup-env.sh`](../../build/setup-env.sh): a hub plus
-three workers with Kueue v0.20+, the LWS controller on the workers and the LWS CRD on the hub.
+You need the ClusterProfile kind environment from
+[`build/setup-env.sh --clusterprofile`](../../build/setup-env.sh): a hub plus three workers
+with Kueue v0.20+, the LWS controller on the workers and the LWS CRD on the hub. `setup.sh`
+stops if the kueue-addon is not in ClusterProfile mode.
 
 ```bash
 cd examples/lws-topology-aware

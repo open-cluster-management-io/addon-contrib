@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
-# Prepares the kind environment from build/setup-env.sh for the LWS multi-provider example.
+# Prepares the kind environment from build/setup-env.sh --clusterprofile for the LWS multi-provider example.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 H="kubectl --context ${HUB_CTX:-kind-local-cluster}"
 declare -A PROVIDER=([cluster1]=ibm [cluster2]=coreweave [cluster3]=onprem)
+
+# The examples run on the ClusterProfile environment from build/setup-env.sh --clusterprofile.
+cp_mode=$($H get deploy kueue-addon-controller -n open-cluster-management-addon \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENABLE_CLUSTERPROFILE")].value}' 2>/dev/null || true)
+if [ "$cp_mode" != "true" ]; then
+  echo "The kueue-addon is not running in ClusterProfile mode." >&2
+  echo "Create the environment with: build/setup-env.sh --clusterprofile" >&2
+  exit 1
+fi
+
+echo "Waiting for the ClusterProfile-backed MultiKueueClusters"
+for c in cluster1 cluster2 cluster3; do
+  until [ "$($H get multikueuecluster "$c" \
+    -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
+    2>/dev/null)" = "$c/True" ]; do sleep 2; done
+done
+$H get clusterprofile -n kueue-system cluster1 cluster2 cluster3
 
 if ! $H get deploy -n open-cluster-management-hub cluster-manager-work-controller >/dev/null 2>&1; then
   echo "Enabling the ManifestWorkReplicaSet feature on the hub"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Creates "slurm-cluster": a kind cluster whose batch nodes are scheduled by Slurm through
-# slurm-bridge, installs Kueue on it, and joins it to the OCM hub from build/setup-env.sh.
+# slurm-bridge, installs Kueue on it, and joins it to the OCM hub from
+# build/setup-env.sh --clusterprofile.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 CLUSTER="${SLURM_CLUSTER_NAME:-slurm-cluster}"
@@ -15,6 +16,15 @@ HELM="helm --kube-context $CTX"
 SLINKY_CHARTS="oci://ghcr.io/slinkyproject/charts"
 
 log() { echo; echo "==> $*"; }
+
+# slurm-cluster joins the ClusterProfile environment from build/setup-env.sh --clusterprofile.
+cp_mode=$(kubectl --context "$HUB_CTX" get deploy kueue-addon-controller -n open-cluster-management-addon \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENABLE_CLUSTERPROFILE")].value}' 2>/dev/null || true)
+if [ "$cp_mode" != "true" ]; then
+  echo "The kueue-addon on $HUB_CTX is not running in ClusterProfile mode." >&2
+  echo "Create the environment with: build/setup-env.sh --clusterprofile" >&2
+  exit 1
+fi
 
 # Each kind node uses inotify instances; the default of 128 (or 512) runs out quickly.
 if [ "$(sysctl -n fs.inotify.max_user_instances)" -lt 1024 ]; then
@@ -96,7 +106,14 @@ until joined; do
   sleep 5
 done
 $HK get managedcluster "$CLUSTER"
-echo "Waiting for the kueue-addon to create the MultiKueueCluster"
-until [ "$(kubectl --context "$HUB_CTX" get multikueuecluster "$CLUSTER" \
-  -o jsonpath='{.status.conditions[?(@.type=="Active")].status}' 2>/dev/null)" = "True" ]; do sleep 5; done
-kubectl --context "$HUB_CTX" get multikueuecluster "$CLUSTER"
+echo "Waiting for OCM to publish the ClusterProfile with a cluster-proxy access provider"
+until [ -n "$($HK get clusterprofile "$CLUSTER" -n kueue-system \
+  -o jsonpath='{.status.accessProviders[*].name}' 2>/dev/null)" ]; do sleep 5; done
+echo "Waiting for managed-serviceaccount to sync the ${CLUSTER}-multikueue token"
+until $HK get secret "${CLUSTER}-multikueue" -n kueue-system >/dev/null 2>&1; do sleep 5; done
+echo "Waiting for the kueue-addon to create the MultiKueueCluster from the ClusterProfile"
+until [ "$($HK get multikueuecluster "$CLUSTER" \
+  -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
+  2>/dev/null)" = "$CLUSTER/True" ]; do sleep 5; done
+$HK get clusterprofile "$CLUSTER" -n kueue-system
+$HK get multikueuecluster "$CLUSTER"

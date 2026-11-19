@@ -61,7 +61,8 @@ flowchart LR
 
 ## Quick start
 
-You need the environment from [`build/setup-env.sh`](../../build/setup-env.sh). This example
+You need the ClusterProfile environment from
+[`build/setup-env.sh --clusterprofile`](../../build/setup-env.sh). This example
 reuses its hub (`local-cluster`) and `cluster1`, and adds one new cluster.
 
 ```bash
@@ -129,9 +130,13 @@ sequenceDiagram
 `create-slurm-cluster.sh` joins the new cluster to the hub. About a minute later, the OCM
 addons have set up everything MultiKueue needs on their own:
 
-- **managed-serviceaccount** creates the token MultiKueue uses, and rotates it.
-- **kueue-addon** writes the kubeconfig secret, creates the `MultiKueueCluster`, and deploys the
-  worker's `cluster-queue`.
+- **OCM** publishes a `ClusterProfile` for the cluster in `kueue-system`, and **cluster-proxy**
+  adds itself as the profile's access provider.
+- **managed-serviceaccount** creates the token MultiKueue uses, syncs it to the hub as
+  `slurm-cluster-multikueue`, and rotates it.
+- **kueue-addon** creates the `MultiKueueCluster` with a `clusterProfileRef`, and deploys the
+  worker's `cluster-queue`. Kueue gets the credentials through the `cp-creds` plugin, so nobody
+  writes a kubeconfig.
 - The **`hpc-workers` ManifestWorkReplicaSet** pushes the `hpc` namespace and LocalQueues as soon
   as `setup.sh` labels the cluster `scheduler=slurm`.
 

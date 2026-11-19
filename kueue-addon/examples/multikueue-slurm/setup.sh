@@ -7,6 +7,23 @@ H="kubectl --context ${HUB_CTX:-kind-local-cluster}"
 KUBE_WORKER="${KUBE_WORKER:-cluster1}"
 SLURM_WORKER="${SLURM_CLUSTER_NAME:-slurm-cluster}"
 
+# The examples run on the ClusterProfile environment from build/setup-env.sh --clusterprofile.
+cp_mode=$($H get deploy kueue-addon-controller -n open-cluster-management-addon \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENABLE_CLUSTERPROFILE")].value}' 2>/dev/null || true)
+if [ "$cp_mode" != "true" ]; then
+  echo "The kueue-addon is not running in ClusterProfile mode." >&2
+  echo "Create the environment with: build/setup-env.sh --clusterprofile" >&2
+  exit 1
+fi
+
+echo "Waiting for the ClusterProfile-backed MultiKueueClusters"
+for c in "$KUBE_WORKER" "$SLURM_WORKER"; do
+  until [ "$($H get multikueuecluster "$c" \
+    -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
+    2>/dev/null)" = "$c/True" ]; do sleep 2; done
+done
+$H get clusterprofile -n kueue-system "$KUBE_WORKER" "$SLURM_WORKER"
+
 if ! $H get deploy -n open-cluster-management-hub cluster-manager-work-controller >/dev/null 2>&1; then
   echo "Enabling the ManifestWorkReplicaSet feature on the hub"
   $H patch clustermanager cluster-manager --type=merge \

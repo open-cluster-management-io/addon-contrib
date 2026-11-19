@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares the kind environment from build/setup-env.sh for the LWS topology-aware example.
+# Prepares the kind environment from build/setup-env.sh --clusterprofile for the LWS topology-aware example.
 #   1. Installs KWOK on each worker and adds fake GPU nodes labelled with that provider's topology.
 #   2. Labels the managed clusters with their provider.
 #   3. Creates the hub Placements, Topologies and queues, and the ManifestWorkReplicaSets that
@@ -9,6 +9,23 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 H="kubectl --context ${HUB_CTX:-kind-local-cluster}"
 KWOK_VERSION=${KWOK_VERSION:-v0.8.0}
 declare -A PROVIDER=([cluster1]=ibm [cluster2]=coreweave [cluster3]=onprem)
+
+# The examples run on the ClusterProfile environment from build/setup-env.sh --clusterprofile.
+cp_mode=$($H get deploy kueue-addon-controller -n open-cluster-management-addon \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENABLE_CLUSTERPROFILE")].value}' 2>/dev/null || true)
+if [ "$cp_mode" != "true" ]; then
+  echo "The kueue-addon is not running in ClusterProfile mode." >&2
+  echo "Create the environment with: build/setup-env.sh --clusterprofile" >&2
+  exit 1
+fi
+
+echo "Waiting for the ClusterProfile-backed MultiKueueClusters"
+for c in cluster1 cluster2 cluster3; do
+  until [ "$($H get multikueuecluster "$c" \
+    -o jsonpath='{.spec.clusterSource.clusterProfileRef.name}/{.status.conditions[?(@.type=="Active")].status}' \
+    2>/dev/null)" = "$c/True" ]; do sleep 2; done
+done
+$H get clusterprofile -n kueue-system cluster1 cluster2 cluster3
 
 # fake_node <name> <label>=<value>...
 # 2 CPU / 8Gi per node, so a group of four 1-CPU pods needs exactly two nodes.
