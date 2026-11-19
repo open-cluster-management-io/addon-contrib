@@ -1,0 +1,49 @@
+# Puts the "hpc" namespace and both LocalQueues on every worker that has a "scheduler"
+# label. MultiKueue creates each remote Workload in the same namespace with the same queue
+# name, so each worker needs them. On slurm-cluster, "hpc" is also the namespace that
+# slurm-bridge manages (see slurm-cluster/bridge-values.yaml).
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: hpc-workers
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: scheduler, operator: Exists}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: hpc-worker-queues
+  namespace: kueue-system
+spec:
+  placementRefs:
+  - name: hpc-workers
+  manifestWorkTemplate:
+    workload:
+      manifests:
+      - apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: hpc
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: kube-queue
+          namespace: hpc
+        spec:
+          clusterQueue: cluster-queue
+      - apiVersion: kueue.x-k8s.io/v1beta2
+        kind: LocalQueue
+        metadata:
+          name: slurm-queue
+          namespace: hpc
+        spec:
+          clusterQueue: cluster-queue

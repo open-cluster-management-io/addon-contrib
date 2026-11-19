@@ -179,7 +179,7 @@ For a complete setup including all prerequisites on Kind:
 ./build/setup-env.sh --clusterprofile
 ```
 
-The script installs Kueue v0.20.5 (override with `--kueue-version`) and installs the add-on from this repository's chart (`charts/kueue-addon`) with the `latest` image built from `main`, so the add-on's RBAC matches the installed Kueue version. Set `KUEUE_ADDON_IMAGE_TAG` to use a different image tag.
+The script installs Kueue v0.20.7 (override with `--kueue-version`) and installs the add-on from this repository's chart (`charts/kueue-addon`) with the `latest` image built from `main`, so the add-on's RBAC matches the installed Kueue version. Set `KUEUE_ADDON_IMAGE_TAG` to use a different image tag.
 
 > **Note:** If you see `inotify_init: too many open files` errors while creating the Kind clusters, raise the limit with `sudo sysctl fs.inotify.max_user_instances=512`.
 
@@ -342,6 +342,12 @@ default-flavor   4h28m
 ## Usage
 
 For detailed usage examples and advanced scenarios, refer to the [Kueue Integration Solution](https://github.com/open-cluster-management-io/ocm/blob/main/solutions/kueue-admission-check).
+
+For a provider-aware example that places LeaderWorkerSet and disaggregated-serving (prefill/decode) workloads on IBM Cloud, CoreWeave or on-prem clusters using `Placement` label selectors, see [examples/lws-multi-provider](examples/lws-multi-provider/README.md).
+
+To add Kueue Topology Aware Scheduling to that setup when every provider labels its racks differently (one `Topology` per provider, pushed to its clusters with a `ManifestWorkReplicaSet`), see [examples/lws-topology-aware](examples/lws-topology-aware/README.md).
+
+To see MultiKueue send the same Job to a cluster that uses the default kube-scheduler and to one where Slurm schedules the pods (through [slurm-bridge](https://github.com/SlinkyProject/slurm-bridge)), see [examples/multikueue-slurm](examples/multikueue-slurm/README.md).
 
 ## Design Details and Workflow
 

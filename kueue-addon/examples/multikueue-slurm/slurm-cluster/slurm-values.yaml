@@ -1,0 +1,11 @@
+# Values for oci://ghcr.io/slinkyproject/charts/slurm (1.2.4).
+# Runs only the Slurm control plane (slurmctld + slurmrestd). There is no slurmd NodeSet:
+# the batch nodes are Kubernetes nodes that slurm-bridge registers in Slurm as external nodes.
+# Based on hack/slurm-bridge-external.yaml from SlinkyProject/slurm-bridge v1.2.4.
+nodesets: {}
+loginsets: {}
+controller:
+  extraConf: |
+    ReconfigFlags=KeepPartInfo
+    Nodeset=slurm-bridge Feature=slurm-bridge
+    PartitionName=slurm-bridge Nodes=slurm-bridge State=UP Default=YES

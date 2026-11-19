@@ -1,0 +1,66 @@
+# One OCM Placement per provider. The kueue-addon turns each into a MultiKueueConfig of the same name.
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: ibm
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [ibm]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: coreweave
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [coreweave]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: onprem
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [onprem]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+# Burst queue: any public-cloud GPU provider (MultiKueue picks between them)
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: gpu-cloud
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [ibm, coreweave]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}

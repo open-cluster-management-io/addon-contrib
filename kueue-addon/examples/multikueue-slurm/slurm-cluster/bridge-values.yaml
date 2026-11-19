@@ -1,0 +1,11 @@
+# Values for oci://ghcr.io/slinkyproject/charts/slurm-bridge (1.2.4).
+schedulerConfig:
+  partition: slurm-bridge
+admission:
+  # Pods created in these namespaces get schedulerName: slurm-bridge-scheduler.
+  # "hpc" is the namespace MultiKueue dispatches jobs into.
+  managedNamespaces:
+    - hpc
+sharedConfig:
+  slurmRestApi: http://slurm-restapi.slurm:6820
+  slurmJwtSecret: slurm-bridge-token

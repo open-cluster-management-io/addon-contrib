@@ -1,0 +1,28 @@
+# Try this: Slurm enforces the time limit set on the hub.
+# The job asks for 1 minute but sleeps for 3, so Slurm stops it with TIMEOUT and the
+# Job on the hub ends Failed. backoffLimit: 0 stops the Job controller from retrying;
+# with the default (6), each retry becomes a new Slurm job that times out again.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: too-long-
+  namespace: hpc
+  labels:
+    kueue.x-k8s.io/queue-name: slurm-queue
+  annotations:
+    slurmjob.slinky.slurm.net/job-name: too-long
+    slurmjob.slinky.slurm.net/timelimit: "1"
+spec:
+  backoffLimit: 0
+  parallelism: 1
+  completions: 1
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: train
+        image: busybox:1.36
+        command: [sh, -c, 'echo "training on $(hostname)"; sleep 180']
+        resources:
+          requests: {cpu: "1", memory: 256Mi}

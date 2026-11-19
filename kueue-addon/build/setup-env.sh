@@ -9,7 +9,7 @@ CLEAN=false
 E2E_MODE=false
 IMPERSONATION=false
 CLUSTERPROFILE=false
-KUEUE_VERSION="v0.20.5"
+KUEUE_VERSION="v0.20.7"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --clean)
@@ -67,6 +67,8 @@ appwrapper_manifest="https://github.com/project-codeflare/appwrapper/releases/do
 # not installed: it runs 2 replicas requesting 1 CPU each, which leaves no room
 # on a 4-CPU CI runner for the e2e GPU job pods to schedule.
 lws_version="v1.0.0"
+lws_manifest="https://github.com/kubernetes-sigs/lws/releases/download/${lws_version}/manifests.yaml"
+# The hub (MultiKueue manager) only needs the LWS CRD, not the LWS controller.
 lws_crd_manifest="https://raw.githubusercontent.com/kubernetes-sigs/lws/${lws_version}/config/crd/bases/leaderworkerset.x-k8s.io_leaderworkersets.yaml"
 
 # Function to create kind clusters
@@ -94,6 +96,12 @@ setup_ocm() {
     echo "Initialize the ocm hub cluster"
     clusteradm init --wait --context ${hubctx}
   fi
+
+  # ManifestWorkReplicaSet lets examples push manifests to every cluster a Placement selects.
+  echo "Enable the ManifestWorkReplicaSet feature on the hub"
+  kubectl patch clustermanager cluster-manager --type=merge --context ${hubctx} \
+    -p '{"spec":{"workConfiguration":{"workDriver":"kube","featureGates":[{"feature":"ManifestWorkReplicaSet","mode":"Enable"}]}}}'
+
   joincmd=$(clusteradm get token --context ${hubctx} | grep clusteradm)
 
   echo "Join clusters to hub"
@@ -128,6 +136,13 @@ install_kueue() {
 
   for ctx in "${spoke_ctx[@]}"; do
       echo "Install Kubeflow MPI Operator, Training Operator on $ctx"
+      # The LWS controller is only installed outside e2e runs: it requests 1 CPU per
+      # replica, which on a 4-CPU CI runner would leave no room for the e2e GPU job
+      # pods to schedule (see the comment above lws_version).
+      if [[ "$E2E_MODE" != "true" ]]; then
+        echo "Install LeaderWorkerSet on $ctx"
+        kubectl apply --server-side -f "$lws_manifest" --context "$ctx" || true
+      fi
       kubectl apply --server-side -f "$mpi_operator_manifest" --context "$ctx" || true
       kubectl apply --server-side -f "$appwrapper_manifest" --context "$ctx" || true
       kubectl apply --server-side -k "$training_operator_kustomize" --context "$ctx" || true

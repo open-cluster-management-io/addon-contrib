@@ -1,0 +1,29 @@
+# The same training Job for both schedulers; only the queue label differs.
+# The slurmjob.slinky.slurm.net/* annotations are ignored by the default scheduler and
+# become Slurm job options on slurm-cluster (MultiKueue copies them to the worker).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: train-slurm-
+  namespace: hpc
+  labels:
+    kueue.x-k8s.io/queue-name: slurm-queue
+  annotations:
+    slurmjob.slinky.slurm.net/job-name: train-slurm
+    slurmjob.slinky.slurm.net/timelimit: "10"
+spec:
+  parallelism: 1
+  completions: 1
+  suspend: true
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: train
+        image: busybox:1.36
+        command: [sh, -c, 'echo "training on $(hostname) (scheduler: $SCHEDULER)"; sleep 30']
+        env:
+        - name: SCHEDULER
+          value: slurm
+        resources:
+          requests: {cpu: "1", memory: 256Mi}

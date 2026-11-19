@@ -1,0 +1,39 @@
+# kind cluster whose batch nodes are scheduled by Slurm through slurm-bridge.
+# Based on hack/kind-1.35.yaml from SlinkyProject/slurm-bridge v1.2.4.
+#   control-plane  Kubernetes control plane
+#   worker         system node: slurmctld, slurmrestd, operators, Kueue, OCM agents
+#   worker2/3      Slurm-managed batch nodes (registered in Slurm as "external" nodes,
+#                  tainted so only slurm-bridge places pods on them)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  GenericWorkload: true
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: ClusterConfiguration
+        apiServer:
+          extraArgs:
+            runtime-config: "scheduling.k8s.io/v1alpha1=true"
+  - role: worker
+  - role: worker
+    labels:
+      scheduler.slinky.slurm.net/slurm-bridge: worker
+      scheduler.slinky.slurm.net/external-node: "true"
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            register-with-taints: "slinky.slurm.net/managed-node=slurm-bridge-scheduler:NoExecute"
+  - role: worker
+    labels:
+      scheduler.slinky.slurm.net/slurm-bridge: worker
+      scheduler.slinky.slurm.net/external-node: "true"
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            register-with-taints: "slinky.slurm.net/managed-node=slurm-bridge-scheduler:NoExecute"

@@ -1,0 +1,256 @@
+# Hub (MultiKueue manager) queues. One TAS ResourceFlavor per provider, each pointing at a
+# Topology that lists THAT provider's node labels. The hub never places pods: with a MultiKueue
+# check on the ClusterQueue, Kueue only checks that the requested level exists here and leaves
+# the real topology assignment to the worker cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inference-tas
+---
+# IBM Cloud: topology levels, from widest to narrowest
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: ibm
+spec:
+  levels:
+  - nodeLabel: ibm.example.com/zone
+  - nodeLabel: ibm.example.com/rack
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: ibm-tas
+spec:
+  nodeLabels: {type: kwok}   # TAS flavors need a node selector; no hub node matches it
+  topologyName: ibm
+---
+# OCM check: keeps MultiKueueConfig "tas-ibm" in sync with Placement "tas-ibm".
+# Intentionally NOT listed on the ClusterQueue (see the README).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: ocm-tas-ibm
+spec:
+  controllerName: open-cluster-management.io/placement
+  parameters: {apiGroup: cluster.open-cluster-management.io, kind: Placement, name: tas-ibm}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: mk-tas-ibm
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters: {apiGroup: kueue.x-k8s.io, kind: MultiKueueConfig, name: tas-ibm}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cq-tas-ibm
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory]
+    flavors:
+    - name: ibm-tas
+      resources:
+      - {name: cpu, nominalQuota: 16}
+      - {name: memory, nominalQuota: 64Gi}
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: mk-tas-ibm
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: ibm-queue
+  namespace: inference-tas
+spec:
+  clusterQueue: cq-tas-ibm
+---
+# CoreWeave: topology levels, from widest to narrowest
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: coreweave
+spec:
+  levels:
+  - nodeLabel: coreweave.example.com/superpod
+  - nodeLabel: coreweave.example.com/ib-leaf
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: coreweave-tas
+spec:
+  nodeLabels: {type: kwok}   # TAS flavors need a node selector; no hub node matches it
+  topologyName: coreweave
+---
+# OCM check: keeps MultiKueueConfig "tas-coreweave" in sync with Placement "tas-coreweave".
+# Intentionally NOT listed on the ClusterQueue (see the README).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: ocm-tas-coreweave
+spec:
+  controllerName: open-cluster-management.io/placement
+  parameters: {apiGroup: cluster.open-cluster-management.io, kind: Placement, name: tas-coreweave}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: mk-tas-coreweave
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters: {apiGroup: kueue.x-k8s.io, kind: MultiKueueConfig, name: tas-coreweave}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cq-tas-coreweave
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory]
+    flavors:
+    - name: coreweave-tas
+      resources:
+      - {name: cpu, nominalQuota: 16}
+      - {name: memory, nominalQuota: 64Gi}
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: mk-tas-coreweave
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: coreweave-queue
+  namespace: inference-tas
+spec:
+  clusterQueue: cq-tas-coreweave
+---
+# on-prem: topology levels, from widest to narrowest
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: onprem
+spec:
+  levels:
+  - nodeLabel: dc.example.com/rack
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: onprem-tas
+spec:
+  nodeLabels: {type: kwok}   # TAS flavors need a node selector; no hub node matches it
+  topologyName: onprem
+---
+# OCM check: keeps MultiKueueConfig "tas-onprem" in sync with Placement "tas-onprem".
+# Intentionally NOT listed on the ClusterQueue (see the README).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: ocm-tas-onprem
+spec:
+  controllerName: open-cluster-management.io/placement
+  parameters: {apiGroup: cluster.open-cluster-management.io, kind: Placement, name: tas-onprem}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: mk-tas-onprem
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters: {apiGroup: kueue.x-k8s.io, kind: MultiKueueConfig, name: tas-onprem}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cq-tas-onprem
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory]
+    flavors:
+    - name: onprem-tas
+      resources:
+      - {name: cpu, nominalQuota: 12}
+      - {name: memory, nominalQuota: 48Gi}
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: mk-tas-onprem
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: onprem-queue
+  namespace: inference-tas
+spec:
+  clusterQueue: cq-tas-onprem
+---
+# gpu-cloud spans two providers that share no rack-level label, so the only level the
+# hub can check is the node. Workloads on this queue prefer kubernetes.io/hostname, and each
+# worker widens to its own next level if a group doesn't fit on one node.
+# IBM Cloud or CoreWeave: topology levels, from widest to narrowest
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: Topology
+metadata:
+  name: gpu-cloud
+spec:
+  levels:
+  - nodeLabel: kubernetes.io/hostname
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ResourceFlavor
+metadata:
+  name: gpu-cloud-tas
+spec:
+  nodeLabels: {type: kwok}   # TAS flavors need a node selector; no hub node matches it
+  topologyName: gpu-cloud
+---
+# OCM check: keeps MultiKueueConfig "tas-gpu-cloud" in sync with Placement "tas-gpu-cloud".
+# Intentionally NOT listed on the ClusterQueue (see the README).
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: ocm-tas-gpu-cloud
+spec:
+  controllerName: open-cluster-management.io/placement
+  parameters: {apiGroup: cluster.open-cluster-management.io, kind: Placement, name: tas-gpu-cloud}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: AdmissionCheck
+metadata:
+  name: mk-tas-gpu-cloud
+spec:
+  controllerName: kueue.x-k8s.io/multikueue
+  parameters: {apiGroup: kueue.x-k8s.io, kind: MultiKueueConfig, name: tas-gpu-cloud}
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: ClusterQueue
+metadata:
+  name: cq-tas-gpu-cloud
+spec:
+  namespaceSelector: {}
+  resourceGroups:
+  - coveredResources: [cpu, memory]
+    flavors:
+    - name: gpu-cloud-tas
+      resources:
+      - {name: cpu, nominalQuota: 16}
+      - {name: memory, nominalQuota: 64Gi}
+  admissionChecksStrategy:
+    admissionChecks:
+    - name: mk-tas-gpu-cloud
+---
+apiVersion: kueue.x-k8s.io/v1beta2
+kind: LocalQueue
+metadata:
+  name: gpu-cloud-queue
+  namespace: inference-tas
+spec:
+  clusterQueue: cq-tas-gpu-cloud

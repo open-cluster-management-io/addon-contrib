@@ -1,0 +1,67 @@
+# One OCM Placement per provider. The kueue-addon turns each into a MultiKueueConfig of the
+# same name, and hub/worker-topology.yaml uses the same Placements to push each provider's
+# Topology and queues to its clusters.
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: tas-ibm
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [ibm]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: tas-coreweave
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [coreweave]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: tas-onprem
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [onprem]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: tas-gpu-cloud
+  namespace: kueue-system
+spec:
+  clusterSets: [global]
+  predicates:
+  - requiredClusterSelector:
+      labelSelector:
+        matchExpressions:
+        - {key: provider, operator: In, values: [ibm, coreweave]}
+  tolerations:
+  - {key: cluster.open-cluster-management.io/unreachable, operator: Exists}
+  - {key: cluster.open-cluster-management.io/unavailable, operator: Exists}

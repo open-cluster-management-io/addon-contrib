@@ -1,0 +1,17 @@
+# JWT that slurm-bridge uses to call slurmrestd, minted and refreshed by slurm-operator.
+# From hack/token.yaml in SlinkyProject/slurm-bridge v1.2.4.
+apiVersion: slinky.slurm.net/v1beta1
+kind: Token
+metadata:
+  name: slurm-bridge-token
+  namespace: slurm
+spec:
+  jwtKeyRef:
+    name: slurm-auth-jwt
+    key: jwt.key
+  secretRef:
+    name: slurm-bridge-token
+    key: auth-token
+  username: slurm
+  refresh: true
+  lifetime: 8760h

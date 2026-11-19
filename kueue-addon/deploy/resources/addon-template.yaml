@@ -43,6 +43,18 @@ spec:
           - kind: ServiceAccount
             name: klusterlet-work-sa
             namespace: open-cluster-management-agent
+        - apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: kueue-topology-ocm-rolebinding
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: kueue-topology-editor-role
+          subjects:
+          - kind: ServiceAccount
+            name: klusterlet-work-sa
+            namespace: open-cluster-management-agent
         - apiVersion: kueue.x-k8s.io/v1beta2
           kind: ResourceFlavor
           metadata:

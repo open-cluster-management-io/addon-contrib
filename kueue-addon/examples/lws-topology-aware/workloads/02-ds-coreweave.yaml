@@ -1,0 +1,81 @@
+# Disaggregated serving on CoreWeave. Each group must sit behind one InfiniBand leaf switch.
+---
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: llama-prefill
+  namespace: inference-tas
+  labels:
+    kueue.x-k8s.io/queue-name: coreweave-queue
+    app: llama-ds
+    role: prefill
+spec:
+  replicas: 1                 # number of groups; Kueue creates one Workload per group
+  leaderWorkerTemplate:
+    size: 4                   # pods per group (1 leader + 3 workers)
+    leaderTemplate:
+      metadata:
+        labels: {app: llama-ds, role: prefill, pod-type: leader}
+        annotations:
+          kueue.x-k8s.io/podset-required-topology: coreweave.example.com/ib-leaf
+          kueue.x-k8s.io/podset-group-name: llama-prefill           # leader and workers share one domain
+      spec:
+        containers:
+        - name: server
+          image: busybox:1.36
+          command: [sh, -c, 'echo "prefill leader $(hostname)"; sleep 3600']
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+    workerTemplate:
+      metadata:
+        labels: {app: llama-ds, role: prefill, pod-type: worker}
+        annotations:
+          kueue.x-k8s.io/podset-required-topology: coreweave.example.com/ib-leaf
+          kueue.x-k8s.io/podset-group-name: llama-prefill           # leader and workers share one domain
+      spec:
+        containers:
+        - name: server
+          image: busybox:1.36
+          command: [sh, -c, 'echo "prefill worker $(hostname)"; sleep 3600']
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+---
+apiVersion: leaderworkerset.x-k8s.io/v1
+kind: LeaderWorkerSet
+metadata:
+  name: llama-decode
+  namespace: inference-tas
+  labels:
+    kueue.x-k8s.io/queue-name: coreweave-queue
+    app: llama-ds
+    role: decode
+spec:
+  replicas: 2                 # number of groups; Kueue creates one Workload per group
+  leaderWorkerTemplate:
+    size: 2                   # pods per group (1 leader + 1 worker)
+    leaderTemplate:
+      metadata:
+        labels: {app: llama-ds, role: decode, pod-type: leader}
+        annotations:
+          kueue.x-k8s.io/podset-required-topology: coreweave.example.com/ib-leaf
+          kueue.x-k8s.io/podset-group-name: llama-decode           # leader and workers share one domain
+      spec:
+        containers:
+        - name: server
+          image: busybox:1.36
+          command: [sh, -c, 'echo "decode leader $(hostname)"; sleep 3600']
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+    workerTemplate:
+      metadata:
+        labels: {app: llama-ds, role: decode, pod-type: worker}
+        annotations:
+          kueue.x-k8s.io/podset-required-topology: coreweave.example.com/ib-leaf
+          kueue.x-k8s.io/podset-group-name: llama-decode           # leader and workers share one domain
+      spec:
+        containers:
+        - name: server
+          image: busybox:1.36
+          command: [sh, -c, 'echo "decode worker $(hostname)"; sleep 3600']
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
