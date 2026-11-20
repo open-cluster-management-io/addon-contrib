@@ -164,7 +164,7 @@ func RunControllerManagerWithInformers(
 		// ClusterProfile mode: create multikueuecluster controller
 		multiKueueClusterController = multikueuecluster.NewMultiKueueClusterController(
 			kueueClient,
-			cpinformers.Apis().V1alpha1().ClusterProfiles(),
+			cpinformers.Apis().V1alpha2().ClusterProfiles(),
 			permissionInformers.Api().V1alpha1().ClusterPermissions(),
 			secretInformers.Core().V1().Secrets(),
 			kueueInformers.Kueue().V1beta2().MultiKueueClusters(),

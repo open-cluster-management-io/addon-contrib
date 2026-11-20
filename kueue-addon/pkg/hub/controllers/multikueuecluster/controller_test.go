@@ -10,10 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/informers"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
-	clientcmdv1 "k8s.io/client-go/tools/clientcmd/api/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/utils/clock"
-	cpv1alpha1 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha1"
+	cpv1alpha2 "sigs.k8s.io/cluster-inventory-api/apis/v1alpha2"
 	cpfake "sigs.k8s.io/cluster-inventory-api/client/clientset/versioned/fake"
 	cpinformers "sigs.k8s.io/cluster-inventory-api/client/informers/externalversions"
 	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
@@ -46,25 +45,26 @@ func (t *testSyncContext) Recorder() events.Recorder {
 	return t.recorder
 }
 
-func newClusterProfile(name string) *cpv1alpha1.ClusterProfile {
-	return &cpv1alpha1.ClusterProfile{
+func newClusterProfile(name string) *cpv1alpha2.ClusterProfile {
+	return &cpv1alpha2.ClusterProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: common.KueueNamespace,
 			Labels: map[string]string{
-				cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
+				cpv1alpha2.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
 				clusterv1.ClusterNameLabelKey:     name,
 			},
 		},
-		Spec: cpv1alpha1.ClusterProfileSpec{
-			DisplayName: name,
+		Spec: cpv1alpha2.ClusterProfileSpec{
+			DisplayName:    name,
+			ClusterManager: cpv1alpha2.ClusterManager{Name: cpcontroller.ClusterProfileManagerName},
 		},
-		Status: cpv1alpha1.ClusterProfileStatus{
-			AccessProviders: []cpv1alpha1.AccessProvider{
+		Status: cpv1alpha2.ClusterProfileStatus{
+			AccessProviders: []cpv1alpha2.AccessProvider{
 				{
 					Name: cpcontroller.ClusterProfileManagerName,
-					Cluster: clientcmdv1.Cluster{
-						Server:                   "fake-server-url",
+					Cluster: cpv1alpha2.Cluster{
+						Server:                   "https://fake.example.com",
 						CertificateAuthorityData: []byte("fake-ca"),
 					},
 				},
@@ -89,8 +89,8 @@ func newSyncedSecret(clusterName string) *corev1.Secret {
 			Namespace: common.KueueNamespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: cpv1alpha1.GroupVersion.String(),
-					Kind:       cpv1alpha1.Kind,
+					APIVersion: cpv1alpha2.GroupVersion.String(),
+					Kind:       cpv1alpha2.Kind,
 					Name:       clusterName,
 				},
 			},
@@ -222,7 +222,7 @@ func TestSync(t *testing.T) {
 			kueueInformers := kueueinformers.NewSharedInformerFactory(kueueClient, 0)
 
 			// Get specific informers
-			cpInformer := cpInformers.Apis().V1alpha1().ClusterProfiles()
+			cpInformer := cpInformers.Apis().V1alpha2().ClusterProfiles()
 			permissionInformer := permissionInformers.Api().V1alpha1().ClusterPermissions()
 			secretInformer := kubeInformers.Core().V1().Secrets()
 			mkclusterInformer := kueueInformers.Kueue().V1beta2().MultiKueueClusters()
@@ -391,12 +391,12 @@ func TestGetClusterProfile(t *testing.T) {
 			name:        "ClusterProfile with wrong manager label",
 			clusterName: "cluster1",
 			clusterProfileObjs: []runtime.Object{
-				&cpv1alpha1.ClusterProfile{
+				&cpv1alpha2.ClusterProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "cluster1",
 						Namespace: common.KueueNamespace,
 						Labels: map[string]string{
-							cpv1alpha1.LabelClusterManagerKey: "wrong-manager",
+							cpv1alpha2.LabelClusterManagerKey: "wrong-manager",
 							clusterv1.ClusterNameLabelKey:     "cluster1",
 						},
 					},
@@ -409,12 +409,12 @@ func TestGetClusterProfile(t *testing.T) {
 			name:        "ClusterProfile with wrong cluster name label",
 			clusterName: "cluster1",
 			clusterProfileObjs: []runtime.Object{
-				&cpv1alpha1.ClusterProfile{
+				&cpv1alpha2.ClusterProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "cluster1",
 						Namespace: common.KueueNamespace,
 						Labels: map[string]string{
-							cpv1alpha1.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
+							cpv1alpha2.LabelClusterManagerKey: cpcontroller.ClusterProfileManagerName,
 							clusterv1.ClusterNameLabelKey:     "wrong-cluster",
 						},
 					},
@@ -431,7 +431,7 @@ func TestGetClusterProfile(t *testing.T) {
 
 			cpClient := cpfake.NewSimpleClientset(tc.clusterProfileObjs...)
 			cpInformers := cpinformers.NewSharedInformerFactory(cpClient, 0)
-			cpInformer := cpInformers.Apis().V1alpha1().ClusterProfiles()
+			cpInformer := cpInformers.Apis().V1alpha2().ClusterProfiles()
 
 			// Manually add objects to informer store
 			for _, obj := range tc.clusterProfileObjs {
